@@ -1,6 +1,5 @@
 """Quarter-over-quarter holdings comparison."""
 from dataclasses import dataclass
-from typing import List
 
 import pandas as pd
 
@@ -21,7 +20,7 @@ class QuarterComparison:
 class QuarterComparator:
     """Compare 13F holdings between two quarters."""
 
-    def __init__(self, value_threshold: float = 0.2) -> None:
+    def __init__(self, value_threshold: float = 0.25) -> None:
         self.value_threshold = value_threshold
 
     def compare(
@@ -32,8 +31,36 @@ class QuarterComparator:
         quarter_previous: str,
     ) -> QuarterComparison:
         """Compare current and previous quarter holdings."""
-        raise NotImplementedError("TODO: implement quarter comparison")
+        current_cusips = current_df["cusip"]
+        previous_cusips = previous_df["cusip"]
+
+        new_positions = current_df[~current_cusips.isin(previous_cusips)].copy()
+        sold_positions = previous_df[~previous_cusips.isin(current_cusips)].copy()
+
+        merged = current_df.merge(
+            previous_df, on="cusip", suffixes=("", "_prev"), how="inner"
+        )
+        value_change_pct = (merged["value"] - merged["value_prev"]) / merged["value_prev"]
+
+        increased_positions = merged[value_change_pct >= self.value_threshold].copy()
+        decreased_positions = merged[value_change_pct <= -self.value_threshold].copy()
+
+        concentration_change = self._compute_hhi(current_df) - self._compute_hhi(previous_df)
+
+        return QuarterComparison(
+            quarter_current=quarter_current,
+            quarter_previous=quarter_previous,
+            new_positions=new_positions,
+            sold_positions=sold_positions,
+            increased_positions=increased_positions,
+            decreased_positions=decreased_positions,
+            concentration_change=concentration_change,
+        )
 
     def _compute_hhi(self, df: pd.DataFrame) -> float:
         """Compute Herfindahl-Hirschman Index for concentration."""
-        raise NotImplementedError("TODO: implement HHI")
+        total_value = df["value"].sum()
+        if total_value == 0:
+            return 0.0
+        value_shares = df["value"] / total_value
+        return float((value_shares**2).sum())
