@@ -44,24 +44,11 @@ gs-tracker/
 - fastapi, gunicorn, uvicorn
 - pytest, pytest-asyncio, black, flake8, mypy
 
-## 环境变量
-- `ANTHROPIC_API_KEY`: Claude API 密钥（必填）
-- `DATABASE_URL`: 默认 `sqlite:///data/db/gs_tracker.db`
-- `REPORT_OUTPUT_DIR`: 默认 `output/reports`
-- `SMTP_*` / `FEISHU_WEBHOOK` / `DINGTALK_WEBHOOK`: 通知（可选）
-- `SEC_API_KEY` / `FINRA_API_KEY` / `CBOE_API_KEY` / `BLOOMBERG_API_KEY`: 备用/付费数据源（可选）
-
 ## 数据规范
 - 13F value 单位为美元（XML 原始为千美元，需 ×1000）
 - 季度格式: `YYYY-QN`，如 `2026-Q1`
 - Goldman Sachs CIK: `0000886982`
 - 13F 截止日: Q1(5/15), Q2(8/14), Q3(11/14), Q4(2/14)
-
-## 部署规范
-- 生产用 Docker Compose + Nginx 部署在京东云 ECS
-- `.env` 不上传 git，宿主机挂载到容器
-- SQLite 数据持久化通过 bind mount
-- 推荐开启 ufw、fail2ban、unattended-upgrades
 
 ## 常用命令
 ```bash
@@ -72,7 +59,10 @@ docker compose -f deploy/docker-compose.yml up -d --build
 ```
 
 ## 沟通风格
-- 先做计划再写代码
-- Build 阶段遵循 TDD、YAGNI
-- 每完成一个模块主动运行测试
-- 报错先分析根因再修复
+- 我是技术小白，请用通俗语言解释
+- 先做计划再写代码，不要直接开始实现
+- 每完成一个模块，主动运行测试验证
+- 遇到报错，先分析根因再修复，不要猜
+- 优先使用 gstack 做阶段把关（/office-hours、/plan-eng-review、/review、/qa、/ship）
+- 在 Build 阶段遵循 Superpowers 的 TDD、YAGNI、子代理隔离纪律
+- 任何代码进入 /review 前，必须先经过测试验证
