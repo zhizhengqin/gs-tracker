@@ -10,6 +10,12 @@
         .container { max-width: 1200px; margin: 0 auto; }
         .card { background: var(--card); border-radius: 10px; padding: 20px; margin-bottom: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.08); }
         h1 { color: var(--primary); }
+        h2 { color: var(--primary); border-bottom: 2px solid var(--accent); padding-bottom: 8px; }
+        table { width: 100%; border-collapse: collapse; margin-top: 12px; }
+        th, td { text-align: left; padding: 10px; border-bottom: 1px solid #e0e0e0; }
+        th { background: #f0f2f5; }
+        .label { font-weight: bold; color: var(--primary); }
+        .section { margin-bottom: 16px; }
     </style>
 </head>
 <body>
@@ -17,10 +23,43 @@
         <div class="card">
             <h1>高盛动向情报板 — {{ quarter }}</h1>
             <p>报告生成时间：{{ generated_at }}</p>
+            <p><span class="label">情绪信号：</span>{{ analysis.sentiment }}（置信度：{{ "%.0f"|format(analysis.confidence * 100) }}%）</p>
         </div>
+
         <div class="card">
             <h2>AI 分析洞察</h2>
-            <div>{{ analysis_html }}</div>
+            <div class="section"><span class="label">总体摘要：</span>{{ analysis.summary }}</div>
+            <div class="section"><span class="label">集中度分析：</span>{{ analysis.concentration_analysis }}</div>
+            <div class="section"><span class="label">前十大重仓股分析：</span>{{ analysis.top_holdings_analysis }}</div>
+            <div class="section"><span class="label">行业偏好：</span>{{ analysis.sector_preference }}</div>
+            <div class="section"><span class="label">交易信号：</span>{{ analysis.trading_signals }}</div>
+            <div class="section"><span class="label">风险提示：</span>{{ analysis.risk_warnings }}</div>
+            <div class="section"><span class="label">散户可借鉴思路：</span>{{ analysis.retail_insights }}</div>
+        </div>
+
+        <div class="card">
+            <h2>重点标的</h2>
+            <p>{{ analysis.key_tickers | join(", ") }}</p>
+        </div>
+
+        <div class="card">
+            <h2>持仓明细</h2>
+            <table>
+                <thead>
+                    <tr>
+                        <th>公司名称</th>
+                        <th>持仓价值（美元）</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for row in holdings %}
+                    <tr>
+                        <td>{{ row.name_of_issuer or "—" }}</td>
+                        <td>{{ "{:,.0f}".format(row.value) if row.value is not none else "—" }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
         </div>
     </div>
 </body>
