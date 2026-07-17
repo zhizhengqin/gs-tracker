@@ -1,4 +1,5 @@
 """Tests for src.data_fetcher."""
+import httpx
 import pandas as pd
 import pytest
 
@@ -138,4 +139,53 @@ async def test_parse_13f_infotable_malformed_xml(httpx_mock):
     )
     df = await fetcher.parse_13f_infotable("https://www.sec.gov/broken.xml")
     assert df.empty
+    await fetcher.close()
+
+
+@pytest.mark.asyncio
+async def test_parse_13f_infotable_429_then_success(httpx_mock, monkeypatch):
+    fetcher = SEC13FFetcher()
+
+    async def _no_sleep(*_args, **_kwargs):
+        pass
+
+    monkeypatch.setattr("asyncio.sleep", _no_sleep)
+
+    httpx_mock.add_response(url="https://www.sec.gov/retry.xml", status_code=429)
+    httpx_mock.add_response(url="https://www.sec.gov/retry.xml", text=SAMPLE_13F_XML)
+
+    df = await fetcher.parse_13f_infotable("https://www.sec.gov/retry.xml")
+    assert len(df) == 1
+    assert df.iloc[0]["name_of_issuer"] == "Apple Inc"
+    assert len(httpx_mock.get_requests(url="https://www.sec.gov/retry.xml")) == 2
+    await fetcher.close()
+
+
+@pytest.mark.asyncio
+async def test_parse_13f_infotable_timeout_then_success(httpx_mock, monkeypatch):
+    fetcher = SEC13FFetcher()
+
+    async def _no_sleep(*_args, **_kwargs):
+        pass
+
+    monkeypatch.setattr("asyncio.sleep", _no_sleep)
+
+    httpx_mock.add_exception(url="https://www.sec.gov/retry.xml", exception=httpx.TimeoutException("timeout"))
+    httpx_mock.add_response(url="https://www.sec.gov/retry.xml", text=SAMPLE_13F_XML)
+
+    df = await fetcher.parse_13f_infotable("https://www.sec.gov/retry.xml")
+    assert len(df) == 1
+    assert df.iloc[0]["name_of_issuer"] == "Apple Inc"
+    assert len(httpx_mock.get_requests(url="https://www.sec.gov/retry.xml")) == 2
+    await fetcher.close()
+
+
+@pytest.mark.asyncio
+async def test_parse_13f_infotable_403_fatal(httpx_mock):
+    fetcher = SEC13FFetcher()
+    httpx_mock.add_response(url="https://www.sec.gov/forbidden.xml", status_code=403)
+
+    with pytest.raises(httpx.HTTPStatusError):
+        await fetcher.parse_13f_infotable("https://www.sec.gov/forbidden.xml")
+    assert len(httpx_mock.get_requests(url="https://www.sec.gov/forbidden.xml")) == 1
     await fetcher.close()

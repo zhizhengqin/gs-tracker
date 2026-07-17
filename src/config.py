@@ -13,6 +13,8 @@ DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///data/db/gs_tracker.db")
 REPORT_OUTPUT_DIR = Path(os.getenv("REPORT_OUTPUT_DIR", "output/reports"))
 
 SEC_USER_AGENT = os.getenv("SEC_USER_AGENT", "GS-Tracker contact@example.com")
+SEC_MAX_RETRIES = int(os.getenv("SEC_MAX_RETRIES", "3"))
+SEC_BACKOFF_BASE = float(os.getenv("SEC_BACKOFF_BASE", "1.0"))
 GOLDMAN_CIK = "0000886982"
 
 SMTP_HOST = os.getenv("SMTP_HOST", "")

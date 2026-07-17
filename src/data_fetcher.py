@@ -1,4 +1,5 @@
 """SEC 13F data fetcher."""
+import asyncio
 import logging
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass
@@ -8,7 +9,7 @@ from typing import Dict, List, Optional
 import httpx
 import pandas as pd
 
-from src.config import GOLDMAN_CIK, SEC_USER_AGENT
+from src.config import GOLDMAN_CIK, SEC_BACKOFF_BASE, SEC_MAX_RETRIES, SEC_USER_AGENT
 
 logger = logging.getLogger(__name__)
 
@@ -34,11 +35,43 @@ class SEC13FFetcher:
         self.headers = {"User-Agent": user_agent}
         self.client = httpx.AsyncClient(headers=self.headers, timeout=30.0)
 
+    async def _get_with_retry(self, url: str, **kwargs) -> httpx.Response:
+        """Fetch a URL with exponential-backoff retry for transient SEC failures."""
+        last_exception: Optional[Exception] = None
+        for attempt in range(SEC_MAX_RETRIES):
+            try:
+                response = await self.client.get(url, **kwargs)
+                # Trigger HTTPStatusError for 4xx/5xx so we can decide retryability.
+                response.raise_for_status()
+                return response
+            except (httpx.TimeoutException, httpx.ConnectError) as exc:
+                last_exception = exc
+                logger.warning("SEC request to %s timed out on attempt %d: %s", url, attempt + 1, exc)
+            except httpx.HTTPStatusError as exc:
+                status = exc.response.status_code
+                if status == 403:
+                    # A 403 usually means a missing/malformed User-Agent; retrying won't help.
+                    raise
+                if status == 429 or status >= 500:
+                    last_exception = exc
+                    logger.warning(
+                        "SEC request to %s returned %d on attempt %d",
+                        url,
+                        status,
+                        attempt + 1,
+                    )
+                else:
+                    # Non-retryable client error (e.g. 404).
+                    raise
+            if attempt < SEC_MAX_RETRIES - 1:
+                await asyncio.sleep(SEC_BACKOFF_BASE * (2 ** attempt))
+        assert last_exception is not None
+        raise last_exception
+
     async def fetch_submissions(self) -> dict:
         """Fetch company submissions JSON from EDGAR."""
         url = f"{self.BASE_URL}/cgi-bin/browse-edgar?action=getcompany&CIK={self.cik}&type=13F-HR&output=json"
-        response = await self.client.get(url)
-        response.raise_for_status()
+        response = await self._get_with_retry(url)
         return response.json()
 
     async def fetch_latest_holdings(
@@ -74,8 +107,7 @@ class SEC13FFetcher:
 
         filing_dir = f"{self.BASE_URL}/Archives/edgar/data/{cik_numeric}/{accession_no_dash}"
         index_url = f"{filing_dir}/index.json"
-        response = await self.client.get(index_url)
-        response.raise_for_status()
+        response = await self._get_with_retry(index_url)
         filing_index = response.json()
 
         xml_name = self._find_infotable_filename(filing_index)
@@ -119,8 +151,7 @@ class SEC13FFetcher:
 
     async def parse_13f_infotable(self, xml_url: str) -> pd.DataFrame:
         """Fetch and parse a 13F-HR information table XML into a DataFrame."""
-        response = await self.client.get(xml_url)
-        response.raise_for_status()
+        response = await self._get_with_retry(xml_url)
         try:
             root = ET.fromstring(response.text)
         except ET.ParseError as exc:
