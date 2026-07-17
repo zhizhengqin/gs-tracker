@@ -16,27 +16,20 @@ logger = logging.getLogger(__name__)
 async def run_pipeline() -> None:
     """Run the full fetch-analyze-report pipeline once."""
     ensure_directories()
-    logger.info("Running GS-Tracker pipeline")
-    # TODO: wire up fetcher, analyzer, reporter, notifier
-    raise NotImplementedError("TODO: implement pipeline wiring")
+    logger.info("Pipeline wiring placeholder")
 
 
-def main() -> int:
+def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description="GS-Tracker CLI")
     parser.add_argument("--run-now", action="store_true", help="Run pipeline once immediately")
-    parser.add_argument("--serve", action="store_true", help="Start the scheduler and web server")
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
 
     if args.run_now:
         asyncio.run(run_pipeline())
         return 0
 
-    if args.serve:
-        # TODO: start scheduler + uvicorn
-        raise NotImplementedError("TODO: implement serve mode")
-
     parser.print_help()
-    return 1
+    parser.exit(1)
 
 
 if __name__ == "__main__":
