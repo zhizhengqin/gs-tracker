@@ -35,7 +35,7 @@ class ReportGenerator:
     ) -> Path:
         """Render a single quarter HTML report."""
         if output_path is None:
-            output_path = REPORT_OUTPUT_DIR / f"report_{quarter}.html"
+            output_path = REPORT_OUTPUT_DIR / f"{quarter}.html"
         output_path.parent.mkdir(parents=True, exist_ok=True)
 
         template = self.env.get_template("report.html")
