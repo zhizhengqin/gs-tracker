@@ -1,0 +1,56 @@
+services:
+  app:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    container_name: gs-tracker-app
+    restart: unless-stopped
+    environment:
+      - TZ=Asia/Shanghai
+    env_file:
+      - ../.env
+    volumes:
+      - ../data:/app/data
+      - ../output:/app/output
+      - ../templates:/app/templates
+    networks:
+      - gs-tracker
+    command: gunicorn src.web:app -w 2 -k uvicorn.workers.UvicornWorker -b 0.0.0.0:8000
+
+  scheduler:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    container_name: gs-tracker-scheduler
+    restart: unless-stopped
+    environment:
+      - TZ=Asia/Shanghai
+    env_file:
+      - ../.env
+    volumes:
+      - ../data:/app/data
+      - ../output:/app/output
+      - ../templates:/app/templates
+    networks:
+      - gs-tracker
+    command: python src/scheduler.py
+
+  nginx:
+    image: nginx:1.27-alpine
+    container_name: gs-tracker-nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ../output/reports:/usr/share/nginx/html/reports:ro
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      # - ./ssl:/etc/nginx/ssl:ro  # HTTPS
+    depends_on:
+      - app
+    networks:
+      - gs-tracker
+
+networks:
+  gs-tracker:
+    driver: bridge

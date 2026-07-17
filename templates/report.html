@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>高盛动向情报板 — {{ quarter }}</title>
+    <style>
+        :root { --primary: #1a237e; --accent: #ff9800; --bg: #f5f7fa; --card: #fff; }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: var(--bg); color: #333; margin: 0; padding: 20px; }
+        .container { max-width: 1200px; margin: 0 auto; }
+        .card { background: var(--card); border-radius: 10px; padding: 20px; margin-bottom: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.08); }
+        h1 { color: var(--primary); }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="card">
+            <h1>高盛动向情报板 — {{ quarter }}</h1>
+            <p>报告生成时间：{{ generated_at }}</p>
+        </div>
+        <div class="card">
+            <h2>AI 分析洞察</h2>
+            <div>{{ analysis_html }}</div>
+        </div>
+    </div>
+</body>
+</html>

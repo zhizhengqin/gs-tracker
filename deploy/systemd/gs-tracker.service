@@ -1,0 +1,14 @@
+[Unit]
+Description=GS-Tracker Docker Compose
+Requires=docker.service
+After=docker.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+WorkingDirectory=/opt/gs-tracker
+ExecStart=/usr/bin/docker compose -f deploy/docker-compose.yml up -d
+ExecStop=/usr/bin/docker compose -f deploy/docker-compose.yml down
+
+[Install]
+WantedBy=multi-user.target
