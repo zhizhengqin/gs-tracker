@@ -1,7 +1,9 @@
 """AI analysis engine using Claude API."""
+import json
 import logging
+import re
 from dataclasses import dataclass
-from typing import List, Optional
+from typing import Any, List, Optional
 
 import anthropic
 import pandas as pd
@@ -76,7 +78,19 @@ class GSAnalyzer:
             "5. 交易信号\n"
             "6. 风险提示\n"
             "7. 散户可借鉴的投资思路\n\n"
-            "输出保持中文，结构清晰。"
+            "最后，请严格按以下 JSON 格式输出分析结果（不要包含 markdown 代码块标记）：\n"
+            '{\n'
+            '  "summary": "总体摘要",\n'
+            '  "concentration_analysis": "集中度分析",\n'
+            '  "top_holdings_analysis": "前十大重仓股分析",\n'
+            '  "sector_preference": "行业偏好",\n'
+            '  "trading_signals": "交易信号",\n'
+            '  "risk_warnings": "风险提示",\n'
+            '  "retail_insights": "散户可借鉴的投资思路",\n'
+            '  "sentiment": "bullish|bearish|neutral",\n'
+            '  "confidence": 0.75\n'
+            '}\n'
+            "输出保持中文，JSON 必须有效。"
         )
         return prompt
 
@@ -101,6 +115,58 @@ class GSAnalyzer:
             top = holdings_df.head(10)
         return top[ticker_col].astype(str).tolist()
 
+    @staticmethod
+    def _parse_analysis_json(text: str) -> Optional[dict[str, Any]]:
+        """Extract and validate JSON analysis from Claude response text."""
+        text = text.strip()
+        if not text:
+            return None
+
+        # Remove markdown code fences if present
+        if text.startswith("```"):
+            text = re.sub(r"^```(?:json)?\s*", "", text)
+            text = re.sub(r"\s*```$", "", text)
+            text = text.strip()
+
+        # Extract the outermost JSON object
+        match = re.search(r"\{.*\}", text, re.DOTALL)
+        if not match:
+            return None
+
+        try:
+            data = json.loads(match.group(0))
+        except json.JSONDecodeError:
+            return None
+
+        required = {
+            "summary",
+            "concentration_analysis",
+            "top_holdings_analysis",
+            "sector_preference",
+            "trading_signals",
+            "risk_warnings",
+            "retail_insights",
+            "sentiment",
+            "confidence",
+        }
+        if not required.issubset(data.keys()):
+            return None
+
+        # Type coercion / validation
+        for key in required - {"sentiment", "confidence"}:
+            if not isinstance(data[key], str):
+                data[key] = str(data[key])
+
+        try:
+            data["confidence"] = float(data["confidence"])
+        except (TypeError, ValueError):
+            data["confidence"] = 0.5
+
+        if data["sentiment"] not in {"bullish", "bearish", "neutral"}:
+            data["sentiment"] = "neutral"
+
+        return data
+
     async def analyze_holdings(
         self,
         holdings_df: pd.DataFrame,
@@ -119,18 +185,33 @@ class GSAnalyzer:
         if not analysis_text:
             logger.warning("Claude returned empty analysis text")
 
+        parsed = self._parse_analysis_json(analysis_text)
+        if parsed is None:
+            logger.warning("Failed to parse structured analysis JSON; using raw text fallback")
+            parsed = {
+                "summary": analysis_text,
+                "concentration_analysis": analysis_text,
+                "top_holdings_analysis": analysis_text,
+                "sector_preference": analysis_text,
+                "trading_signals": analysis_text,
+                "risk_warnings": analysis_text,
+                "retail_insights": analysis_text,
+                "sentiment": "neutral",
+                "confidence": 0.5,
+            }
+
         key_tickers = self._extract_top_tickers(holdings_df)
         return AnalysisResult(
-            summary=analysis_text,
-            concentration_analysis=analysis_text,
-            top_holdings_analysis=analysis_text,
-            sector_preference=analysis_text,
-            trading_signals=analysis_text,
-            risk_warnings=analysis_text,
-            retail_insights=analysis_text,
+            summary=parsed["summary"],
+            concentration_analysis=parsed["concentration_analysis"],
+            top_holdings_analysis=parsed["top_holdings_analysis"],
+            sector_preference=parsed["sector_preference"],
+            trading_signals=parsed["trading_signals"],
+            risk_warnings=parsed["risk_warnings"],
+            retail_insights=parsed["retail_insights"],
             key_tickers=key_tickers,
-            sentiment="neutral",
-            confidence=0.5,
+            sentiment=parsed["sentiment"],
+            confidence=parsed["confidence"],
         )
 
     async def compare_quarters(

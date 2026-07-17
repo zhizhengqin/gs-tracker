@@ -20,7 +20,7 @@ class QuarterComparison:
 class QuarterComparator:
     """Compare 13F holdings between two quarters."""
 
-    def __init__(self, value_threshold: float = 0.25) -> None:
+    def __init__(self, value_threshold: float = 0.2) -> None:
         self.value_threshold = value_threshold
 
     def compare(

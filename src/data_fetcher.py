@@ -2,7 +2,8 @@
 import logging
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass
-from typing import List, Optional
+from datetime import datetime
+from typing import Dict, List, Optional
 
 import httpx
 import pandas as pd
@@ -40,12 +41,19 @@ class SEC13FFetcher:
         response.raise_for_status()
         return response.json()
 
-    async def fetch_latest_holdings(self) -> pd.DataFrame:
-        """Fetch the most recent 13F-HR holdings as a DataFrame."""
+    async def fetch_latest_holdings(
+        self, filing_info: Optional[Dict[str, str]] = None
+    ) -> pd.DataFrame:
+        """Fetch the most recent 13F-HR holdings as a DataFrame.
+
+        Args:
+            filing_info: Optional dict to populate with accession_number and report_date.
+        """
         submissions = await self.fetch_submissions()
         recent = submissions.get("filings", {}).get("recent", {})
         forms = recent.get("form", [])
         accession_numbers = recent.get("accessionNumber", [])
+        report_dates = recent.get("reportDate", [])
 
         if not forms or not accession_numbers or len(forms) != len(accession_numbers):
             raise ValueError("No 13F-HR filing found")
@@ -56,13 +64,45 @@ class SEC13FFetcher:
             raise ValueError("No 13F-HR filing found")
 
         accession_number = accession_numbers[index]
+        report_date = report_dates[index] if index < len(report_dates) else ""
+        if filing_info is not None:
+            filing_info["accession_number"] = accession_number
+            filing_info["report_date"] = report_date
+
         accession_no_dash = accession_number.replace("-", "")
-        cik_numeric = self.cik.lstrip("0") or "886982"
-        xml_url = (
-            f"{self.BASE_URL}/Archives/edgar/data/{cik_numeric}/"
-            f"{accession_no_dash}/{accession_number}_infotable.xml"
-        )
+        cik_numeric = self.cik.lstrip("0") or GOLDMAN_CIK.lstrip("0")
+
+        filing_dir = f"{self.BASE_URL}/Archives/edgar/data/{cik_numeric}/{accession_no_dash}"
+        index_url = f"{filing_dir}/index.json"
+        response = await self.client.get(index_url)
+        response.raise_for_status()
+        filing_index = response.json()
+
+        xml_name = self._find_infotable_filename(filing_index)
+        if not xml_name:
+            raise ValueError("No infotable XML found in filing directory")
+
+        xml_url = f"{filing_dir}/{xml_name}"
         return await self.parse_13f_infotable(xml_url)
+
+    @staticmethod
+    def report_date_to_quarter(report_date: str) -> str:
+        """Convert a YYYY-MM-DD report date into YYYY-QN format."""
+        if not report_date:
+            raise ValueError("Empty report date")
+        date = datetime.strptime(report_date, "%Y-%m-%d")
+        quarter = (date.month - 1) // 3 + 1
+        return f"{date.year}-Q{quarter}"
+
+    @staticmethod
+    def _find_infotable_filename(filing_index: dict) -> Optional[str]:
+        """Find the infotable XML filename from a SEC filing index.json."""
+        items = filing_index.get("directory", {}).get("item", [])
+        for item in items:
+            name = item.get("name", "")
+            if "infotable" in name.lower() and name.lower().endswith(".xml"):
+                return name
+        return None
 
     async def fetch_historical_holdings(self, quarters: List[str]) -> pd.DataFrame:
         """Fetch holdings for multiple quarters."""
@@ -81,7 +121,11 @@ class SEC13FFetcher:
         """Fetch and parse a 13F-HR information table XML into a DataFrame."""
         response = await self.client.get(xml_url)
         response.raise_for_status()
-        root = ET.fromstring(response.text)
+        try:
+            root = ET.fromstring(response.text)
+        except ET.ParseError as exc:
+            logger.warning("Failed to parse 13F XML from %s: %s", xml_url, exc)
+            return pd.DataFrame()
 
         namespace = ""
         if root.tag.startswith("{"):

@@ -50,3 +50,92 @@ async def test_parse_13f_infotable(httpx_mock):
     assert df.iloc[0]["value"] == 100000000.0  # 千美元 -> 美元
     assert df.iloc[0]["shares"] == 10000
     await fetcher.close()
+
+
+@pytest.mark.asyncio
+async def test_fetch_latest_holdings_parses_index_json(httpx_mock):
+    fetcher = SEC13FFetcher()
+
+    submissions = {
+        "filings": {
+            "recent": {
+                "form": ["13F-HR", "10-Q"],
+                "accessionNumber": ["0001193125-26-000001", "0001193125-26-000002"],
+                "reportDate": ["2026-03-31", "2026-02-28"],
+            }
+        }
+    }
+    index_json = {
+        "directory": {
+            "item": [
+                {"name": "primary_doc.xml", "type": "1", "size": "12345"},
+                {"name": "0001193125-26-000001-infotable.xml", "type": "1", "size": "67890"},
+            ]
+        }
+    }
+
+    httpx_mock.add_response(
+        url="https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&CIK=0000886982&type=13F-HR&output=json",
+        json=submissions,
+    )
+    httpx_mock.add_response(
+        url="https://www.sec.gov/Archives/edgar/data/886982/000119312526000001/index.json",
+        json=index_json,
+    )
+    httpx_mock.add_response(
+        url="https://www.sec.gov/Archives/edgar/data/886982/000119312526000001/0001193125-26-000001-infotable.xml",
+        text=SAMPLE_13F_XML,
+    )
+
+    df = await fetcher.fetch_latest_holdings()
+    assert len(df) == 1
+    assert df.iloc[0]["name_of_issuer"] == "Apple Inc"
+    await fetcher.close()
+
+
+@pytest.mark.asyncio
+async def test_fetch_latest_holdings_missing_infotable_raises(httpx_mock):
+    fetcher = SEC13FFetcher()
+
+    submissions = {
+        "filings": {
+            "recent": {
+                "form": ["13F-HR"],
+                "accessionNumber": ["0001193125-26-000001"],
+                "reportDate": ["2026-03-31"],
+            }
+        }
+    }
+    index_json = {"directory": {"item": [{"name": "primary_doc.xml", "type": "1", "size": "12345"}]}}
+
+    httpx_mock.add_response(
+        url="https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&CIK=0000886982&type=13F-HR&output=json",
+        json=submissions,
+    )
+    httpx_mock.add_response(
+        url="https://www.sec.gov/Archives/edgar/data/886982/000119312526000001/index.json",
+        json=index_json,
+    )
+
+    with pytest.raises(ValueError, match="No infotable XML found"):
+        await fetcher.fetch_latest_holdings()
+    await fetcher.close()
+
+
+def test_report_date_to_quarter():
+    assert SEC13FFetcher.report_date_to_quarter("2026-03-31") == "2026-Q1"
+    assert SEC13FFetcher.report_date_to_quarter("2026-06-30") == "2026-Q2"
+    assert SEC13FFetcher.report_date_to_quarter("2026-09-30") == "2026-Q3"
+    assert SEC13FFetcher.report_date_to_quarter("2026-12-31") == "2026-Q4"
+
+
+@pytest.mark.asyncio
+async def test_parse_13f_infotable_malformed_xml(httpx_mock):
+    fetcher = SEC13FFetcher()
+    httpx_mock.add_response(
+        url="https://www.sec.gov/broken.xml",
+        text="<not-an-information-table></no-tag-closure",
+    )
+    df = await fetcher.parse_13f_infotable("https://www.sec.gov/broken.xml")
+    assert df.empty
+    await fetcher.close()

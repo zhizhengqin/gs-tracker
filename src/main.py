@@ -25,8 +25,11 @@ async def run_pipeline() -> None:
     quarter = "2026-Q1"
     cik = "0000886982"
 
+    filing_info: dict[str, str] = {}
     async with SEC13FFetcher() as fetcher:
-        df = await fetcher.fetch_latest_holdings()
+        df = await fetcher.fetch_latest_holdings(filing_info)
+        if filing_info.get("report_date"):
+            quarter = SEC13FFetcher.report_date_to_quarter(filing_info["report_date"])
 
     save_holdings(cik, quarter, df.to_dict("records"))
 
@@ -34,7 +37,7 @@ async def run_pipeline() -> None:
     analysis = await analyzer.analyze_holdings(df)
 
     reporter = ReportGenerator()
-    report_path = reporter.generate_report(quarter, df, analysis)
+    report_path = await asyncio.to_thread(reporter.generate_report, quarter, df, analysis)
     logger.info("Report generated at %s", report_path)
 
 
