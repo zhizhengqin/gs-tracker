@@ -60,7 +60,7 @@ gs-tracker/
 ```bash
 pytest -v
 uvicorn src.web:app --reload
-python src/main.py --run-now
+python -m src.main --run-now
 docker compose -f deploy/docker-compose.yml up -d --build
 ```
 
