@@ -50,6 +50,7 @@ Thumbs.db
 
 # Docker
 .dockerignore
+!.dockerignore
 
 # Backups
 *.bak
