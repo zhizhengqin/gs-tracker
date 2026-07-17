@@ -42,7 +42,27 @@ class SEC13FFetcher:
 
     async def fetch_latest_holdings(self) -> pd.DataFrame:
         """Fetch the most recent 13F-HR holdings as a DataFrame."""
-        raise NotImplementedError("TODO: implement latest holdings fetch")
+        submissions = await self.fetch_submissions()
+        recent = submissions.get("filings", {}).get("recent", {})
+        forms = recent.get("form", [])
+        accession_numbers = recent.get("accessionNumber", [])
+
+        if not forms or not accession_numbers or len(forms) != len(accession_numbers):
+            raise ValueError("No 13F-HR filing found")
+
+        try:
+            index = forms.index("13F-HR")
+        except ValueError:
+            raise ValueError("No 13F-HR filing found")
+
+        accession_number = accession_numbers[index]
+        accession_no_dash = accession_number.replace("-", "")
+        cik_numeric = self.cik.lstrip("0") or "886982"
+        xml_url = (
+            f"{self.BASE_URL}/Archives/edgar/data/{cik_numeric}/"
+            f"{accession_no_dash}/{accession_number}_infotable.xml"
+        )
+        return await self.parse_13f_infotable(xml_url)
 
     async def fetch_historical_holdings(self, quarters: List[str]) -> pd.DataFrame:
         """Fetch holdings for multiple quarters."""
