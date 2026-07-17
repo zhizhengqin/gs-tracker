@@ -1,4 +1,5 @@
 """AI analysis engine using Claude API."""
+import asyncio
 import json
 import logging
 import re
@@ -8,7 +9,7 @@ from typing import Any, List, Optional
 import anthropic
 import pandas as pd
 
-from src.config import ANTHROPIC_API_KEY
+from src.config import ANTHROPIC_API_KEY, ANTHROPIC_BACKOFF_BASE, ANTHROPIC_MAX_RETRIES
 
 logger = logging.getLogger(__name__)
 
@@ -167,6 +168,22 @@ class GSAnalyzer:
 
         return data
 
+    def _placeholder_analysis(self, holdings_df: pd.DataFrame) -> AnalysisResult:
+        """Return a Chinese placeholder when the Claude API is unavailable."""
+        key_tickers = self._extract_top_tickers(holdings_df)
+        return AnalysisResult(
+            summary="AI 分析服务暂不可用，请稍后重试。",
+            concentration_analysis="由于 AI 服务异常，无法生成集中度分析。",
+            top_holdings_analysis="由于 AI 服务异常，无法生成重仓股分析。",
+            sector_preference="由于 AI 服务异常，无法生成行业偏好分析。",
+            trading_signals="由于 AI 服务异常，无法生成交易信号。",
+            risk_warnings="AI 服务异常，建议关注后续官方披露。",
+            retail_insights="由于 AI 服务异常，无法生成散户投资思路。",
+            key_tickers=key_tickers,
+            sentiment="neutral",
+            confidence=0.0,
+        )
+
     async def analyze_holdings(
         self,
         holdings_df: pd.DataFrame,
@@ -174,14 +191,39 @@ class GSAnalyzer:
     ) -> AnalysisResult:
         """Generate an AI analysis for a single quarter holdings report."""
         prompt = self._build_prompt(holdings_df, previous_df)
-        response = await self.client.messages.create(
-            model=self.model,
-            max_tokens=2048,
-            messages=[{"role": "user", "content": prompt}],
-        )
         analysis_text = ""
-        if response.content:
-            analysis_text = response.content[0].text
+        last_exception: Optional[Exception] = None
+
+        retriable_errors = (
+            anthropic.RateLimitError,
+            anthropic.InternalServerError,
+            anthropic.OverloadedError,
+            anthropic.APIConnectionError,
+            anthropic.APITimeoutError,
+        )
+
+        for attempt in range(ANTHROPIC_MAX_RETRIES):
+            try:
+                response = await self.client.messages.create(
+                    model=self.model,
+                    max_tokens=2048,
+                    messages=[{"role": "user", "content": prompt}],
+                )
+                if response.content:
+                    analysis_text = response.content[0].text
+                break
+            except retriable_errors as exc:
+                last_exception = exc
+                logger.warning("Claude API call failed on attempt %d: %s", attempt + 1, exc)
+                if attempt < ANTHROPIC_MAX_RETRIES - 1:
+                    await asyncio.sleep(ANTHROPIC_BACKOFF_BASE * (2 ** attempt))
+        else:
+            logger.error(
+                "Claude API failed after %d attempts; returning placeholder analysis",
+                ANTHROPIC_MAX_RETRIES,
+            )
+            return self._placeholder_analysis(holdings_df)
+
         if not analysis_text:
             logger.warning("Claude returned empty analysis text")
 

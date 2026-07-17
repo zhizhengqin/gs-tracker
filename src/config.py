@@ -9,6 +9,8 @@ load_dotenv()
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
+ANTHROPIC_MAX_RETRIES = int(os.getenv("ANTHROPIC_MAX_RETRIES", "3"))
+ANTHROPIC_BACKOFF_BASE = float(os.getenv("ANTHROPIC_BACKOFF_BASE", "1.0"))
 DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///data/db/gs_tracker.db")
 REPORT_OUTPUT_DIR = Path(os.getenv("REPORT_OUTPUT_DIR", "output/reports"))
 
