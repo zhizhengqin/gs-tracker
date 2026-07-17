@@ -1,7 +1,10 @@
 """Task scheduler for periodic data fetching and reporting."""
+import asyncio
 import logging
+import signal
 from typing import Optional
 
+from apscheduler.schedulers import SchedulerNotRunningError
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 
@@ -27,11 +30,52 @@ class GSScheduler:
             CronTrigger(day_of_week="mon", hour=9, minute=0),
             id="quarterly_check",
             replace_existing=True,
+            max_instances=1,
+            coalesce=True,
+            misfire_grace_time=3600,
         )
 
     async def run_quarterly_pipeline(self) -> None:
         """Run the full quarterly fetch + analyze + report pipeline."""
-        raise NotImplementedError("TODO: implement pipeline")
+        from src.main import run_pipeline
+
+        try:
+            await run_pipeline()
+        except Exception:
+            logger.exception("Quarterly pipeline failed")
 
     def shutdown(self) -> None:
-        self.scheduler.shutdown()
+        try:
+            self.scheduler.shutdown()
+            logger.info("Scheduler stopped")
+        except SchedulerNotRunningError:
+            logger.debug("Scheduler was not running")
+
+
+async def main(shutdown_event: Optional[asyncio.Event] = None) -> None:
+    """Start the scheduler and keep running until SIGINT or SIGTERM."""
+    scheduler = GSScheduler()
+    scheduler.schedule_quarterly_check()
+    scheduler.start()
+
+    stop_event = shutdown_event or asyncio.Event()
+    loop = asyncio.get_running_loop()
+
+    for sig in (signal.SIGINT, signal.SIGTERM):
+        loop.add_signal_handler(sig, stop_event.set)
+
+    try:
+        await stop_event.wait()
+    finally:
+        scheduler.shutdown()
+        for sig in (signal.SIGINT, signal.SIGTERM):
+            loop.remove_signal_handler(sig)
+        logger.info("Scheduler stopped")
+
+
+if __name__ == "__main__":
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+    )
+    asyncio.run(main())
