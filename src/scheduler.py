@@ -1,4 +1,5 @@
 """Task scheduler for periodic data fetching and reporting."""
+
 import asyncio
 import logging
 import signal

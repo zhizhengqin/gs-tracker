@@ -1,8 +1,9 @@
 """Tests for src.scheduler."""
+
 import asyncio
 import logging
 import signal
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -95,7 +96,9 @@ async def test_main_registers_signal_handlers(monkeypatch):
     mock_scheduler_instance = MagicMock()
     mock_scheduler_instance.start = MagicMock()
     mock_scheduler_instance.shutdown = MagicMock()
-    monkeypatch.setattr(scheduler_module, "GSScheduler", MagicMock(return_value=mock_scheduler_instance))
+    monkeypatch.setattr(
+        scheduler_module, "GSScheduler", MagicMock(return_value=mock_scheduler_instance)
+    )
 
     shutdown_event = asyncio.Event()
 

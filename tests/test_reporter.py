@@ -1,6 +1,6 @@
 """Tests for src.reporter."""
+
 import pandas as pd
-import pytest
 from src.reporter import ReportGenerator
 from src.analyzer import AnalysisResult
 
@@ -11,10 +11,12 @@ def test_generate_report_creates_file(tmp_path):
     (tmp_path / "templates").mkdir()
     (tmp_path / "templates" / "report.html").write_text("<html>{{ quarter }}</html>")
 
-    holdings = pd.DataFrame({
-        "name_of_issuer": ["Apple"],
-        "value": [1000000.0],
-    })
+    holdings = pd.DataFrame(
+        {
+            "name_of_issuer": ["Apple"],
+            "value": [1000000.0],
+        }
+    )
     analysis = AnalysisResult(
         summary="摘要",
         concentration_analysis="",

@@ -1,17 +1,18 @@
 """HTML report generator."""
+
 import logging
 from datetime import datetime
 from pathlib import Path
 from typing import List, Optional
 
 import matplotlib
-matplotlib.use("Agg")  # noqa: E402
-import matplotlib.pyplot as plt
 import pandas as pd
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 
 from src.analyzer import AnalysisResult
 from src.config import PROJECT_ROOT, REPORT_OUTPUT_DIR
+
+matplotlib.use("Agg")
 
 logger = logging.getLogger(__name__)
 
