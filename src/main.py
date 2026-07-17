@@ -31,7 +31,7 @@ async def run_pipeline() -> None:
         if filing_info.get("report_date"):
             quarter = SEC13FFetcher.report_date_to_quarter(filing_info["report_date"])
 
-    save_holdings(cik, quarter, df.to_dict("records"))
+    save_holdings(cik, quarter, df.to_dict("records"), filing_info)
 
     analyzer = GSAnalyzer()
     analysis = await analyzer.analyze_holdings(df)

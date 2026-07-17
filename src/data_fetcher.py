@@ -101,6 +101,11 @@ class SEC13FFetcher:
         if filing_info is not None:
             filing_info["accession_number"] = accession_number
             filing_info["report_date"] = report_date
+            filing_dates = recent.get("filingDate", [])
+            if index < len(filing_dates):
+                filing_info["filing_date"] = filing_dates[index]
+            filing_info["period_of_report"] = report_date
+            filing_info["xml_url"] = xml_url
 
         accession_no_dash = accession_number.replace("-", "")
         cik_numeric = self.cik.lstrip("0") or GOLDMAN_CIK.lstrip("0")
