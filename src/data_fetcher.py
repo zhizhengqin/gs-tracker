@@ -1,5 +1,6 @@
 """SEC 13F data fetcher."""
 import logging
+import xml.etree.ElementTree as ET
 from dataclasses import dataclass
 from typing import List, Optional
 
@@ -47,9 +48,56 @@ class SEC13FFetcher:
         """Fetch holdings for multiple quarters."""
         raise NotImplementedError("TODO: implement historical holdings fetch")
 
+    @staticmethod
+    def _get_text(element: ET.Element, tag_name: str) -> str:
+        """Return stripped text of the first descendant matching *tag_name* (with or without namespace)."""
+        for child in element.iter():
+            if child.tag == tag_name or child.tag.endswith(f"}}{tag_name}"):
+                text = child.text or ""
+                return text.strip()
+        return ""
+
     async def parse_13f_infotable(self, xml_url: str) -> pd.DataFrame:
-        """Parse a 13F-HR information table XML into a DataFrame."""
-        raise NotImplementedError("TODO: implement XML parsing")
+        """Fetch and parse a 13F-HR information table XML into a DataFrame."""
+        response = await self.client.get(xml_url)
+        response.raise_for_status()
+        root = ET.fromstring(response.text)
+
+        namespace = ""
+        if root.tag.startswith("{"):
+            namespace = root.tag.split("}", 1)[0][1:]
+
+        ns_map = {"ns": namespace} if namespace else {}
+        if namespace:
+            info_tables = root.findall(".//ns:infoTable", ns_map)
+        else:
+            info_tables = root.findall(".//infoTable")
+
+        records = []
+        for info in info_tables:
+            records.append(
+                {
+                    "name_of_issuer": self._get_text(info, "nameOfIssuer"),
+                    "title_of_class": self._get_text(info, "titleOfClass"),
+                    "cusip": self._get_text(info, "cusip"),
+                    "value": self._get_text(info, "value"),
+                    "shares": self._get_text(info, "sshPrnamt"),
+                    "investment_discretion": self._get_text(info, "investmentDiscretion"),
+                    "voting_sole": self._get_text(info, "Sole"),
+                    "voting_shared": self._get_text(info, "Shared"),
+                    "voting_none": self._get_text(info, "None"),
+                }
+            )
+
+        df = pd.DataFrame(records)
+        if not df.empty:
+            df["value"] = pd.to_numeric(df["value"], errors="coerce") * 1000
+            df["shares"] = pd.to_numeric(df["shares"], errors="coerce")
+            df["voting_sole"] = pd.to_numeric(df["voting_sole"], errors="coerce")
+            df["voting_shared"] = pd.to_numeric(df["voting_shared"], errors="coerce")
+            df["voting_none"] = pd.to_numeric(df["voting_none"], errors="coerce")
+
+        return df
 
     async def close(self) -> None:
         await self.client.aclose()
