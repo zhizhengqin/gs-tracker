@@ -21,6 +21,44 @@ from src.config import (
 logger = logging.getLogger(__name__)
 
 
+def _format_value(value: float) -> str:
+    """Format a dollar value into human-readable B/M/K."""
+    if value >= 1e9:
+        return f"${value / 1e9:.1f}B"
+    if value >= 1e6:
+        return f"${value / 1e6:.1f}M"
+    if value >= 1e3:
+        return f"${value / 1e3:.1f}K"
+    return f"${int(value)}"
+
+
+def _format_summary(summary: Optional[dict]) -> str:
+    """Format a ReportSummary dict into Chinese notification body."""
+    if not summary:
+        return ""
+    return (
+        f"总持仓市值：{_format_value(summary['total_value'])}\n"
+        f"新增持仓：{summary['new_positions']} 只\n"
+        f"清仓持仓：{summary['sold_positions']} 只\n"
+        f"大幅（变化≥20%）增持：{summary['increased_positions']} 只\n"
+        f"大幅（变化≥20%）减持：{summary['decreased_positions']} 只"
+    )
+
+
+def _truncate_text(text: str, max_bytes: int = 15000) -> str:
+    """Truncate text to fit within Feishu message size limits."""
+    encoded = text.encode("utf-8")
+    if len(encoded) <= max_bytes:
+        return text
+    truncated = encoded[: max_bytes - 3]
+    while truncated:
+        try:
+            return truncated.decode("utf-8") + "..."
+        except UnicodeDecodeError:
+            truncated = truncated[:-1]
+    return "..."
+
+
 @dataclass
 class Notification:
     """A notification payload."""
