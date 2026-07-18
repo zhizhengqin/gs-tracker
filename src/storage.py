@@ -89,6 +89,11 @@ def init_db() -> None:
                 voting_authority_none INTEGER DEFAULT 0,
                 FOREIGN KEY (report_id) REFERENCES quarterly_reports(id)
             );
+
+            CREATE TABLE IF NOT EXISTS sent_notifications (
+                quarter TEXT PRIMARY KEY,
+                sent_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
             """
         )
 
@@ -214,3 +219,31 @@ def get_holdings(cik: str, quarter: str) -> List[dict]:
             (cik, quarter),
         )
         return [dict(row) for row in cursor.fetchall()]
+
+
+def mark_notification_sent(quarter: str) -> bool:
+    """Mark a quarter as notified.
+
+    Returns True if this call inserted the row (first time),
+    False if the quarter was already present.
+    """
+    with get_connection() as conn:
+        try:
+            conn.execute(
+                "INSERT INTO sent_notifications (quarter) VALUES (?)",
+                (quarter,),
+            )
+            conn.commit()
+            return True
+        except sqlite3.IntegrityError:
+            return False
+
+
+def is_notification_sent(quarter: str) -> bool:
+    """Return whether a notification has already been sent for this quarter."""
+    with get_connection() as conn:
+        cursor = conn.execute(
+            "SELECT 1 FROM sent_notifications WHERE quarter = ?",
+            (quarter,),
+        )
+        return cursor.fetchone() is not None
