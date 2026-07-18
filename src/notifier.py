@@ -1,6 +1,5 @@
 """Notification delivery (email, Feishu, DingTalk, Telegram)."""
 import asyncio
-import json
 import logging
 from dataclasses import dataclass
 from typing import Optional
@@ -12,11 +11,7 @@ from src.config import (
     FEISHU_WEBHOOK,
     NOTIFIER_BACKOFF_BASE,
     NOTIFIER_MAX_ATTEMPTS,
-    SMTP_FROM,
     SMTP_HOST,
-    SMTP_PASS,
-    SMTP_PORT,
-    SMTP_USER,
     TELEGRAM_BOT_TOKEN,
     TELEGRAM_CHAT_ID,
 )

@@ -3,7 +3,7 @@ import logging
 import sqlite3
 from contextlib import contextmanager
 from pathlib import Path
-from typing import List, Optional
+from typing import Iterator, List, Optional
 
 from src.config import DATABASE_URL, PROJECT_ROOT
 
@@ -20,7 +20,7 @@ def db_path() -> Path:
 
 
 @contextmanager
-def get_connection():
+def get_connection() -> Iterator[sqlite3.Connection]:
     """Yield a SQLite connection with row factory."""
     path = db_path()
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -32,7 +32,9 @@ def get_connection():
         conn.close()
 
 
-def _add_column_if_not_exists(conn: sqlite3.Connection, table: str, column: str, col_type: str) -> None:
+def _add_column_if_not_exists(
+    conn: sqlite3.Connection, table: str, column: str, col_type: str
+) -> None:
     """Safely add a column to an existing table, ignoring duplicate-column errors."""
     try:
         conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {col_type}")
@@ -47,7 +49,9 @@ def _column_exists(conn: sqlite3.Connection, table: str, column: str) -> bool:
     return any(row["name"] == column for row in rows)
 
 
-def _create_index_if_columns_exist(conn: sqlite3.Connection, index_name: str, table: str, columns: List[str]) -> None:
+def _create_index_if_columns_exist(
+    conn: sqlite3.Connection, index_name: str, table: str, columns: List[str]
+) -> None:
     """Create an index only if all referenced columns already exist."""
     if all(_column_exists(conn, table, col) for col in columns):
         conn.execute(
@@ -110,9 +114,13 @@ def init_db() -> None:
         ):
             _add_column_if_not_exists(conn, table, column, col_type)
 
-        _create_index_if_columns_exist(conn, "idx_reports_cik_quarter", "quarterly_reports", ["cik", "quarter"])
+        _create_index_if_columns_exist(
+            conn, "idx_reports_cik_quarter", "quarterly_reports", ["cik", "quarter"]
+        )
         _create_index_if_columns_exist(conn, "idx_holdings_report_id", "holdings", ["report_id"])
-        _create_index_if_columns_exist(conn, "idx_holdings_cik_quarter", "holdings", ["cik", "quarter"])
+        _create_index_if_columns_exist(
+            conn, "idx_holdings_cik_quarter", "holdings", ["cik", "quarter"]
+        )
 
         conn.commit()
 
@@ -161,7 +169,7 @@ def save_holdings(
             "SELECT id FROM quarterly_reports WHERE cik = ? AND quarter = ?",
             (cik, quarter),
         )
-        report_id = cursor.fetchone()["id"]
+        report_id = int(cursor.fetchone()["id"])
 
         conn.execute(
             "DELETE FROM holdings WHERE report_id = ?",

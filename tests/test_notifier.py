@@ -1,7 +1,7 @@
 """Tests for src.notifier formatting helpers."""
 import httpx
 import pytest
-from unittest.mock import AsyncMock, patch
+from unittest.mock import patch
 
 from src.notifier import (
     Notification,
@@ -66,7 +66,8 @@ async def test_send_feishu_success(httpx_mock):
 
     with patch("src.notifier.FEISHU_WEBHOOK", "https://fake.feishu.webhook"):
         notifier = Notifier()
-        await notifier.send(Notification(title="hi", body="body", link="https://example.com/r.html"))
+        notification = Notification(title="hi", body="body", link="https://example.com/r.html")
+        await notifier.send(notification)
         await notifier.close()
 
     requests = httpx_mock.get_requests()
