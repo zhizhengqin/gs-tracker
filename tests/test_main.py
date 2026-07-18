@@ -90,12 +90,15 @@ async def test_run_pipeline_sends_notification_after_report(tmp_path, monkeypatc
                         with patch(
                             "src.main.mark_notification_sent", return_value=True
                         ) as mock_mark:
-                            with patch("src.main.FEISHU_WEBHOOK", "https://fake.webhook"):
-                                with patch("src.main.PUBLIC_BASE_URL", "https://example.com"):
-                                    with patch("src.main.get_holdings", return_value=[]):
-                                        await run_pipeline()
-                                        notifier.send.assert_awaited_once()
-                                        mock_mark.assert_called_once_with("2026-Q2")
+                            with patch(
+                                "src.main.is_notification_sent", return_value=False
+                            ):
+                                with patch("src.main.FEISHU_WEBHOOK", "https://fake.webhook"):
+                                    with patch("src.main.PUBLIC_BASE_URL", "https://example.com"):
+                                        with patch("src.main.get_holdings", return_value=[]):
+                                            await run_pipeline()
+                                            notifier.send.assert_awaited_once()
+                                            mock_mark.assert_called_once_with("2026-Q2")
 
 
 @pytest.mark.asyncio
@@ -134,9 +137,61 @@ async def test_run_pipeline_marks_notification_after_success(tmp_path, monkeypat
                         notifier.send = AsyncMock(side_effect=RuntimeError("boom"))
                         notifier.close = AsyncMock()
                         with patch("src.main.mark_notification_sent") as mock_mark:
-                            with patch("src.main.FEISHU_WEBHOOK", "https://fake.webhook"):
-                                with patch("src.main.PUBLIC_BASE_URL", "https://example.com"):
-                                    with patch("src.main.get_holdings", return_value=[]):
-                                        await run_pipeline()
-                                        notifier.send.assert_awaited_once()
-                                        mock_mark.assert_not_called()
+                            with patch(
+                                "src.main.is_notification_sent", return_value=False
+                            ):
+                                with patch("src.main.FEISHU_WEBHOOK", "https://fake.webhook"):
+                                    with patch("src.main.PUBLIC_BASE_URL", "https://example.com"):
+                                        with patch("src.main.get_holdings", return_value=[]):
+                                            await run_pipeline()
+                                            notifier.send.assert_awaited_once()
+                                            mock_mark.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_run_pipeline_skips_notification_when_already_sent(tmp_path, monkeypatch):
+    monkeypatch.setattr("src.main.REPORT_OUTPUT_DIR", tmp_path)
+    monkeypatch.setattr("src.config.REPORT_OUTPUT_DIR", tmp_path)
+
+    mock_df = pd.DataFrame(
+        {
+            "cusip": ["A"],
+            "name_of_issuer": ["Apple"],
+            "title_of_class": ["COM"],
+            "value": [1000000.0],
+            "shares": [1000],
+            "investment_discretion": ["SOLE"],
+        }
+    )
+
+    async def fake_fetch(filing_info):
+        filing_info["report_date"] = "2026-06-30"
+        return mock_df
+
+    with patch("src.main.SEC13FFetcher") as MockFetcher:
+        MockFetcher.report_date_to_quarter = SEC13FFetcher.report_date_to_quarter
+        instance = MockFetcher.return_value.__aenter__.return_value
+        instance.fetch_latest_holdings = fake_fetch
+        with patch("src.main.save_holdings"):
+            with patch("src.main.GSAnalyzer") as MockAnalyzer:
+                analyzer = MockAnalyzer.return_value
+                analyzer.analyze_holdings = AsyncMock(return_value=MagicMock())
+                with patch("src.main.ReportGenerator") as MockReporter:
+                    reporter = MockReporter.return_value
+                    reporter.generate_report = lambda *args, **kwargs: tmp_path / "2026-Q2.html"
+                    with patch("src.main.Notifier") as MockNotifier:
+                        notifier = MockNotifier.return_value
+                        notifier.send = AsyncMock()
+                        notifier.close = AsyncMock()
+                        with patch("src.main.mark_notification_sent") as mock_mark:
+                            with patch(
+                                "src.main.is_notification_sent", return_value=True
+                            ) as mock_is_sent:
+                                with patch("src.main.FEISHU_WEBHOOK", "https://fake.webhook"):
+                                    with patch("src.main.PUBLIC_BASE_URL", "https://example.com"):
+                                        with patch("src.main.get_holdings", return_value=[]):
+                                            await run_pipeline()
+                                            mock_is_sent.assert_called_once_with("2026-Q2")
+                                            MockNotifier.assert_not_called()
+                                            notifier.send.assert_not_awaited()
+                                            mock_mark.assert_not_called()

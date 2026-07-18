@@ -18,7 +18,13 @@ from src.data_fetcher import SEC13FFetcher
 from src.notifier import Notification, Notifier, _format_summary
 from src.quarter_compare import QuarterComparator
 from src.reporter import ReportGenerator
-from src.storage import get_holdings, init_db, mark_notification_sent, save_holdings
+from src.storage import (
+    get_holdings,
+    init_db,
+    is_notification_sent,
+    mark_notification_sent,
+    save_holdings,
+)
 
 logging.basicConfig(
     level=logging.INFO,
@@ -68,6 +74,12 @@ async def run_pipeline() -> None:
             }
 
     if FEISHU_WEBHOOK:
+        if is_notification_sent(quarter):
+            logger.info(
+                "Notification already sent for %s; skipping send", quarter
+            )
+            return
+
         base = (PUBLIC_BASE_URL or "").rstrip("/")
         report_url = f"{base}/reports/{quarter}.html" if base else None
         if not base:
@@ -81,9 +93,10 @@ async def run_pipeline() -> None:
         notifier = Notifier()
         try:
             await notifier.send(notification)
-            mark_notification_sent(quarter)
         except Exception:
             logger.exception("Failed to send notification for %s", quarter)
+        else:
+            mark_notification_sent(quarter)
         finally:
             await notifier.close()
 
