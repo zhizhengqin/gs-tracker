@@ -1,4 +1,5 @@
 """Notification delivery (email, Feishu, DingTalk, Telegram)."""
+import asyncio
 import json
 import logging
 from dataclasses import dataclass
@@ -9,6 +10,8 @@ import httpx
 from src.config import (
     DINGTALK_WEBHOOK,
     FEISHU_WEBHOOK,
+    NOTIFIER_BACKOFF_BASE,
+    NOTIFIER_MAX_ATTEMPTS,
     SMTP_FROM,
     SMTP_HOST,
     SMTP_PASS,
@@ -86,7 +89,48 @@ class Notifier:
             await self._send_telegram(notification)
 
     async def _send_feishu(self, notification: Notification) -> None:
-        raise NotImplementedError("TODO: implement Feishu webhook")
+        text = notification.title
+        if notification.body:
+            text += f"\n\n{notification.body}"
+        if notification.link:
+            text += f"\n\n查看完整报告：{notification.link}"
+        text += "\n\n本内容仅供学习参考，不构成投资建议。"
+        text = _truncate_text(text)
+
+        payload = {
+            "msg_type": "text",
+            "content": {"text": text},
+        }
+
+        for attempt in range(1, NOTIFIER_MAX_ATTEMPTS + 1):
+            try:
+                response = await self.client.post(
+                    FEISHU_WEBHOOK,
+                    json=payload,
+                    timeout=20.0,
+                )
+                response.raise_for_status()
+                data = response.json()
+                if data.get("code") != 0:
+                    raise httpx.HTTPStatusError(
+                        f"Feishu error: {data.get('msg')}",
+                        request=response.request,
+                        response=response,
+                    )
+                return
+            except httpx.HTTPStatusError as exc:
+                code = exc.response.status_code if exc.response else 0
+                # App-level errors (HTTP 200 with non-zero code) and 4xx
+                # (except 429 rate limit) are not retryable.
+                if code == 200 or (400 <= code < 500 and code != 429):
+                    raise
+                if attempt == NOTIFIER_MAX_ATTEMPTS:
+                    raise
+                await asyncio.sleep(NOTIFIER_BACKOFF_BASE * (2 ** (attempt - 1)))
+            except httpx.TransportError:
+                if attempt == NOTIFIER_MAX_ATTEMPTS:
+                    raise
+                await asyncio.sleep(NOTIFIER_BACKOFF_BASE * (2 ** (attempt - 1)))
 
     async def _send_dingtalk(self, notification: Notification) -> None:
         raise NotImplementedError("TODO: implement DingTalk webhook")
