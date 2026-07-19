@@ -42,6 +42,82 @@
             <p>{{ analysis.key_tickers | join(", ") }}</p>
         </div>
 
+        <!-- 多源信号面板 -->
+        {% if signals or signal_errors %}
+        <div class="card">
+            <h2>📡 多源信号面板</h2>
+
+            <div class="source-status" style="margin-bottom: 12px;">
+                {% for src, status in source_status.items() %}
+                <span style="margin-right: 16px; padding: 4px 10px; border-radius: 4px; {% if status == 'ok' %}background: #e8f5e9; color: #2e7d32;{% else %}background: #fff3e0; color: #e65100;{% endif %}">
+                    {{ src }}: {% if status == 'ok' %}✅{% else %}⚠️ 暂不可用{% endif %}
+                </span>
+                {% endfor %}
+            </div>
+
+            {% if signal_errors %}
+            <div style="background: #fff3e0; padding: 8px 12px; border-radius: 6px; margin-bottom: 12px;">
+                <strong>⚠️ 部分信号源获取失败：</strong>
+                <ul style="margin: 4px 0 0 0;">
+                    {% for err in signal_errors %}
+                    <li>{{ err }}</li>
+                    {% endfor %}
+                </ul>
+            </div>
+            {% endif %}
+
+            {% if signals %}
+            <div class="signal-list">
+                {% set ns = namespace(high=[], medium=[], low=[]) %}
+                {% for sig in signals %}
+                    {% if sig.strength.value == 'high' %}
+                        {% set _ = ns.high.append(sig) %}
+                    {% elif sig.strength.value == 'medium' %}
+                        {% set _ = ns.medium.append(sig) %}
+                    {% else %}
+                        {% set _ = ns.low.append(sig) %}
+                    {% endif %}
+                {% endfor %}
+
+                {% for level, group in [('high', ns.high), ('medium', ns.medium), ('low', ns.low)] %}
+                {% if group %}
+                <div style="margin-bottom: 16px;">
+                    <h3 style="margin: 8px 0 12px 0;">
+                        {% if level == 'high' %}🔴 高优先级信号
+                        {% elif level == 'medium' %}🟡 中优先级信号
+                        {% else %}🟢 低优先级信号
+                        {% endif %}
+                        ({{ group|length }})
+                    </h3>
+                    {% for sig in group %}
+                    <div style="border: 1px solid #e0e0e0; border-radius: 8px; padding: 12px; margin-bottom: 8px;">
+                        <div style="display: flex; justify-content: space-between; color: #666; font-size: 0.9em; margin-bottom: 6px;">
+                            <span style="font-weight: bold; color: var(--primary);">{{ sig.source }}</span>
+                            <span>{{ sig.published_at.strftime('%Y-%m-%d') }}</span>
+                        </div>
+                        <strong>{{ sig.title }}</strong>
+                        <p style="margin: 8px 0; color: #555;">{{ sig.summary }}</p>
+                        <div style="display: flex; gap: 12px; flex-wrap: wrap; align-items: center;">
+                            {% if sig.companies %}
+                            <span style="font-size: 0.9em; color: #666;">相关公司: {{ sig.companies|join(', ') }}</span>
+                            {% endif %}
+                            {% if sig.cross_refs %}
+                            <span style="background: #e3f2fd; color: #1565c0; padding: 2px 8px; border-radius: 4px; font-size: 0.85em;">🔗 交叉信号</span>
+                            {% endif %}
+                            {% if sig.url %}
+                            <a href="{{ sig.url }}" target="_blank" rel="noopener" style="color: var(--accent);">查看原文 →</a>
+                            {% endif %}
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% endif %}
+                {% endfor %}
+            </div>
+            {% endif %}
+        </div>
+        {% endif %}
+
         <div class="card">
             <h2>持仓明细</h2>
             <table>
