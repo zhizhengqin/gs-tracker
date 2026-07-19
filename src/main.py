@@ -9,6 +9,7 @@ import pandas as pd
 
 from src.analyzer import GSAnalyzer
 from src.config import (  # noqa: F401  (REPORT_OUTPUT_DIR kept as a patchable name for tests)
+    RSS_FEEDS,
     FEISHU_WEBHOOK,
     PUBLIC_BASE_URL,
     REPORT_OUTPUT_DIR,
@@ -18,6 +19,9 @@ from src.data_fetcher import SEC13FFetcher
 from src.notifier import Notification, Notifier, _format_summary
 from src.quarter_compare import QuarterComparator
 from src.reporter import ReportGenerator
+from src.signals.aggregator import SignalAggregator
+from src.signals.news_source import NewsSource
+from src.signals.sec_8k_source import Sec8kSource
 from src.storage import (
     get_holdings,
     init_db,
@@ -52,10 +56,6 @@ async def run_pipeline() -> None:
     analyzer = GSAnalyzer()
     analysis = await analyzer.analyze_holdings(df)
 
-    reporter = ReportGenerator()
-    report_path = await asyncio.to_thread(reporter.generate_report, quarter, df, analysis)
-    logger.info("Report generated at %s", report_path)
-
     summary = None
     previous_quarter = _previous_quarter(quarter)
     if previous_quarter:
@@ -72,6 +72,40 @@ async def run_pipeline() -> None:
                 "increased_positions": len(comparison.increased_positions),
                 "decreased_positions": len(comparison.decreased_positions),
             }
+
+    # --- Multi-source signal aggregation ---
+    aggregation_signals = []
+    aggregation_errors = []
+    aggregation_status = {}
+    aggregator = SignalAggregator(
+        news_source=NewsSource(rss_urls=RSS_FEEDS) if RSS_FEEDS else None,
+        sec8k_source=Sec8kSource(),
+    )
+    try:
+        aggregation = await aggregator.aggregate(quarter, df.to_dict("records"), summary)
+        aggregation_signals = aggregation.signals
+        aggregation_errors = aggregation.errors
+        aggregation_status = aggregation.source_status
+        logger.info(
+            "Aggregated %d signals (errors: %d, status: %s)",
+            len(aggregation_signals), len(aggregation_errors), aggregation_status,
+        )
+    except Exception:
+        logger.exception("Signal aggregation failed; report will lack signal panel")
+    finally:
+        await aggregator.close()
+
+    reporter = ReportGenerator()
+    report_path = await asyncio.to_thread(
+        reporter.generate_report,
+        quarter,
+        df,
+        analysis,
+        signals=aggregation_signals,
+        signal_errors=aggregation_errors,
+        source_status=aggregation_status,
+    )
+    logger.info("Report generated at %s", report_path)
 
     if FEISHU_WEBHOOK:
         if is_notification_sent(quarter):
