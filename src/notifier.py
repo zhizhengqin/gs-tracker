@@ -121,11 +121,21 @@ class Notifier:
                     raise
                 if attempt == NOTIFIER_MAX_ATTEMPTS:
                     raise
-                await asyncio.sleep(NOTIFIER_BACKOFF_BASE * (2 ** (attempt - 1)))
+                delay = NOTIFIER_BACKOFF_BASE * (2 ** (attempt - 1))
+                logger.warning(
+                    "Feishu send attempt %d/%d failed (HTTP %d), retrying in %.1fs",
+                    attempt, NOTIFIER_MAX_ATTEMPTS, code, delay,
+                )
+                await asyncio.sleep(delay)
             except httpx.TransportError:
                 if attempt == NOTIFIER_MAX_ATTEMPTS:
                     raise
-                await asyncio.sleep(NOTIFIER_BACKOFF_BASE * (2 ** (attempt - 1)))
+                delay = NOTIFIER_BACKOFF_BASE * (2 ** (attempt - 1))
+                logger.warning(
+                    "Feishu send attempt %d/%d failed (network), retrying in %.1fs",
+                    attempt, NOTIFIER_MAX_ATTEMPTS, delay,
+                )
+                await asyncio.sleep(delay)
 
     async def _send_dingtalk(self, notification: Notification) -> None:
         raise NotImplementedError("TODO: implement DingTalk webhook")

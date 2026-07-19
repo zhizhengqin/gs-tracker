@@ -195,3 +195,21 @@ async def test_run_pipeline_skips_notification_when_already_sent(tmp_path, monke
                                             MockNotifier.assert_not_called()
                                             notifier.send.assert_not_awaited()
                                             mock_mark.assert_not_called()
+
+
+class TestPreviousQuarter:
+    def test_q2_returns_q1(self):
+        from src.main import _previous_quarter
+        assert _previous_quarter("2026-Q2") == "2026-Q1"
+
+    def test_q1_returns_previous_year_q4(self):
+        from src.main import _previous_quarter
+        assert _previous_quarter("2026-Q1") == "2025-Q4"
+
+    def test_q4_returns_q3(self):
+        from src.main import _previous_quarter
+        assert _previous_quarter("2026-Q4") == "2026-Q3"
+
+    def test_q3_returns_q2(self):
+        from src.main import _previous_quarter
+        assert _previous_quarter("2026-Q3") == "2026-Q2"

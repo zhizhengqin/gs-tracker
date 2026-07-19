@@ -22,6 +22,17 @@ HOLDING_KEYWORDS = [
 ]
 
 
+QUARTER_START_MONTHS = {"Q1": 1, "Q2": 4, "Q3": 7, "Q4": 10}
+
+
+def _quarter_start(quarter: str) -> datetime:
+    """Return the first day of the quarter as a UTC datetime."""
+    year_str, q = quarter.split("-")
+    year = int(year_str)
+    month = QUARTER_START_MONTHS.get(q, 1)
+    return datetime(year, month, 1, tzinfo=timezone.utc)
+
+
 class NewsSource:
     """Fetch news signals from RSS feeds."""
 
@@ -36,7 +47,10 @@ class NewsSource:
 
     async def fetch(self, quarter: str) -> List[Signal]:
         """Fetch RSS items and convert to Signals. Never raises — returns empty list on failure."""
-        cutoff = datetime.now(timezone.utc) - timedelta(days=SIGNAL_LOOKBACK_DAYS)
+        lookback_cutoff = datetime.now(timezone.utc) - timedelta(days=SIGNAL_LOOKBACK_DAYS)
+        quarter_cutoff = _quarter_start(quarter)
+        # Use the later of the two cutoffs to avoid pulling data before the quarter
+        cutoff = max(lookback_cutoff, quarter_cutoff)
         all_items: list = []
 
         for url in self.rss_urls:
