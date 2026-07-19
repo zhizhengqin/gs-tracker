@@ -20,3 +20,11 @@ def test_notifier_max_attempts_default():
 
 def test_notifier_backoff_base_default():
     assert config.NOTIFIER_BACKOFF_BASE == 1.0
+
+
+def test_rss_feeds_default():
+    assert isinstance(config.RSS_FEEDS, list)
+
+
+def test_signal_lookback_days_default():
+    assert config.SIGNAL_LOOKBACK_DAYS == 90

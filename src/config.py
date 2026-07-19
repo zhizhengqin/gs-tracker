@@ -33,6 +33,13 @@ PUBLIC_BASE_URL = os.getenv("PUBLIC_BASE_URL", "")
 NOTIFIER_MAX_ATTEMPTS = int(os.getenv("NOTIFIER_MAX_ATTEMPTS", "3"))
 NOTIFIER_BACKOFF_BASE = float(os.getenv("NOTIFIER_BACKOFF_BASE", "1.0"))
 
+RSS_FEEDS_RAW = os.getenv(
+    "RSS_FEEDS",
+    "https://feeds.content.dowjones.io/public/rss/RSSWSJ,https://www.reuters.com/arc/outboundfeeds/v3/all/?outputType=xml",
+)
+RSS_FEEDS: list[str] = [u.strip() for u in RSS_FEEDS_RAW.split(",") if u.strip()]
+SIGNAL_LOOKBACK_DAYS = int(os.getenv("SIGNAL_LOOKBACK_DAYS", "90"))
+
 SEC_API_KEY = os.getenv("SEC_API_KEY", "")
 FINRA_API_KEY = os.getenv("FINRA_API_KEY", "")
 CBOE_API_KEY = os.getenv("CBOE_API_KEY", "")
