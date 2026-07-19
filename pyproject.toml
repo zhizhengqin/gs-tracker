@@ -21,6 +21,7 @@ dependencies = [
     "matplotlib>=3.9.1",
     "apscheduler>=3.10.4",
     "python-dotenv>=1.0.1",
+    "feedparser>=6.0.0",
 ]
 
 [project.optional-dependencies]
