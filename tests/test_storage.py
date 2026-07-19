@@ -3,7 +3,13 @@ import sqlite3
 
 import pytest
 
-from src.storage import init_db, save_holdings, get_holdings
+from src.storage import (
+    get_holdings,
+    init_db,
+    is_notification_sent,
+    mark_notification_sent,
+    save_holdings,
+)
 
 
 @pytest.fixture
@@ -133,3 +139,18 @@ def test_init_db_migrates_existing_database(tmp_path, monkeypatch):
     assert "voting_authority_sole" in h_columns
     assert "voting_authority_shared" in h_columns
     assert "voting_authority_none" in h_columns
+
+
+def test_mark_notification_sent_first_time(fresh_db):
+    assert mark_notification_sent("2026-Q1") is True
+
+
+def test_mark_notification_sent_duplicate_returns_false(fresh_db):
+    mark_notification_sent("2026-Q1")
+    assert mark_notification_sent("2026-Q1") is False
+
+
+def test_is_notification_sent(fresh_db):
+    assert is_notification_sent("2026-Q1") is False
+    mark_notification_sent("2026-Q1")
+    assert is_notification_sent("2026-Q1") is True
