@@ -1,9 +1,8 @@
 """Tests for src.signals.13f_adapter."""
 from datetime import datetime, timezone
 
-import pytest
 
-from src.signals.base import Signal, SignalStrength
+from src.signals.base import SignalStrength
 from src.signals.thirteenf_adapter import ThirteenthFSignalAdapter
 
 

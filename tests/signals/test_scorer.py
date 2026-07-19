@@ -1,10 +1,9 @@
 """Tests for src.signals.scorer."""
 from datetime import datetime, timedelta, timezone
 
-import pytest
 
 from src.signals.base import Signal, SignalStrength
-from src.signals.scorer import ScoredSignal, SignalScorer
+from src.signals.scorer import SignalScorer
 
 
 NOW = datetime(2026, 5, 20, tzinfo=timezone.utc)

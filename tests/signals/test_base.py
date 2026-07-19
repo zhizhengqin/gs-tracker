@@ -1,7 +1,6 @@
 """Tests for src.signals.base."""
 from datetime import datetime, timezone
 
-import pytest
 
 from src.signals.base import Signal, SignalStrength
 

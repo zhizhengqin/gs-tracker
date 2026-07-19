@@ -1,7 +1,7 @@
 """SEC 8-K filing signal source."""
 import logging
 from datetime import datetime, timezone
-from typing import Dict, List, Optional
+from typing import Dict, List
 
 import httpx
 
@@ -31,6 +31,17 @@ ITEM_LABELS: Dict[str, str] = {
     "9.01": "财务报表与展品",
 }
 
+
+def _build_8k_summary(filing_date, item_labels, acc_num):
+    """Build a Chinese summary line for an 8-K filing."""
+    items_text = ', '.join(item_labels) if item_labels else '待解析'
+    return (
+        f"高盛于 {filing_date} 提交 8-K 报告。"
+        f"涉及事项: {items_text}。"
+        f"SEC 文件编号: {acc_num}。"
+    )
+
+
 QUARTER_DATE_RANGES = {
     "Q1": ("-01-01", "-03-31"),
     "Q2": ("-04-01", "-06-30"),
@@ -53,7 +64,10 @@ class Sec8kSource:
         )
 
     async def fetch(self, quarter: str) -> List[Signal]:
-        """Fetch recent 8-K filings and convert to Signals. Never raises — returns empty list on failure."""
+        """Fetch recent 8-K filings and convert to Signals.
+
+        Never raises — returns empty list on failure.
+        """
         try:
             padded_cik = self.cik.zfill(10)
             url = SEC_SUBMISSIONS_URL.format(padded_cik)
@@ -112,10 +126,18 @@ class Sec8kSource:
                 title=title,
                 source="8-K",
                 published_at=published_at,
-                summary=f"高盛于 {filing_date} 提交 8-K 报告。涉及事项: {', '.join(item_labels) if item_labels else '待解析'}。SEC 文件编号: {acc_num}。",
+                summary=_build_8k_summary(filing_date, item_labels, acc_num),
                 companies=["GS"],
-                strength=SignalStrength.HIGH if item_labels else SignalStrength.MEDIUM,
-                url=f"https://www.sec.gov/Archives/edgar/data/{padded_cik}/{acc_num.replace('-', '')}/{doc_name}" if acc_num and doc_name else None,
+                strength=(
+                    SignalStrength.HIGH if item_labels
+                    else SignalStrength.MEDIUM
+                ),
+                url=(
+                    (
+                        "https://www.sec.gov/Archives/edgar/data/"
+                        f"{padded_cik}/{acc_num.replace('-', '')}/{doc_name}"
+                    ) if acc_num and doc_name else None
+                ),
             ))
             count += 1
 

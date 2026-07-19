@@ -1,11 +1,9 @@
 """Tests for src.signals.news_source."""
-from datetime import datetime, timezone
+from datetime import datetime
 
 import pytest
-import pytest_asyncio
 from pytest_httpx import HTTPXMock
 
-from src.signals.base import Signal
 from src.signals.news_source import NewsSource
 
 

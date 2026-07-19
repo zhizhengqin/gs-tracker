@@ -1,10 +1,9 @@
 """Tests for src.signals.sec_8k_source."""
-from datetime import datetime, timezone
+from datetime import datetime
 
 import pytest
 from pytest_httpx import HTTPXMock
 
-from src.signals.base import Signal
 from src.signals.sec_8k_source import Sec8kSource
 
 
