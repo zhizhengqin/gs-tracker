@@ -28,8 +28,8 @@ from src.storage import (
     is_notification_sent,
     mark_notification_sent,
     save_holdings,
+    save_signal_payload,
     save_signal_run,
-    save_signals,
 )
 
 logging.basicConfig(
@@ -94,16 +94,26 @@ async def run_pipeline() -> None:
             "Aggregated %d signals (errors: %d, status: %s)",
             len(aggregation_signals), len(aggregation_errors), aggregation_status,
         )
-    except Exception:
+    except Exception as exc:
         logger.exception("Signal aggregation failed; report will lack signal panel")
+        # Record the failure so the dashboard stops showing stale "ok" badges;
+        # previously saved signals (last known good) are kept as-is.
+        try:
+            save_signal_run(
+                quarter,
+                source_status={},
+                errors=[f"信号聚合失败: {exc}"],
+            )
+        except Exception:
+            logger.exception("Failed to record signal run failure for %s", quarter)
     finally:
         await aggregator.close()
 
     if aggregation_ok:
         try:
-            save_signals(quarter, aggregation_signals)
-            save_signal_run(
+            save_signal_payload(
                 quarter,
+                aggregation_signals,
                 source_status=aggregation_status,
                 errors=aggregation_errors,
             )
