@@ -1,16 +1,19 @@
-"""FastAPI web service for report browsing and API access."""
+"""FastAPI web service for dashboard, report browsing and API access."""
 import logging
 from pathlib import Path
 from typing import List
 
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import HTMLResponse
+from fastapi.staticfiles import StaticFiles
 
-from src.config import REPORT_OUTPUT_DIR
+from src.config import PROJECT_ROOT, REPORT_OUTPUT_DIR
 
 logger = logging.getLogger(__name__)
 
-app = FastAPI(title="GS-Tracker", version="0.1.0")
+app = FastAPI(title="GS-Tracker", version="0.2.0")
+
+DASHBOARD_TEMPLATE = PROJECT_ROOT / "templates" / "dashboard.html"
 
 
 def _list_report_files() -> List[Path]:
@@ -21,30 +24,19 @@ def _list_report_files() -> List[Path]:
 
 
 @app.get("/", response_class=HTMLResponse)
-async def list_reports() -> str:
-    """Return the report listing page in Chinese."""
+async def dashboard() -> str:
+    """Serve the interactive dashboard."""
+    if DASHBOARD_TEMPLATE.exists():
+        return DASHBOARD_TEMPLATE.read_text(encoding="utf-8")
+    # Fallback to simple listing
     files = _list_report_files()
-    items = []
-    for file_path in files:
-        quarter = file_path.stem
-        link = f"/reports/{quarter}.html"
-        items.append(f'<li><a href="{link}">高盛动向情报板 — {quarter}</a></li>')
-
-    items_html = "\n".join(items) if items else "<li>暂无报告</li>"
-
+    items = "".join(
+        f'<li><a href="/reports/{f.name}">高盛动向情报板 — {f.stem}</a></li>'
+        for f in files
+    ) or "<li>暂无报告</li>"
     return f"""<!DOCTYPE html>
-<html lang="zh-CN">
-<head>
-    <meta charset="UTF-8">
-    <title>GS-Tracker 报告列表</title>
-</head>
-<body>
-    <h1>高盛动向情报系统 — 报告列表</h1>
-    <ul>
-        {items_html}
-    </ul>
-</body>
-</html>"""
+<html lang="zh-CN"><head><meta charset="UTF-8"><title>GS-Tracker</title></head>
+<body><h1>高盛动向情报系统</h1><ul>{items}</ul></body></html>"""
 
 
 @app.get("/reports/{quarter}.html", response_class=HTMLResponse)

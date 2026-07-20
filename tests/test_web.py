@@ -19,25 +19,20 @@ def test_report_not_found(tmp_path, monkeypatch):
     assert response.status_code == 404
 
 
-def test_root_lists_reports(tmp_path, monkeypatch):
+def test_root_serves_dashboard(tmp_path, monkeypatch):
     monkeypatch.setattr("src.web.REPORT_OUTPUT_DIR", tmp_path)
-    (tmp_path / "2026-Q2.html").write_text("<html>Q2</html>", encoding="utf-8")
-    (tmp_path / "2026-Q1.html").write_text("<html>Q1</html>", encoding="utf-8")
-
     response = client.get("/")
     assert response.status_code == 200
-    assert "GS-Tracker 报告列表" in response.text
-    assert "2026-Q1" in response.text
-    assert "2026-Q2" in response.text
-    # Verify ordering and link format.
-    q1_pos = response.text.find("2026-Q1")
-    q2_pos = response.text.find("2026-Q2")
-    assert q1_pos < q2_pos
-    assert '/reports/2026-Q1.html"' in response.text
+    # Dashboard renders with GS-Tracker branding
+    assert "GS-Tracker" in response.text
+    assert "高盛动向情报系统" in response.text
+    # Dashboard has sidebar navigation
+    assert "sidebar" in response.text
 
 
-def test_root_empty_reports(tmp_path, monkeypatch):
+def test_root_fallback_when_no_dashboard(tmp_path, monkeypatch):
     monkeypatch.setattr("src.web.REPORT_OUTPUT_DIR", tmp_path)
+    monkeypatch.setattr("src.web.DASHBOARD_TEMPLATE", tmp_path / "nonexistent.html")
     response = client.get("/")
     assert response.status_code == 200
     assert "暂无报告" in response.text

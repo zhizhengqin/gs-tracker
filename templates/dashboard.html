@@ -1,0 +1,590 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GS-Tracker 高盛动向情报系统</title>
+    <style>
+        :root {
+            --sidebar-w: 260px;
+            --primary: #1a237e;
+            --accent: #ff9800;
+            --bg: #f0f2f5;
+            --sidebar-bg: #121858;
+            --sidebar-text: #c4c9e0;
+            --sidebar-active: #fff;
+            --card: #fff;
+            --danger: #d32f2f;
+            --success: #2e7d32;
+            --warn: #e65100;
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: var(--bg); color: #333; display: flex; min-height: 100vh; }
+
+        /* ====== Sidebar ====== */
+        .sidebar {
+            width: var(--sidebar-w); background: var(--sidebar-bg); color: var(--sidebar-text);
+            display: flex; flex-direction: column; position: fixed; top: 0; left: 0; bottom: 0; z-index: 100;
+            overflow-y: auto;
+        }
+        .sidebar-header {
+            padding: 24px 20px; border-bottom: 1px solid rgba(255,255,255,0.1);
+        }
+        .sidebar-header h1 { font-size: 1.15em; color: #fff; font-weight: 700; }
+        .sidebar-header .sub { font-size: 0.8em; color: #8890b5; margin-top: 4px; }
+
+        .sidebar-section { padding: 16px 20px; border-bottom: 1px solid rgba(255,255,255,0.06); }
+        .sidebar-section h3 { font-size: 0.7em; text-transform: uppercase; letter-spacing: 1.5px; color: #6670a0; margin-bottom: 10px; }
+
+        .quarter-list { list-style: none; }
+        .quarter-list li {
+            padding: 10px 14px; border-radius: 8px; cursor: pointer; font-size: 0.9em;
+            margin-bottom: 4px; transition: all 0.15s; display: flex; justify-content: space-between; align-items: center;
+        }
+        .quarter-list li:hover { background: rgba(255,255,255,0.08); color: #fff; }
+        .quarter-list li.active { background: var(--accent); color: #fff; font-weight: 600; }
+        .quarter-list li .badge { font-size: 0.7em; background: rgba(255,255,255,0.2); padding: 2px 8px; border-radius: 10px; }
+        .quarter-list li.active .badge { background: rgba(255,255,255,0.3); }
+
+        .nav-tabs { list-style: none; }
+        .nav-tabs li {
+            padding: 9px 14px; border-radius: 8px; cursor: pointer; font-size: 0.88em;
+            margin-bottom: 2px; transition: all 0.15s;
+        }
+        .nav-tabs li:hover { background: rgba(255,255,255,0.08); color: #fff; }
+        .nav-tabs li.active { background: rgba(255,255,255,0.12); color: #fff; font-weight: 600; border-left: 3px solid var(--accent); padding-left: 11px; }
+
+        .signal-filter { margin-top: 8px; }
+        .signal-filter label { display: flex; align-items: center; gap: 8px; font-size: 0.82em; padding: 4px 0; cursor: pointer; }
+        .signal-filter input[type=checkbox] { accent-color: var(--accent); }
+
+        .sidebar-footer {
+            margin-top: auto; padding: 16px 20px; font-size: 0.7em; color: #6670a0;
+            border-top: 1px solid rgba(255,255,255,0.06);
+        }
+
+        /* ====== Main Content ====== */
+        .main {
+            margin-left: var(--sidebar-w); flex: 1; padding: 28px 32px; min-height: 100vh;
+        }
+
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+
+        .page-header {
+            display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;
+        }
+        .page-header h2 { font-size: 1.5em; color: var(--primary); }
+        .page-header .meta { font-size: 0.85em; color: #888; }
+
+        .card {
+            background: var(--card); border-radius: 12px; padding: 24px; margin-bottom: 20px;
+            box-shadow: 0 1px 4px rgba(0,0,0,0.06); border: 1px solid #e8eaed;
+        }
+        .card h3 { font-size: 1.05em; color: var(--primary); margin-bottom: 14px; padding-bottom: 8px; border-bottom: 2px solid var(--accent); display: inline-block; }
+
+        /* Stats row */
+        .stats-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 24px; }
+        .stat-card {
+            background: var(--card); border-radius: 12px; padding: 20px; text-align: center;
+            box-shadow: 0 1px 4px rgba(0,0,0,0.06); border: 1px solid #e8eaed;
+        }
+        .stat-card .num { font-size: 1.8em; font-weight: 700; color: var(--primary); }
+        .stat-card .label { font-size: 0.8em; color: #888; margin-top: 4px; }
+
+        /* Signals */
+        .signal-card {
+            border: 1px solid #e8eaed; border-radius: 10px; padding: 14px 18px; margin-bottom: 10px;
+            transition: box-shadow 0.15s; cursor: default;
+        }
+        .signal-card:hover { box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+        .signal-card.high { border-left: 4px solid var(--danger); }
+        .signal-card.medium { border-left: 4px solid var(--warn); }
+        .signal-card.low { border-left: 4px solid #9e9e9e; }
+        .signal-card .sig-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+        .signal-card .sig-source {
+            font-size: 0.75em; font-weight: 700; padding: 2px 8px; border-radius: 4px;
+            text-transform: uppercase;
+        }
+        .sig-source.src-13F { background: #e3f2fd; color: #1565c0; }
+        .sig-source.src-news { background: #fce4ec; color: #c62828; }
+        .sig-source.src-8-K { background: #e8f5e9; color: #2e7d32; }
+        .signal-card .sig-date { font-size: 0.8em; color: #999; }
+        .signal-card h4 { font-size: 0.95em; margin-bottom: 6px; }
+        .signal-card .sig-summary { font-size: 0.85em; color: #666; line-height: 1.5; }
+        .signal-card .sig-meta { margin-top: 8px; display: flex; gap: 10px; flex-wrap: wrap; align-items: center; font-size: 0.82em; }
+        .cross-badge { background: #ede7f6; color: #4527a0; padding: 2px 8px; border-radius: 4px; font-weight: 600; }
+        .sig-link { color: var(--accent); text-decoration: none; font-weight: 600; }
+        .sig-link:hover { text-decoration: underline; }
+
+        /* Holdings table */
+        table { width: 100%; border-collapse: collapse; }
+        th, td { text-align: left; padding: 10px 14px; border-bottom: 1px solid #eee; }
+        th { background: #f5f6f8; font-size: 0.8em; text-transform: uppercase; letter-spacing: 0.5px; color: #666; }
+        td { font-size: 0.9em; }
+        tr:hover td { background: #fafbfc; }
+
+        .sentiment-tag {
+            display: inline-block; padding: 4px 12px; border-radius: 20px; font-size: 0.85em; font-weight: 600;
+        }
+        .sentiment-tag.bullish { background: #e8f5e9; color: #2e7d32; }
+        .sentiment-tag.bearish { background: #fce4ec; color: #c62828; }
+        .sentiment-tag.neutral { background: #f5f5f5; color: #666; }
+
+        .confidence-bar { display: inline-block; width: 80px; height: 6px; background: #e0e0e0; border-radius: 3px; vertical-align: middle; margin-left: 8px; }
+        .confidence-bar .fill { height: 100%; border-radius: 3px; background: var(--accent); }
+
+        .empty-state { text-align: center; padding: 60px 20px; color: #999; }
+        .empty-state .icon { font-size: 3em; margin-bottom: 12px; }
+        .loading { text-align: center; padding: 40px; color: #999; }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            .sidebar { width: 100%; position: relative; height: auto; }
+            .main { margin-left: 0; }
+            .stats-row { grid-template-columns: repeat(2, 1fr); }
+        }
+    </style>
+</head>
+<body>
+
+<!-- ====== SIDEBAR ====== -->
+<aside class="sidebar">
+    <div class="sidebar-header">
+        <h1>🏦 GS-Tracker</h1>
+        <div class="sub">高盛动向情报系统</div>
+    </div>
+
+    <div class="sidebar-section">
+        <h3>📅 季度报告</h3>
+        <ul class="quarter-list" id="quarterList">
+            <li class="active" data-quarter="2026-Q2">
+                2026-Q2 <span class="badge">最新</span>
+            </li>
+            <li data-quarter="2026-Q1">2026-Q1</li>
+        </ul>
+    </div>
+
+    <div class="sidebar-section">
+        <h3>📋 模块</h3>
+        <ul class="nav-tabs" id="navTabs">
+            <li class="active" data-tab="overview">📊 概览</li>
+            <li data-tab="analysis">🤖 AI 分析</li>
+            <li data-tab="signals">📡 多源信号</li>
+            <li data-tab="holdings">📋 持仓明细</li>
+        </ul>
+    </div>
+
+    <div class="sidebar-section" id="signalFilterSection" style="display:none;">
+        <h3>🔍 信号筛选</h3>
+        <div class="signal-filter">
+            <label><input type="checkbox" checked onchange="renderSignals()" class="filter-source" value="13F"> 13F 持仓</label>
+            <label><input type="checkbox" checked onchange="renderSignals()" class="filter-source" value="news"> 新闻</label>
+            <label><input type="checkbox" checked onchange="renderSignals()" class="filter-source" value="8-K"> SEC 8-K</label>
+        </div>
+        <div class="signal-filter" style="margin-top: 8px;">
+            <label><input type="checkbox" checked onchange="renderSignals()" class="filter-strength" value="high"> 🔴 高优先级</label>
+            <label><input type="checkbox" checked onchange="renderSignals()" class="filter-strength" value="medium"> 🟡 中优先级</label>
+            <label><input type="checkbox" checked onchange="renderSignals()" class="filter-strength" value="low"> 🟢 低优先级</label>
+        </div>
+    </div>
+
+    <div class="sidebar-footer">
+        GS-Tracker v1.0 · 数据来源 SEC EDGAR / RSS<br>
+        本内容仅供学习参考，不构成投资建议
+    </div>
+</aside>
+
+<!-- ====== MAIN CONTENT ====== -->
+<main class="main" id="mainContent">
+    <div class="loading">加载中...</div>
+</main>
+
+<script>
+// ====== State ======
+let currentQuarter = '2026-Q2';
+let reportData = null;
+let reports = [];
+
+// ====== Init ======
+async function init() {
+    // Load report list from API
+    try {
+        const resp = await fetch('/api/reports');
+        reports = await resp.json();
+        renderQuarterList();
+    } catch(e) { console.error('Failed to load reports', e); }
+
+    // Load current quarter
+    await loadQuarter(currentQuarter);
+
+    // Bind events
+    document.querySelectorAll('#navTabs li').forEach(li => {
+        li.addEventListener('click', () => switchTab(li.dataset.tab));
+    });
+}
+
+async function loadQuarter(quarter) {
+    currentQuarter = quarter;
+    document.getElementById('mainContent').innerHTML = '<div class="loading">加载中...</div>';
+
+    try {
+        const resp = await fetch(`/reports/${quarter}.html`);
+        const html = await resp.text();
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(html, 'text/html');
+
+        // Extract data from the static HTML
+        // For now, extract what we can and build the dashboard
+        reportData = {
+            quarter: quarter,
+            generated_at: extractMeta(doc, '报告生成时间'),
+            sentiment: extractMeta(doc, '情绪信号'),
+            confidence: extractMeta(doc, '置信度'),
+            analysis: {
+                summary: extractSection(doc, '总体摘要'),
+                concentration: extractSection(doc, '集中度分析'),
+                topHoldings: extractSection(doc, '前十大重仓股分析'),
+                sector: extractSection(doc, '行业偏好'),
+                signals: extractSection(doc, '交易信号'),
+                risks: extractSection(doc, '风险提示'),
+                retail: extractSection(doc, '散户可借鉴思路'),
+            },
+            keyTickers: extractTickers(doc),
+            signals: extractSignals(doc),
+            sourceStatus: extractSourceStatus(doc),
+            holdings: extractHoldings(doc),
+        };
+    } catch(e) {
+        console.error('Failed to load report', e);
+        reportData = null;
+    }
+
+    renderAll();
+    updateQuarterListActive();
+}
+
+// ====== Data extractors from static HTML ======
+function extractMeta(doc, label) {
+    const ps = doc.querySelectorAll('p');
+    for (const p of ps) {
+        if (p.textContent.includes(label)) {
+            return p.textContent.replace(label + '：', '').replace(label + ':', '').trim();
+        }
+    }
+    return '';
+}
+
+function extractSection(doc, label) {
+    const spans = doc.querySelectorAll('.label');
+    for (const s of spans) {
+        if (s.textContent.includes(label)) {
+            return s.parentElement.textContent.replace(label + '：', '').replace(label + ':', '').trim();
+        }
+    }
+    return '暂无数据';
+}
+
+function extractTickers(doc) {
+    const h2s = doc.querySelectorAll('h2');
+    for (const h2 of h2s) {
+        if (h2.textContent.includes('重点标的')) {
+            const card = h2.closest('.card');
+            if (card) {
+                const p = card.querySelector('p');
+                return p ? p.textContent.split(',').map(s => s.trim()).filter(Boolean) : [];
+            }
+        }
+    }
+    return [];
+}
+
+function extractSignals(doc) {
+    const signals = [];
+    const signalCards = doc.querySelectorAll('.signal-card, [style*="border: 1px solid #e0e0e0"]');
+    // Fallback: parse the old template format
+    const cards = doc.querySelectorAll('.card');
+    for (const card of cards) {
+        const h2 = card.querySelector('h2');
+        if (h2 && h2.textContent.includes('多源信号')) {
+            const items = card.querySelectorAll('[style*="border: 1px solid #e0e0e0"]');
+            items.forEach(item => {
+                const headerDiv = item.querySelector('[style*="justify-content: space-between"]');
+                const source = headerDiv ? headerDiv.querySelector('span:first-child')?.textContent?.trim() : '';
+                const date = headerDiv ? headerDiv.querySelector('span:last-child')?.textContent?.trim() : '';
+                const title = item.querySelector('strong')?.textContent?.trim() || '';
+                const summary = item.querySelector('p')?.textContent?.trim() || '';
+                const companiesEl = item.querySelector('[style*="相关公司"]');
+                const companies = companiesEl ? companiesEl.textContent.replace('相关公司:', '').split(',').map(s => s.trim()) : [];
+                const crossRef = !!item.querySelector('[style*="交叉信号"]');
+                const linkEl = item.querySelector('a');
+                const url = linkEl ? linkEl.href : null;
+
+                // Determine strength from heading context
+                let strength = 'low';
+                const h3 = item.closest('[style*="margin-bottom: 16px"]')?.querySelector('h3');
+                if (h3) {
+                    if (h3.textContent.includes('高优先级')) strength = 'high';
+                    else if (h3.textContent.includes('中优先级')) strength = 'medium';
+                }
+
+                signals.push({ title, source, date, summary, companies, strength, crossRef, url });
+            });
+            break;
+        }
+    }
+    return signals;
+}
+
+function extractSourceStatus(doc) {
+    const status = {};
+    const badges = doc.querySelectorAll('.source-status span, [style*="source-status"] span');
+    badges.forEach(b => {
+        const text = b.textContent.trim();
+        const match = text.match(/^(\S+):\s*(.+)/);
+        if (match) status[match[1]] = match[2];
+    });
+    return status;
+}
+
+function extractHoldings(doc) {
+    const holdings = [];
+    const table = doc.querySelector('table');
+    if (!table) return holdings;
+    const rows = table.querySelectorAll('tbody tr');
+    rows.forEach(row => {
+        const cells = row.querySelectorAll('td');
+        if (cells.length >= 2) {
+            holdings.push({
+                name: cells[0].textContent.trim(),
+                value: cells[1].textContent.trim(),
+            });
+        }
+    });
+    return holdings;
+}
+
+// ====== Render ======
+function renderAll() {
+    switchTab(document.querySelector('#navTabs li.active')?.dataset?.tab || 'overview');
+}
+
+function switchTab(tab) {
+    document.querySelectorAll('#navTabs li').forEach(li => li.classList.remove('active'));
+    const activeLi = document.querySelector(`#navTabs li[data-tab="${tab}"]`);
+    if (activeLi) activeLi.classList.add('active');
+
+    // Show/hide signal filter
+    const filterSection = document.getElementById('signalFilterSection');
+    filterSection.style.display = tab === 'signals' ? 'block' : 'none';
+
+    if (!reportData) {
+        document.getElementById('mainContent').innerHTML = '<div class="empty-state"><div class="icon">📭</div><p>暂无数据</p></div>';
+        return;
+    }
+
+    const d = reportData;
+    let html = '';
+    switch(tab) {
+        case 'overview': html = renderOverview(d); break;
+        case 'analysis': html = renderAnalysis(d); break;
+        case 'signals': html = renderSignalsPanel(d); break;
+        case 'holdings': html = renderHoldingsPanel(d); break;
+    }
+    document.getElementById('mainContent').innerHTML = html;
+}
+
+function renderOverview(d) {
+    const sigCount = d.signals.length;
+    const highCount = d.signals.filter(s => s.strength === 'high').length;
+    const confidence = d.confidence ? parseFloat(d.confidence) : 0;
+
+    let sentimentClass = 'neutral';
+    if (d.sentiment.includes('偏多') || d.sentiment.includes('bullish')) sentimentClass = 'bullish';
+    else if (d.sentiment.includes('偏空') || d.sentiment.includes('bearish')) sentimentClass = 'bearish';
+
+    return `
+        <div class="page-header">
+            <h2>📊 ${d.quarter} 概览</h2>
+            <span class="meta">${d.generated_at || ''}</span>
+        </div>
+        <div class="stats-row">
+            <div class="stat-card">
+                <div class="num">${d.keyTickers.length}</div>
+                <div class="label">重点标的</div>
+            </div>
+            <div class="stat-card">
+                <div class="num">${sigCount}</div>
+                <div class="label">多源信号</div>
+            </div>
+            <div class="stat-card">
+                <div class="num">${highCount}</div>
+                <div class="label">高优先级信号</div>
+            </div>
+            <div class="stat-card">
+                <span class="sentiment-tag ${sentimentClass}">${d.sentiment || '—'}</span>
+                <div class="label" style="margin-top: 4px;">AI 情绪判断
+                    <span class="confidence-bar"><span class="fill" style="width:${confidence * 100}%"></span></span>
+                    ${(confidence * 100).toFixed(0)}%
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <h3>📡 信号源状态</h3>
+            <div style="display:flex;gap:16px;flex-wrap:wrap;margin-top:8px;">
+                ${Object.entries(d.sourceStatus).map(([src, status]) => `
+                    <span style="padding:6px 14px;border-radius:8px;font-size:0.9em;
+                        ${status.includes('✅') ? 'background:#e8f5e9;color:#2e7d32;' : 'background:#fff3e0;color:#e65100;'}">
+                        ${src}: ${status}
+                    </span>
+                `).join('')}
+            </div>
+        </div>
+
+        <div class="card">
+            <h3>🎯 重点标的</h3>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;">
+                ${d.keyTickers.map(t => `<span style="background:#e3f2fd;color:#1565c0;padding:6px 14px;border-radius:20px;font-size:0.9em;font-weight:600;">${t}</span>`).join('')}
+            </div>
+        </div>
+
+        ${d.signals.length > 0 ? `
+        <div class="card">
+            <h3>🔴 最新高优先级信号</h3>
+            ${d.signals.filter(s => s.strength === 'high').slice(0, 3).map(s => renderSignalCard(s)).join('')}
+            ${d.signals.filter(s => s.strength === 'high').length === 0 ? '<p style="color:#999;">本季度无高优先级信号</p>' : ''}
+        </div>
+        ` : ''}
+    `;
+}
+
+function renderAnalysis(d) {
+    const a = d.analysis;
+    let confidence = d.confidence ? parseFloat(d.confidence) : 0;
+    return `
+        <div class="page-header">
+            <h2>🤖 AI 分析洞察</h2>
+            <span class="meta">${d.quarter} · 置信度 ${(confidence * 100).toFixed(0)}%</span>
+        </div>
+        <div class="card"><h3>总体摘要</h3><p style="line-height:1.8;color:#555;">${a.summary}</p></div>
+        <div class="card"><h3>集中度分析</h3><p style="line-height:1.8;color:#555;">${a.concentration}</p></div>
+        <div class="card"><h3>前十大重仓股分析</h3><p style="line-height:1.8;color:#555;">${a.topHoldings}</p></div>
+        <div class="card"><h3>行业偏好</h3><p style="line-height:1.8;color:#555;">${a.sector}</p></div>
+        <div class="card"><h3>交易信号</h3><p style="line-height:1.8;color:#555;">${a.signals}</p></div>
+        <div class="card"><h3>⚠️ 风险提示</h3><p style="line-height:1.8;color:var(--danger);">${a.risks}</p></div>
+        <div class="card"><h3>💡 散户可借鉴思路</h3><p style="line-height:1.8;color:#555;">${a.retail}</p></div>
+    `;
+}
+
+function renderSignalsPanel(d) {
+    return `
+        <div class="page-header">
+            <h2>📡 多源信号</h2>
+            <span class="meta">共 ${d.signals.length} 条信号 · ${d.quarter}</span>
+        </div>
+        <div id="signalsContainer"></div>
+    ` + `<script>renderSignals();</script>`;
+}
+
+function renderSignals() {
+    const container = document.getElementById('signalsContainer');
+    if (!container || !reportData) return;
+
+    const activeSources = [...document.querySelectorAll('.filter-source:checked')].map(cb => cb.value);
+    const activeStrengths = [...document.querySelectorAll('.filter-strength:checked')].map(cb => cb.value);
+
+    let filtered = reportData.signals.filter(s => {
+        const srcMatch = activeSources.includes(s.source);
+        const strMatch = activeStrengths.includes(s.strength);
+        return srcMatch && strMatch;
+    });
+
+    if (filtered.length === 0) {
+        container.innerHTML = '<div class="empty-state"><div class="icon">🔍</div><p>没有匹配的信号，试试调整筛选条件</p></div>';
+        return;
+    }
+
+    const grouped = { high: [], medium: [], low: [] };
+    filtered.forEach(s => grouped[s.strength].push(s));
+
+    let html = '';
+    for (const [level, signals] of Object.entries(grouped)) {
+        if (signals.length === 0) continue;
+        const emoji = level === 'high' ? '🔴' : level === 'medium' ? '🟡' : '🟢';
+        const label = level === 'high' ? '高优先级' : level === 'medium' ? '中优先级' : '低优先级';
+        html += `<div class="card"><h3>${emoji} ${label}信号 (${signals.length})</h3>`;
+        signals.forEach(s => { html += renderSignalCard(s); });
+        html += '</div>';
+    }
+    container.innerHTML = html;
+}
+
+function renderSignalCard(s) {
+    const srcClass = s.source === '13F' ? 'src-13F' : s.source === 'news' ? 'src-news' : 'src-8-K';
+    return `
+        <div class="signal-card ${s.strength}">
+            <div class="sig-header">
+                <span class="sig-source ${srcClass}">${s.source}</span>
+                <span class="sig-date">${s.date}</span>
+            </div>
+            <h4>${s.title}</h4>
+            <p class="sig-summary">${s.summary}</p>
+            <div class="sig-meta">
+                ${s.companies.length ? `<span>🏢 ${s.companies.join(', ')}</span>` : ''}
+                ${s.crossRef ? '<span class="cross-badge">🔗 交叉信号</span>' : ''}
+                ${s.url ? `<a href="${s.url}" target="_blank" rel="noopener" class="sig-link">查看原文 →</a>` : ''}
+            </div>
+        </div>
+    `;
+}
+
+function renderHoldingsPanel(d) {
+    const rows = d.holdings.map((h, i) => `
+        <tr>
+            <td style="color:#888;">${i + 1}</td>
+            <td><strong>${h.name}</strong></td>
+            <td style="text-align:right;font-family:monospace;">${h.value}</td>
+        </tr>
+    `).join('');
+
+    return `
+        <div class="page-header">
+            <h2>📋 持仓明细</h2>
+            <span class="meta">${d.quarter} · ${d.holdings.length} 条记录</span>
+        </div>
+        <div class="card">
+            <table>
+                <thead><tr><th style="width:40px;">#</th><th>公司名称</th><th style="text-align:right;">持仓价值（美元）</th></tr></thead>
+                <tbody>${rows || '<tr><td colspan="3" style="text-align:center;color:#999;">暂无持仓数据</td></tr>'}</tbody>
+            </table>
+        </div>
+    `;
+}
+
+// ====== Quarter switching ======
+function renderQuarterList() {
+    const ul = document.getElementById('quarterList');
+    ul.innerHTML = reports.map((r, i) => `
+        <li data-quarter="${r.quarter}" class="${r.quarter === currentQuarter ? 'active' : ''}">
+            ${r.quarter}
+            ${i === 0 ? '<span class="badge">最新</span>' : ''}
+        </li>
+    `).join('');
+
+    ul.querySelectorAll('li').forEach(li => {
+        li.addEventListener('click', () => loadQuarter(li.dataset.quarter));
+    });
+}
+
+function updateQuarterListActive() {
+    document.querySelectorAll('#quarterList li').forEach(li => {
+        li.classList.toggle('active', li.dataset.quarter === currentQuarter);
+    });
+}
+
+// ====== Boot ======
+init();
+</script>
+</body>
+</html>
