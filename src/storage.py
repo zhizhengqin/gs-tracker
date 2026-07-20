@@ -1,11 +1,14 @@
 """SQLite persistence layer."""
+import json
 import logging
 import sqlite3
 from contextlib import contextmanager
+from datetime import datetime
 from pathlib import Path
 from typing import Iterator, List, Optional
 
 from src.config import DATABASE_URL, PROJECT_ROOT
+from src.signals.base import Signal, SignalStrength
 
 logger = logging.getLogger(__name__)
 
@@ -97,6 +100,28 @@ def init_db() -> None:
             CREATE TABLE IF NOT EXISTS sent_notifications (
                 quarter TEXT PRIMARY KEY,
                 sent_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+
+            CREATE TABLE IF NOT EXISTS signals (
+                id TEXT NOT NULL,
+                quarter TEXT NOT NULL,
+                source TEXT NOT NULL,
+                title TEXT NOT NULL,
+                published_at TEXT NOT NULL,
+                summary TEXT,
+                companies TEXT,
+                strength TEXT NOT NULL,
+                url TEXT,
+                cross_refs TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (quarter, id)
+            );
+
+            CREATE TABLE IF NOT EXISTS signal_runs (
+                quarter TEXT PRIMARY KEY,
+                source_status TEXT,
+                errors TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
             """
         )
@@ -255,3 +280,102 @@ def is_notification_sent(quarter: str) -> bool:
             (quarter,),
         )
         return cursor.fetchone() is not None
+
+
+def save_signals(quarter: str, signals: List[Signal]) -> None:
+    """Persist aggregated signals for a quarter, replacing any previous run."""
+    with get_connection() as conn:
+        conn.execute("DELETE FROM signals WHERE quarter = ?", (quarter,))
+        for s in signals:
+            conn.execute(
+                """
+                INSERT INTO signals (
+                    id, quarter, source, title, published_at,
+                    summary, companies, strength, url, cross_refs
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    s.id,
+                    quarter,
+                    s.source,
+                    s.title,
+                    s.published_at.isoformat(),
+                    s.summary,
+                    json.dumps(s.companies, ensure_ascii=False),
+                    s.strength.value,
+                    s.url,
+                    json.dumps(s.cross_refs, ensure_ascii=False),
+                ),
+            )
+        conn.commit()
+
+
+def get_signals(quarter: str) -> List[Signal]:
+    """Load persisted signals for a quarter, in insertion order."""
+    with get_connection() as conn:
+        cursor = conn.execute(
+            """
+            SELECT id, source, title, published_at, summary,
+                   companies, strength, url, cross_refs
+            FROM signals
+            WHERE quarter = ?
+            ORDER BY rowid
+            """,
+            (quarter,),
+        )
+        return [
+            Signal(
+                id=row["id"],
+                source=row["source"],
+                title=row["title"],
+                published_at=datetime.fromisoformat(row["published_at"]),
+                summary=row["summary"] or "",
+                companies=json.loads(row["companies"]) if row["companies"] else [],
+                strength=SignalStrength(row["strength"]),
+                url=row["url"],
+                cross_refs=json.loads(row["cross_refs"]) if row["cross_refs"] else [],
+            )
+            for row in cursor.fetchall()
+        ]
+
+
+def save_signal_run(
+    quarter: str,
+    source_status: Optional[dict] = None,
+    errors: Optional[List[str]] = None,
+) -> None:
+    """Persist metadata about a signal aggregation run for a quarter."""
+    with get_connection() as conn:
+        conn.execute(
+            """
+            INSERT INTO signal_runs (quarter, source_status, errors)
+            VALUES (?, ?, ?)
+            ON CONFLICT(quarter) DO UPDATE SET
+                source_status=excluded.source_status,
+                errors=excluded.errors,
+                created_at=CURRENT_TIMESTAMP
+            """,
+            (
+                quarter,
+                json.dumps(source_status or {}, ensure_ascii=False),
+                json.dumps(errors or [], ensure_ascii=False),
+            ),
+        )
+        conn.commit()
+
+
+def get_signal_run(quarter: str) -> Optional[dict]:
+    """Load signal aggregation run metadata, or None if the quarter never ran."""
+    with get_connection() as conn:
+        cursor = conn.execute(
+            "SELECT quarter, source_status, errors FROM signal_runs WHERE quarter = ?",
+            (quarter,),
+        )
+        row = cursor.fetchone()
+        if row is None:
+            return None
+        return {
+            "quarter": row["quarter"],
+            "source_status": json.loads(row["source_status"]) if row["source_status"] else {},
+            "errors": json.loads(row["errors"]) if row["errors"] else [],
+        }
