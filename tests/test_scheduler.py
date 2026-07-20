@@ -113,3 +113,58 @@ async def test_main_registers_signal_handlers(monkeypatch):
     assert signal.SIGTERM in added
     assert signal.SIGINT in removed
     assert signal.SIGTERM in removed
+
+
+@pytest.mark.asyncio
+async def test_main_run_now_flag_triggers_pipeline(monkeypatch):
+    """--run-now should execute pipeline immediately before entering the wait loop."""
+    from src import scheduler as scheduler_module
+
+    mock_scheduler_instance = MagicMock()
+    mock_scheduler_instance.run_quarterly_pipeline = AsyncMock()
+    mock_scheduler_instance.start = MagicMock()
+    mock_scheduler_instance.shutdown = MagicMock()
+
+    mock_scheduler_class = MagicMock(return_value=mock_scheduler_instance)
+    monkeypatch.setattr(scheduler_module, "GSScheduler", mock_scheduler_class)
+
+    shutdown_event = asyncio.Event()
+
+    async def _stop_later():
+        shutdown_event.set()
+
+    asyncio.create_task(_stop_later())
+
+    await scheduler_module.main(shutdown_event=shutdown_event, run_now=True)
+
+    mock_scheduler_instance.run_quarterly_pipeline.assert_awaited_once()
+    # Scheduler should still start and schedule after the immediate run
+    mock_scheduler_instance.schedule_quarterly_check.assert_called_once()
+    mock_scheduler_instance.start.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_main_calls_ensure_directories(monkeypatch):
+    """Scheduler should create output directories on startup for fresh deployments."""
+    from src import scheduler as scheduler_module
+
+    mock_ensure = MagicMock()
+    monkeypatch.setattr(scheduler_module, "ensure_directories", mock_ensure)
+
+    mock_scheduler_instance = MagicMock()
+    mock_scheduler_instance.start = MagicMock()
+    mock_scheduler_instance.shutdown = MagicMock()
+    monkeypatch.setattr(
+        scheduler_module, "GSScheduler", MagicMock(return_value=mock_scheduler_instance)
+    )
+
+    shutdown_event = asyncio.Event()
+
+    async def _stop_later():
+        shutdown_event.set()
+
+    asyncio.create_task(_stop_later())
+
+    await scheduler_module.main(shutdown_event=shutdown_event)
+
+    mock_ensure.assert_called_once()

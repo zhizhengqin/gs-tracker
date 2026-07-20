@@ -1,5 +1,6 @@
 """Task scheduler for periodic data fetching and reporting."""
 
+import argparse
 import asyncio
 import logging
 import signal
@@ -8,6 +9,8 @@ from typing import Optional
 from apscheduler.schedulers import SchedulerNotRunningError
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
+
+from src.config import ensure_directories
 
 logger = logging.getLogger(__name__)
 
@@ -53,9 +56,19 @@ class GSScheduler:
             logger.debug("Scheduler was not running")
 
 
-async def main(shutdown_event: Optional[asyncio.Event] = None) -> None:
+async def main(
+    shutdown_event: Optional[asyncio.Event] = None,
+    run_now: bool = False,
+) -> None:
     """Start the scheduler and keep running until SIGINT or SIGTERM."""
+    ensure_directories()
+
     scheduler = GSScheduler()
+
+    if run_now:
+        logger.info("Running pipeline immediately (--run-now)")
+        await scheduler.run_quarterly_pipeline()
+
     scheduler.schedule_quarterly_check()
     scheduler.start()
 
@@ -79,4 +92,11 @@ if __name__ == "__main__":
         level=logging.INFO,
         format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
     )
-    asyncio.run(main())
+    parser = argparse.ArgumentParser(description="GS-Tracker periodic scheduler")
+    parser.add_argument(
+        "--run-now",
+        action="store_true",
+        help="Run the full pipeline immediately on startup, then begin scheduling",
+    )
+    args = parser.parse_args()
+    asyncio.run(main(run_now=args.run_now))
