@@ -1,11 +1,8 @@
 """Tests for src.web."""
-from datetime import datetime
-
 import pytest
 from fastapi.testclient import TestClient
 
 from src import storage
-from src.signals.base import Signal, SignalStrength
 from src.web import app
 
 
@@ -80,35 +77,35 @@ def signals_db(tmp_path, monkeypatch):
     return db_file
 
 
-def _make_signal(**overrides) -> Signal:
-    defaults = dict(
-        title="高盛增持苹果",
-        source="13F",
-        published_at=datetime(2026, 3, 31, 12, 0, 0),
-        summary="苹果占组合 12.3%",
-        companies=["AAPL"],
-        strength=SignalStrength.HIGH,
-        url="https://example.com/a",
-        cross_refs=["news:高盛看好苹果"],
-        id="sig00001",
-    )
-    defaults.update(overrides)
-    return Signal(**defaults)
-
-
 def test_api_signals_not_found_when_no_run(signals_db):
     response = client.get("/api/signals/2099-Q4")
     assert response.status_code == 404
     assert response.json()["detail"] == "该季度暂无信号数据"
 
 
-def test_api_signals_returns_saved_signals(signals_db):
+def test_api_signals_invalid_quarter_returns_422(signals_db):
+    for bad in ("foo", "2026", "2026-q1", "2026-Q5", "2026-Q0"):
+        response = client.get(f"/api/signals/{bad}")
+        assert response.status_code == 422, bad
+
+
+def test_api_signals_fresh_db_initialized_at_startup(tmp_path, monkeypatch):
+    """Fresh deployment: startup init creates tables, so the endpoint 404s (not 500s)."""
+    db_file = tmp_path / "fresh.db"
+    monkeypatch.setattr("src.storage.DATABASE_URL", f"sqlite:///{db_file}")
+    with TestClient(app) as startup_client:
+        response = startup_client.get("/api/signals/2026-Q1")
+    assert response.status_code == 404
+    assert response.json()["detail"] == "该季度暂无信号数据"
+
+
+def test_api_signals_returns_saved_signals(signals_db, make_signal):
     storage.save_signal_run(
         "2026-Q1",
         source_status={"13F": "ok", "news": "error"},
         errors=["news failed: timeout"],
     )
-    storage.save_signals("2026-Q1", [_make_signal()])
+    storage.save_signals("2026-Q1", [make_signal()])
 
     response = client.get("/api/signals/2026-Q1")
     assert response.status_code == 200
@@ -127,7 +124,7 @@ def test_api_signals_returns_saved_signals(signals_db):
     assert s["summary"] == "苹果占组合 12.3%"
     assert s["url"] == "https://example.com/a"
     assert s["cross_refs"] == ["news:高盛看好苹果"]
-    assert s["published_at"] == "2026-03-31T12:00:00"
+    assert s["published_at"] == "2026-03-31T12:00:00+00:00"
 
 
 def test_api_signals_empty_run_returns_empty_list(signals_db):

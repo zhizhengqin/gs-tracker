@@ -1,18 +1,29 @@
 """FastAPI web service for dashboard, report browsing and API access."""
+import asyncio
 import logging
+from contextlib import asynccontextmanager
+from datetime import timezone
 from pathlib import Path
 from typing import List
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Path as PathParam
 from fastapi.responses import HTMLResponse
 
 from src.config import PROJECT_ROOT, REPORT_OUTPUT_DIR
 from src.signals.base import Signal
-from src.storage import get_signal_run, get_signals
+from src.storage import get_signal_run, get_signals, init_db
 
 logger = logging.getLogger(__name__)
 
-app = FastAPI(title="GS-Tracker", version="0.2.0")
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Ensure the database schema exists before serving requests."""
+    init_db()
+    yield
+
+
+app = FastAPI(title="GS-Tracker", version="0.2.0", lifespan=lifespan)
 
 DASHBOARD_TEMPLATE = PROJECT_ROOT / "templates" / "dashboard.html"
 
@@ -64,12 +75,19 @@ async def api_reports() -> List[dict]:
 
 
 def _signal_to_dict(signal: Signal) -> dict:
-    """Serialize a Signal dataclass to a JSON-friendly dict."""
+    """Serialize a Signal dataclass to a JSON-friendly dict.
+
+    Naive datetimes are normalized to UTC so the wire format always
+    carries an explicit offset (all production sources emit UTC).
+    """
+    published = signal.published_at
+    if published.tzinfo is None:
+        published = published.replace(tzinfo=timezone.utc)
     return {
         "id": signal.id,
         "title": signal.title,
         "source": signal.source,
-        "published_at": signal.published_at.isoformat(),
+        "published_at": published.isoformat(),
         "summary": signal.summary,
         "companies": signal.companies,
         "strength": signal.strength.value,
@@ -79,14 +97,17 @@ def _signal_to_dict(signal: Signal) -> dict:
 
 
 @app.get("/api/signals/{quarter}")
-async def api_signals(quarter: str) -> dict:
+async def api_signals(
+    quarter: str = PathParam(pattern=r"^\d{4}-Q[1-4]$"),
+) -> dict:
     """Return structured signal data for a quarter."""
-    run = get_signal_run(quarter)
+    run = await asyncio.to_thread(get_signal_run, quarter)
     if run is None:
         raise HTTPException(status_code=404, detail="该季度暂无信号数据")
+    signals = await asyncio.to_thread(get_signals, quarter)
     return {
         "quarter": quarter,
-        "signals": [_signal_to_dict(s) for s in get_signals(quarter)],
+        "signals": [_signal_to_dict(s) for s in signals],
         "source_status": run["source_status"],
         "errors": run["errors"],
     }
