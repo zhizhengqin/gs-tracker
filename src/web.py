@@ -8,6 +8,8 @@ from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 
 from src.config import PROJECT_ROOT, REPORT_OUTPUT_DIR
+from src.signals.base import Signal
+from src.storage import get_signal_run, get_signals
 
 logger = logging.getLogger(__name__)
 
@@ -60,6 +62,35 @@ async def api_reports() -> List[dict]:
         }
         for file_path in files
     ]
+
+
+def _signal_to_dict(signal: Signal) -> dict:
+    """Serialize a Signal dataclass to a JSON-friendly dict."""
+    return {
+        "id": signal.id,
+        "title": signal.title,
+        "source": signal.source,
+        "published_at": signal.published_at.isoformat(),
+        "summary": signal.summary,
+        "companies": signal.companies,
+        "strength": signal.strength.value,
+        "url": signal.url,
+        "cross_refs": signal.cross_refs,
+    }
+
+
+@app.get("/api/signals/{quarter}")
+async def api_signals(quarter: str) -> dict:
+    """Return structured signal data for a quarter."""
+    run = get_signal_run(quarter)
+    if run is None:
+        raise HTTPException(status_code=404, detail="该季度暂无信号数据")
+    return {
+        "quarter": quarter,
+        "signals": [_signal_to_dict(s) for s in get_signals(quarter)],
+        "source_status": run["source_status"],
+        "errors": run["errors"],
+    }
 
 
 @app.get("/api/health")
