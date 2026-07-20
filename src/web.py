@@ -5,7 +5,6 @@ from typing import List
 
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import HTMLResponse
-from fastapi.staticfiles import StaticFiles
 
 from src.config import PROJECT_ROOT, REPORT_OUTPUT_DIR
 from src.signals.base import Signal

@@ -229,13 +229,24 @@ async function loadQuarter(quarter) {
     document.getElementById('mainContent').innerHTML = '<div class="loading">加载中...</div>';
 
     try {
-        const resp = await fetch(`/reports/${quarter}.html`);
-        const html = await resp.text();
+        const [reportResp, signalsResp] = await Promise.all([
+            fetch(`/reports/${quarter}.html`),
+            fetch(`/api/signals/${quarter}`),
+        ]);
+        const html = await reportResp.text();
         const parser = new DOMParser();
         const doc = parser.parseFromString(html, 'text/html');
 
-        // Extract data from the static HTML
-        // For now, extract what we can and build the dashboard
+        // Signals come from the JSON API (404 = this quarter has no signal run yet)
+        let signals = [];
+        let sourceStatus = {};
+        if (signalsResp.ok) {
+            const signalData = await signalsResp.json();
+            signals = signalData.signals;
+            sourceStatus = signalData.source_status;
+        }
+
+        // Analysis and holdings are still extracted from the static HTML report
         reportData = {
             quarter: quarter,
             generated_at: extractMeta(doc, '报告生成时间'),
@@ -251,8 +262,8 @@ async function loadQuarter(quarter) {
                 retail: extractSection(doc, '散户可借鉴思路'),
             },
             keyTickers: extractTickers(doc),
-            signals: extractSignals(doc),
-            sourceStatus: extractSourceStatus(doc),
+            signals: signals,
+            sourceStatus: sourceStatus,
             holdings: extractHoldings(doc),
         };
     } catch(e) {
@@ -297,54 +308,6 @@ function extractTickers(doc) {
         }
     }
     return [];
-}
-
-function extractSignals(doc) {
-    const signals = [];
-    const signalCards = doc.querySelectorAll('.signal-card, [style*="border: 1px solid #e0e0e0"]');
-    // Fallback: parse the old template format
-    const cards = doc.querySelectorAll('.card');
-    for (const card of cards) {
-        const h2 = card.querySelector('h2');
-        if (h2 && h2.textContent.includes('多源信号')) {
-            const items = card.querySelectorAll('[style*="border: 1px solid #e0e0e0"]');
-            items.forEach(item => {
-                const headerDiv = item.querySelector('[style*="justify-content: space-between"]');
-                const source = headerDiv ? headerDiv.querySelector('span:first-child')?.textContent?.trim() : '';
-                const date = headerDiv ? headerDiv.querySelector('span:last-child')?.textContent?.trim() : '';
-                const title = item.querySelector('strong')?.textContent?.trim() || '';
-                const summary = item.querySelector('p')?.textContent?.trim() || '';
-                const companiesEl = item.querySelector('[style*="相关公司"]');
-                const companies = companiesEl ? companiesEl.textContent.replace('相关公司:', '').split(',').map(s => s.trim()) : [];
-                const crossRef = !!item.querySelector('[style*="交叉信号"]');
-                const linkEl = item.querySelector('a');
-                const url = linkEl ? linkEl.href : null;
-
-                // Determine strength from heading context
-                let strength = 'low';
-                const h3 = item.closest('[style*="margin-bottom: 16px"]')?.querySelector('h3');
-                if (h3) {
-                    if (h3.textContent.includes('高优先级')) strength = 'high';
-                    else if (h3.textContent.includes('中优先级')) strength = 'medium';
-                }
-
-                signals.push({ title, source, date, summary, companies, strength, crossRef, url });
-            });
-            break;
-        }
-    }
-    return signals;
-}
-
-function extractSourceStatus(doc) {
-    const status = {};
-    const badges = doc.querySelectorAll('.source-status span, [style*="source-status"] span');
-    badges.forEach(b => {
-        const text = b.textContent.trim();
-        const match = text.match(/^(\S+):\s*(.+)/);
-        if (match) status[match[1]] = match[2];
-    });
-    return status;
 }
 
 function extractHoldings(doc) {
@@ -435,8 +398,8 @@ function renderOverview(d) {
             <div style="display:flex;gap:16px;flex-wrap:wrap;margin-top:8px;">
                 ${Object.entries(d.sourceStatus).map(([src, status]) => `
                     <span style="padding:6px 14px;border-radius:8px;font-size:0.9em;
-                        ${status.includes('✅') ? 'background:#e8f5e9;color:#2e7d32;' : 'background:#fff3e0;color:#e65100;'}">
-                        ${src}: ${status}
+                        ${status === 'ok' ? 'background:#e8f5e9;color:#2e7d32;' : 'background:#fff3e0;color:#e65100;'}">
+                        ${src}: ${status === 'ok' ? '✅' : '⚠️ 暂不可用'}
                     </span>
                 `).join('')}
             </div>
@@ -522,17 +485,19 @@ function renderSignals() {
 
 function renderSignalCard(s) {
     const srcClass = s.source === '13F' ? 'src-13F' : s.source === 'news' ? 'src-news' : 'src-8-K';
+    const date = (s.published_at || '').slice(0, 10);
+    const hasCrossRefs = s.cross_refs && s.cross_refs.length > 0;
     return `
         <div class="signal-card ${s.strength}">
             <div class="sig-header">
                 <span class="sig-source ${srcClass}">${s.source}</span>
-                <span class="sig-date">${s.date}</span>
+                <span class="sig-date">${date}</span>
             </div>
             <h4>${s.title}</h4>
             <p class="sig-summary">${s.summary}</p>
             <div class="sig-meta">
                 ${s.companies.length ? `<span>🏢 ${s.companies.join(', ')}</span>` : ''}
-                ${s.crossRef ? '<span class="cross-badge">🔗 交叉信号</span>' : ''}
+                ${hasCrossRefs ? '<span class="cross-badge">🔗 交叉信号</span>' : ''}
                 ${s.url ? `<a href="${s.url}" target="_blank" rel="noopener" class="sig-link">查看原文 →</a>` : ''}
             </div>
         </div>
