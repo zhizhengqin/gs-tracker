@@ -80,7 +80,9 @@ class SEC13FFetcher:
         """Fetch the most recent 13F-HR holdings as a DataFrame.
 
         Args:
-            filing_info: Optional dict to populate with accession_number and report_date.
+            filing_info: Optional dict populated with accession_number,
+                report_date, filing_date, period_of_report, and xml_url
+                (xml_url only on success).
         """
         submissions = await self.fetch_submissions()
         recent = submissions.get("filings", {}).get("recent", {})

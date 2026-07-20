@@ -236,3 +236,41 @@ async def test_fetch_latest_holdings_populates_filing_info(httpx_mock):
     assert filing_info["period_of_report"] == "2026-03-31"
     assert filing_info["xml_url"].endswith("/0001193125-26-000001-infotable.xml")
     await fetcher.close()
+
+
+@pytest.mark.asyncio
+async def test_missing_infotable_leaves_filing_info_without_xml_url(httpx_mock):
+    """Error path: early metadata is populated, but xml_url must not be set."""
+    fetcher = SEC13FFetcher()
+
+    submissions = {
+        "filings": {
+            "recent": {
+                "form": ["13F-HR"],
+                "accessionNumber": ["0001193125-26-000001"],
+                "reportDate": ["2026-03-31"],
+                "filingDate": ["2026-05-15"],
+            }
+        }
+    }
+    index_json = {
+        "directory": {"item": [{"name": "primary_doc.xml", "type": "1", "size": "12345"}]}
+    }
+
+    httpx_mock.add_response(
+        url="https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&CIK=0000886982&type=13F-HR&output=json",
+        json=submissions,
+    )
+    httpx_mock.add_response(
+        url="https://www.sec.gov/Archives/edgar/data/886982/000119312526000001/index.json",
+        json=index_json,
+    )
+
+    filing_info: dict = {}
+    with pytest.raises(ValueError, match="No infotable XML found"):
+        await fetcher.fetch_latest_holdings(filing_info)
+
+    assert filing_info["accession_number"] == "0001193125-26-000001"
+    assert filing_info["report_date"] == "2026-03-31"
+    assert "xml_url" not in filing_info
+    await fetcher.close()
