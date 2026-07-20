@@ -224,8 +224,11 @@ async function init() {
     });
 }
 
+let loadSeq = 0;
+
 async function loadQuarter(quarter) {
     currentQuarter = quarter;
+    const seq = ++loadSeq;
     document.getElementById('mainContent').innerHTML = '<div class="loading">加载中...</div>';
 
     try {
@@ -240,11 +243,17 @@ async function loadQuarter(quarter) {
         // Signals come from the JSON API (404 = this quarter has no signal run yet)
         let signals = [];
         let sourceStatus = {};
+        let signalsError = false;
         if (signalsResp.ok) {
             const signalData = await signalsResp.json();
-            signals = signalData.signals;
-            sourceStatus = signalData.source_status;
+            signals = Array.isArray(signalData.signals) ? signalData.signals : [];
+            sourceStatus = signalData.source_status || {};
+        } else if (signalsResp.status !== 404) {
+            signalsError = true;
         }
+
+        // Ignore stale responses if the user clicked another quarter meanwhile
+        if (seq !== loadSeq) return;
 
         // Analysis and holdings are still extracted from the static HTML report
         reportData = {
@@ -264,9 +273,11 @@ async function loadQuarter(quarter) {
             keyTickers: extractTickers(doc),
             signals: signals,
             sourceStatus: sourceStatus,
+            signalsError: signalsError,
             holdings: extractHoldings(doc),
         };
     } catch(e) {
+        if (seq !== loadSeq) return;
         console.error('Failed to load report', e);
         reportData = null;
     }
@@ -355,6 +366,8 @@ function switchTab(tab) {
         case 'holdings': html = renderHoldingsPanel(d); break;
     }
     document.getElementById('mainContent').innerHTML = html;
+    // Scripts injected via innerHTML never execute, so render signals explicitly
+    if (tab === 'signals') renderSignals();
 }
 
 function renderOverview(d) {
@@ -446,8 +459,9 @@ function renderSignalsPanel(d) {
             <h2>📡 多源信号</h2>
             <span class="meta">共 ${d.signals.length} 条信号 · ${d.quarter}</span>
         </div>
+        ${d.signalsError ? '<div class="card" style="border-left:4px solid #e65100;"><p style="color:#e65100;margin:0;">⚠️ 信号数据加载失败，请稍后重试</p></div>' : ''}
         <div id="signalsContainer"></div>
-    ` + `<script>renderSignals();</script>`;
+    `;
 }
 
 function renderSignals() {
@@ -469,7 +483,10 @@ function renderSignals() {
     }
 
     const grouped = { high: [], medium: [], low: [] };
-    filtered.forEach(s => grouped[s.strength].push(s));
+    filtered.forEach(s => {
+        const key = Object.prototype.hasOwnProperty.call(grouped, s.strength) ? s.strength : 'low';
+        grouped[key].push(s);
+    });
 
     let html = '';
     for (const [level, signals] of Object.entries(grouped)) {
@@ -483,22 +500,40 @@ function renderSignals() {
     container.innerHTML = html;
 }
 
+// Escape external content (RSS/SEC-derived) before injecting into innerHTML
+function esc(v) {
+    return String(v ?? '').replace(/[&<>"']/g, c => (
+        { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
+    ));
+}
+
+function safeHttpUrl(u) {
+    return /^https?:\/\//i.test(u || '') ? u : null;
+}
+
 function renderSignalCard(s) {
     const srcClass = s.source === '13F' ? 'src-13F' : s.source === 'news' ? 'src-news' : 'src-8-K';
-    const date = (s.published_at || '').slice(0, 10);
+    let date = '';
+    if (s.published_at) {
+        const dt = new Date(s.published_at);
+        date = isNaN(dt) ? String(s.published_at).slice(0, 10) : dt.toLocaleDateString('zh-CN');
+    }
     const hasCrossRefs = s.cross_refs && s.cross_refs.length > 0;
+    const strength = ['high', 'medium', 'low'].includes(s.strength) ? s.strength : 'low';
+    const link = safeHttpUrl(s.url);
+    const companies = Array.isArray(s.companies) ? s.companies : [];
     return `
-        <div class="signal-card ${s.strength}">
+        <div class="signal-card ${strength}">
             <div class="sig-header">
-                <span class="sig-source ${srcClass}">${s.source}</span>
-                <span class="sig-date">${date}</span>
+                <span class="sig-source ${srcClass}">${esc(s.source)}</span>
+                <span class="sig-date">${esc(date)}</span>
             </div>
-            <h4>${s.title}</h4>
-            <p class="sig-summary">${s.summary}</p>
+            <h4>${esc(s.title)}</h4>
+            <p class="sig-summary">${esc(s.summary)}</p>
             <div class="sig-meta">
-                ${s.companies.length ? `<span>🏢 ${s.companies.join(', ')}</span>` : ''}
+                ${companies.length ? `<span>🏢 ${companies.map(esc).join(', ')}</span>` : ''}
                 ${hasCrossRefs ? '<span class="cross-badge">🔗 交叉信号</span>' : ''}
-                ${s.url ? `<a href="${s.url}" target="_blank" rel="noopener" class="sig-link">查看原文 →</a>` : ''}
+                ${link ? `<a href="${esc(link)}" target="_blank" rel="noopener" class="sig-link">查看原文 →</a>` : ''}
             </div>
         </div>
     `;
