@@ -28,6 +28,8 @@ from src.storage import (
     is_notification_sent,
     mark_notification_sent,
     save_holdings,
+    save_signal_run,
+    save_signals,
 )
 
 logging.basicConfig(
@@ -77,6 +79,7 @@ async def run_pipeline() -> None:
     aggregation_signals = []
     aggregation_errors = []
     aggregation_status = {}
+    aggregation_ok = False
     aggregator = SignalAggregator(
         news_source=NewsSource(rss_urls=RSS_FEEDS) if RSS_FEEDS else None,
         sec8k_source=Sec8kSource(),
@@ -86,6 +89,7 @@ async def run_pipeline() -> None:
         aggregation_signals = aggregation.signals
         aggregation_errors = aggregation.errors
         aggregation_status = aggregation.source_status
+        aggregation_ok = True
         logger.info(
             "Aggregated %d signals (errors: %d, status: %s)",
             len(aggregation_signals), len(aggregation_errors), aggregation_status,
@@ -94,6 +98,17 @@ async def run_pipeline() -> None:
         logger.exception("Signal aggregation failed; report will lack signal panel")
     finally:
         await aggregator.close()
+
+    if aggregation_ok:
+        try:
+            save_signals(quarter, aggregation_signals)
+            save_signal_run(
+                quarter,
+                source_status=aggregation_status,
+                errors=aggregation_errors,
+            )
+        except Exception:
+            logger.exception("Failed to persist signals for %s", quarter)
 
     reporter = ReportGenerator()
     report_path = await asyncio.to_thread(
