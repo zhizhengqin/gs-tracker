@@ -29,6 +29,10 @@ def get_connection() -> Iterator[sqlite3.Connection]:
     path.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(path)
     conn.row_factory = sqlite3.Row
+    # WAL lets readers (web server) proceed while the pipeline process writes;
+    # busy_timeout waits out short lock contention instead of failing.
+    conn.execute("PRAGMA journal_mode=WAL")
+    conn.execute("PRAGMA busy_timeout=10000")
     try:
         yield conn
     finally:
@@ -282,36 +286,77 @@ def is_notification_sent(quarter: str) -> bool:
         return cursor.fetchone() is not None
 
 
+_INSERT_SIGNAL_SQL = """
+    INSERT OR REPLACE INTO signals (
+        id, quarter, source, title, published_at,
+        summary, companies, strength, url, cross_refs
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+"""
+
+_UPSERT_SIGNAL_RUN_SQL = """
+    INSERT INTO signal_runs (quarter, source_status, errors)
+    VALUES (?, ?, ?)
+    ON CONFLICT(quarter) DO UPDATE SET
+        source_status=excluded.source_status,
+        errors=excluded.errors,
+        created_at=CURRENT_TIMESTAMP
+"""
+
+
+def _signal_row(quarter: str, s: Signal) -> tuple:
+    """Build the SQL parameter tuple for one signal."""
+    return (
+        s.id,
+        quarter,
+        s.source,
+        s.title,
+        s.published_at.isoformat(),
+        s.summary,
+        json.dumps(s.companies, ensure_ascii=False),
+        s.strength.value,
+        s.url,
+        json.dumps(s.cross_refs, ensure_ascii=False),
+    )
+
+
+def _insert_signals(
+    conn: sqlite3.Connection, quarter: str, signals: List[Signal]
+) -> None:
+    """Replace a quarter's signal rows inside an existing transaction."""
+    conn.execute("DELETE FROM signals WHERE quarter = ?", (quarter,))
+    conn.executemany(_INSERT_SIGNAL_SQL, [_signal_row(quarter, s) for s in signals])
+
+
+def _upsert_signal_run(
+    conn: sqlite3.Connection,
+    quarter: str,
+    source_status: Optional[dict],
+    errors: Optional[List[str]],
+) -> None:
+    """Upsert run metadata inside an existing transaction."""
+    conn.execute(
+        _UPSERT_SIGNAL_RUN_SQL,
+        (
+            quarter,
+            json.dumps(source_status or {}, ensure_ascii=False),
+            json.dumps(errors or [], ensure_ascii=False),
+        ),
+    )
+
+
 def save_signals(quarter: str, signals: List[Signal]) -> None:
     """Persist aggregated signals for a quarter, replacing any previous run."""
     with get_connection() as conn:
-        conn.execute("DELETE FROM signals WHERE quarter = ?", (quarter,))
-        for s in signals:
-            conn.execute(
-                """
-                INSERT INTO signals (
-                    id, quarter, source, title, published_at,
-                    summary, companies, strength, url, cross_refs
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """,
-                (
-                    s.id,
-                    quarter,
-                    s.source,
-                    s.title,
-                    s.published_at.isoformat(),
-                    s.summary,
-                    json.dumps(s.companies, ensure_ascii=False),
-                    s.strength.value,
-                    s.url,
-                    json.dumps(s.cross_refs, ensure_ascii=False),
-                ),
-            )
+        _insert_signals(conn, quarter, signals)
         conn.commit()
 
 
 def get_signals(quarter: str) -> List[Signal]:
-    """Load persisted signals for a quarter, in insertion order."""
+    """Load persisted signals for a quarter, in insertion order.
+
+    Malformed rows (unknown strength, unparseable date/JSON) are skipped
+    with a warning so one bad row cannot fail the whole quarter.
+    """
     with get_connection() as conn:
         cursor = conn.execute(
             """
@@ -323,20 +368,27 @@ def get_signals(quarter: str) -> List[Signal]:
             """,
             (quarter,),
         )
-        return [
-            Signal(
-                id=row["id"],
-                source=row["source"],
-                title=row["title"],
-                published_at=datetime.fromisoformat(row["published_at"]),
-                summary=row["summary"] or "",
-                companies=json.loads(row["companies"]) if row["companies"] else [],
-                strength=SignalStrength(row["strength"]),
-                url=row["url"],
-                cross_refs=json.loads(row["cross_refs"]) if row["cross_refs"] else [],
-            )
-            for row in cursor.fetchall()
-        ]
+        signals: List[Signal] = []
+        for row in cursor.fetchall():
+            try:
+                signals.append(
+                    Signal(
+                        id=row["id"],
+                        source=row["source"],
+                        title=row["title"],
+                        published_at=datetime.fromisoformat(row["published_at"]),
+                        summary=row["summary"] or "",
+                        companies=json.loads(row["companies"]) if row["companies"] else [],
+                        strength=SignalStrength(row["strength"]),
+                        url=row["url"],
+                        cross_refs=json.loads(row["cross_refs"]) if row["cross_refs"] else [],
+                    )
+                )
+            except (ValueError, TypeError, KeyError) as exc:
+                logger.warning(
+                    "Skipping malformed signal row (id=%s): %s", row["id"], exc
+                )
+        return signals
 
 
 def save_signal_run(
@@ -346,21 +398,20 @@ def save_signal_run(
 ) -> None:
     """Persist metadata about a signal aggregation run for a quarter."""
     with get_connection() as conn:
-        conn.execute(
-            """
-            INSERT INTO signal_runs (quarter, source_status, errors)
-            VALUES (?, ?, ?)
-            ON CONFLICT(quarter) DO UPDATE SET
-                source_status=excluded.source_status,
-                errors=excluded.errors,
-                created_at=CURRENT_TIMESTAMP
-            """,
-            (
-                quarter,
-                json.dumps(source_status or {}, ensure_ascii=False),
-                json.dumps(errors or [], ensure_ascii=False),
-            ),
-        )
+        _upsert_signal_run(conn, quarter, source_status, errors)
+        conn.commit()
+
+
+def save_signal_payload(
+    quarter: str,
+    signals: List[Signal],
+    source_status: Optional[dict] = None,
+    errors: Optional[List[str]] = None,
+) -> None:
+    """Persist signals and run metadata for a quarter in a single transaction."""
+    with get_connection() as conn:
+        _insert_signals(conn, quarter, signals)
+        _upsert_signal_run(conn, quarter, source_status, errors)
         conn.commit()
 
 

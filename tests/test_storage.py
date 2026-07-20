@@ -1,11 +1,10 @@
 """Tests for src.storage."""
 import sqlite3
-from datetime import datetime
+from datetime import datetime, timezone
 
 import pytest
 
 from src import storage
-from src.signals.base import Signal, SignalStrength
 from src.storage import (
     get_holdings,
     init_db,
@@ -162,23 +161,8 @@ def test_is_notification_sent(fresh_db):
 class TestSignalsStorage:
     """Tests for signals and signal_runs persistence."""
 
-    def _make_signal(self, **overrides) -> Signal:
-        defaults = dict(
-            title="高盛增持苹果",
-            source="13F",
-            published_at=datetime(2026, 3, 31, 12, 0, 0),
-            summary="苹果占组合 12.3%",
-            companies=["AAPL"],
-            strength=SignalStrength.HIGH,
-            url="https://example.com/a",
-            cross_refs=["news:高盛看好苹果"],
-            id="sig00001",
-        )
-        defaults.update(overrides)
-        return Signal(**defaults)
-
-    def test_save_and_get_signals_round_trip(self, fresh_db):
-        storage.save_signals("2026-Q1", [self._make_signal()])
+    def test_save_and_get_signals_round_trip(self, fresh_db, make_signal):
+        storage.save_signals("2026-Q1", [make_signal()])
 
         loaded = storage.get_signals("2026-Q1")
         assert len(loaded) == 1
@@ -186,37 +170,81 @@ class TestSignalsStorage:
         assert s.id == "sig00001"
         assert s.title == "高盛增持苹果"
         assert s.source == "13F"
-        assert s.published_at == datetime(2026, 3, 31, 12, 0, 0)
+        assert s.published_at == datetime(2026, 3, 31, 12, 0, 0, tzinfo=timezone.utc)
         assert s.summary == "苹果占组合 12.3%"
         assert s.companies == ["AAPL"]
-        assert s.strength == SignalStrength.HIGH
+        assert s.strength.value == "high"
         assert s.url == "https://example.com/a"
         assert s.cross_refs == ["news:高盛看好苹果"]
 
-    def test_signal_optional_fields_default(self, fresh_db):
+    def test_round_trip_preserves_naive_and_aware_datetimes(
+        self, fresh_db, make_signal
+    ):
+        # All production sources emit tz-aware UTC; naive inputs must also survive.
+        for published in (
+            datetime(2026, 3, 31, 12, 0, 0),
+            datetime(2026, 3, 31, 12, 0, 0, tzinfo=timezone.utc),
+        ):
+            storage.save_signals("2026-Q1", [make_signal(published_at=published)])
+            loaded = storage.get_signals("2026-Q1")[0]
+            assert loaded.published_at == published
+            assert loaded.published_at.tzinfo == published.tzinfo
+
+    def test_get_signals_preserves_insertion_order(self, fresh_db, make_signal):
+        signals = [
+            make_signal(id="zz000001", title="第一条"),
+            make_signal(id="aa000002", title="第二条"),
+            make_signal(id="mm000003", title="第三条"),
+        ]
+        storage.save_signals("2026-Q1", signals)
+
+        loaded_ids = [s.id for s in storage.get_signals("2026-Q1")]
+        assert loaded_ids == ["zz000001", "aa000002", "mm000003"]
+
+    def test_get_signals_skips_malformed_rows(self, fresh_db, make_signal):
+        storage.save_signals("2026-Q1", [make_signal()])
+        with storage.get_connection() as conn:
+            conn.execute(
+                """
+                INSERT INTO signals (id, quarter, source, title, published_at, strength)
+                VALUES ('bad00001', '2026-Q1', 'news', '坏强度', '2026-01-01T00:00:00', 'weird')
+                """
+            )
+            conn.execute(
+                """
+                INSERT INTO signals (id, quarter, source, title, published_at, strength)
+                VALUES ('bad00002', '2026-Q1', 'news', '坏日期', 'not-a-date', 'high')
+                """
+            )
+            conn.commit()
+
+        loaded = storage.get_signals("2026-Q1")
+        assert [s.id for s in loaded] == ["sig00001"]
+
+    def test_signal_optional_fields_default(self, fresh_db, make_signal):
         storage.save_signals(
             "2026-Q1",
-            [self._make_signal(url=None, cross_refs=[], companies=[])],
+            [make_signal(url=None, cross_refs=[], companies=[])],
         )
         s = storage.get_signals("2026-Q1")[0]
         assert s.url is None
         assert s.cross_refs == []
         assert s.companies == []
 
-    def test_save_signals_replaces_existing_quarter(self, fresh_db):
+    def test_save_signals_replaces_existing_quarter(self, fresh_db, make_signal):
         storage.save_signals(
-            "2026-Q1", [self._make_signal(id="old00001", title="旧信号")]
+            "2026-Q1", [make_signal(id="old00001", title="旧信号")]
         )
         storage.save_signals(
-            "2026-Q1", [self._make_signal(id="new00001", title="新信号")]
+            "2026-Q1", [make_signal(id="new00001", title="新信号")]
         )
 
         loaded = storage.get_signals("2026-Q1")
         assert len(loaded) == 1
         assert loaded[0].title == "新信号"
 
-    def test_save_signals_does_not_touch_other_quarters(self, fresh_db):
-        storage.save_signals("2026-Q1", [self._make_signal()])
+    def test_save_signals_does_not_touch_other_quarters(self, fresh_db, make_signal):
+        storage.save_signals("2026-Q1", [make_signal()])
         storage.save_signals("2026-Q2", [])
 
         assert len(storage.get_signals("2026-Q1")) == 1
@@ -248,3 +276,19 @@ class TestSignalsStorage:
 
     def test_get_signal_run_none_when_missing(self, fresh_db):
         assert storage.get_signal_run("2099-Q4") is None
+
+    def test_save_signal_payload_writes_signals_and_run_atomically(
+        self, fresh_db, make_signal
+    ):
+        storage.save_signal_payload(
+            "2026-Q1",
+            [make_signal()],
+            source_status={"13F": "ok"},
+            errors=[],
+        )
+
+        assert len(storage.get_signals("2026-Q1")) == 1
+        run = storage.get_signal_run("2026-Q1")
+        assert run is not None
+        assert run["source_status"] == {"13F": "ok"}
+        assert run["errors"] == []
