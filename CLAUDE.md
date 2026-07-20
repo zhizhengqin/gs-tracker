@@ -64,6 +64,11 @@ python -m src.main --run-now
 docker compose -f deploy/docker-compose.yml up -d --build
 ```
 
+## API 端点
+- `GET /api/signals/{quarter}` — 指定季度的多源信号 JSON（404=该季度未跑过，422=季度格式错误）
+- `GET /api/reports` — 报告列表；`GET /reports/{quarter}.html` — 静态报告；`GET /api/health`
+- 信号由流水线写入 `signals` / `signal_runs` 表（WAL 模式），仪表盘信号页走 API 不再解析 HTML
+
 ## 沟通风格
 - 我是技术小白，请用通俗语言解释
 - 先做计划再写代码，不要直接开始实现
