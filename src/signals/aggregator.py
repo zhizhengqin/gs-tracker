@@ -5,6 +5,7 @@ from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
 from src.signals.base import Signal, SignalStrength
+from src.signals.scorer import SignalScorer
 from src.signals.thirteenf_adapter import ThirteenthFSignalAdapter
 from src.signals.news_source import NewsSource
 from src.signals.sec_8k_source import Sec8kSource
@@ -86,7 +87,26 @@ class SignalAggregator:
         strength_order = {SignalStrength.HIGH: 0, SignalStrength.MEDIUM: 1, SignalStrength.LOW: 2}
         deduped.sort(key=lambda s: (strength_order.get(s.strength, 2), -s.published_at.timestamp()))
 
-        result.signals = deduped
+        # Score signals and detect cross-source validation
+        scorer = SignalScorer()
+        scored = scorer.score(deduped)
+
+        # Build ID → Signal lookup for human-readable cross-refs
+        id_to_signal: Dict[str, Signal] = {s.id: s for s in deduped}
+
+        # Apply scorer results back to signals
+        for sc in scored:
+            sig = sc.signal
+            sig.cross_refs = [
+                f"{id_to_signal[rid].source}:{id_to_signal[rid].title}"
+                for rid in sc.cross_refs
+                if rid in id_to_signal
+            ]
+            sig.strength = sc.final_strength
+
+        # Re-sort by scored relevance (may differ from naive strength ordering)
+        scored.sort(key=lambda x: x.relevance_score, reverse=True)
+        result.signals = [sc.signal for sc in scored]
         return result
 
     async def _safe_fetch(

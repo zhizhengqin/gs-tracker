@@ -1,5 +1,5 @@
 """Tests for src.signals.aggregator."""
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -129,43 +129,34 @@ class TestSignalAggregator:
         assert len(result.errors) == 3
 
     @pytest.mark.asyncio
-    async def test_aggregate_sorts_by_strength_then_date(self):
+    async def test_aggregate_sorts_by_scored_relevance(self):
+        """Scorer re-ranks by relevance_score — HIGH before MEDIUM before LOW."""
         mock_13f = MagicMock()
         mock_13f.to_signals.return_value = []
-        old_high = Signal(
-            title="Old High",
-            source="news",
-            published_at=datetime(2026, 4, 1, tzinfo=timezone.utc),
-            summary="Old",
-            companies=["GS"],
-            strength=SignalStrength.HIGH,
+        now = datetime.now(timezone.utc)
+        # All signals recent (time decay ≈ 1) so scorer preserves strength order
+        high1 = Signal(
+            title="High A", source="news",
+            published_at=now - timedelta(hours=2),
+            summary="A", companies=["GS"], strength=SignalStrength.HIGH,
         )
-        new_low = Signal(
-            title="New Low",
-            source="news",
-            published_at=datetime(2026, 5, 1, tzinfo=timezone.utc),
-            summary="New",
-            companies=["GS"],
-            strength=SignalStrength.LOW,
+        low = Signal(
+            title="Low", source="news",
+            published_at=now - timedelta(hours=1),
+            summary="Low", companies=["GS"], strength=SignalStrength.LOW,
         )
-        old_medium = Signal(
-            title="Old Medium",
-            source="news",
-            published_at=datetime(2026, 3, 1, tzinfo=timezone.utc),
-            summary="Old",
-            companies=["GS"],
-            strength=SignalStrength.MEDIUM,
+        medium = Signal(
+            title="Medium", source="news",
+            published_at=now - timedelta(hours=3),
+            summary="M", companies=["GS"], strength=SignalStrength.MEDIUM,
         )
-        new_high = Signal(
-            title="New High",
-            source="news",
-            published_at=datetime(2026, 5, 1, tzinfo=timezone.utc),
-            summary="New",
-            companies=["GS"],
-            strength=SignalStrength.HIGH,
+        high2 = Signal(
+            title="High B", source="news",
+            published_at=now - timedelta(hours=2),
+            summary="B", companies=["GS"], strength=SignalStrength.HIGH,
         )
         mock_news = AsyncMock()
-        mock_news.fetch.return_value = [old_high, new_low, old_medium, new_high]
+        mock_news.fetch.return_value = [high1, low, medium, high2]
         mock_8k = AsyncMock()
         mock_8k.fetch.return_value = []
 
@@ -175,11 +166,11 @@ class TestSignalAggregator:
             sec8k_source=mock_8k,
         )
         result = await aggregator.aggregate(
-            quarter="2026-Q2",
-            holdings_records=[],
+            quarter="2026-Q2", holdings_records=[],
         )
         strengths = [s.strength for s in result.signals]
-        # HIGH before MEDIUM before LOW
+        # HIGH before MEDIUM before LOW (scorer preserves original strength
+        # when time decay is negligible)
         assert strengths[0] == SignalStrength.HIGH
         assert strengths[1] == SignalStrength.HIGH
         assert strengths[2] == SignalStrength.MEDIUM
@@ -197,3 +188,103 @@ class TestSignalAggregator:
         await aggregator.close()
         mock_news.close.assert_awaited_once()
         mock_8k.close.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_aggregate_populates_cross_refs(self):
+        """Signals sharing companies across different sources get cross_refs."""
+        now = datetime.now(timezone.utc)
+        s1 = Signal(
+            title="高盛增持苹果",
+            source="13F",
+            published_at=now - timedelta(hours=4),
+            summary="苹果仓位增加",
+            companies=["AAPL"],
+            strength=SignalStrength.HIGH,
+        )
+        s2 = Signal(
+            title="Goldman Raises Apple Target",
+            source="news",
+            published_at=now - timedelta(hours=2),
+            summary="Apple target raised",
+            companies=["AAPL"],
+            strength=SignalStrength.MEDIUM,
+        )
+        s3 = Signal(
+            title="Microsoft Unrelated",
+            source="news",
+            published_at=now - timedelta(hours=1),
+            summary="MSFT only",
+            companies=["MSFT"],
+            strength=SignalStrength.LOW,
+        )
+
+        mock_13f = MagicMock()
+        mock_13f.to_signals.return_value = [s1]
+        mock_news = AsyncMock()
+        mock_news.fetch.return_value = [s2, s3]
+        mock_8k = AsyncMock()
+        mock_8k.fetch.return_value = []
+
+        aggregator = SignalAggregator(
+            adapter_13f=mock_13f,
+            news_source=mock_news,
+            sec8k_source=mock_8k,
+        )
+        result = await aggregator.aggregate(
+            quarter="2026-Q3", holdings_records=[{"name_of_issuer": "Apple Inc", "value": 100.0}],
+        )
+
+        # s1 and s2 share AAPL across different sources → cross_refs populated
+        s1_out = next(s for s in result.signals if s.title == "高盛增持苹果")
+        s2_out = next(s for s in result.signals if s.title == "Goldman Raises Apple Target")
+        s3_out = next(s for s in result.signals if s.title == "Microsoft Unrelated")
+
+        assert len(s1_out.cross_refs) >= 1
+        assert len(s2_out.cross_refs) >= 1
+        assert s3_out.cross_refs == []  # MSFT only, no cross-source match
+
+        # Cross-refs use human-readable "source:title" format
+        assert any("news:Goldman Raises Apple Target" in ref for ref in s1_out.cross_refs)
+        assert any("13F:高盛增持苹果" in ref for ref in s2_out.cross_refs)
+
+    @pytest.mark.asyncio
+    async def test_aggregate_scorer_upgrades_strength(self):
+        """Cross-source validation bonus can upgrade signal strength."""
+        now = datetime.now(timezone.utc)
+        s1 = Signal(
+            title="高盛建仓英伟达",
+            source="13F",
+            published_at=now - timedelta(hours=3),
+            summary="新建 NVDA 仓位",
+            companies=["NVDA"],
+            strength=SignalStrength.HIGH,
+        )
+        s2 = Signal(
+            title="高盛 8-K: NVDA 投资披露",
+            source="8-K",
+            published_at=now - timedelta(hours=2),
+            summary="重大持仓披露",
+            companies=["NVDA"],
+            strength=SignalStrength.LOW,
+        )
+
+        mock_13f = MagicMock()
+        mock_13f.to_signals.return_value = [s1]
+        mock_news = AsyncMock()
+        mock_news.fetch.return_value = []
+        mock_8k = AsyncMock()
+        mock_8k.fetch.return_value = [s2]
+
+        aggregator = SignalAggregator(
+            adapter_13f=mock_13f,
+            news_source=mock_news,
+            sec8k_source=mock_8k,
+        )
+        result = await aggregator.aggregate(
+            quarter="2026-Q3", holdings_records=[{"name_of_issuer": "NVIDIA", "value": 100.0}],
+        )
+
+        s2_out = next(s for s in result.signals if s.title == "高盛 8-K: NVDA 投资披露")
+        # Cross-ref bonus (2.0) pushes LOW (base ~1.8) past MEDIUM threshold (3.0)
+        assert s2_out.strength == SignalStrength.MEDIUM
+        assert len(s2_out.cross_refs) >= 1
