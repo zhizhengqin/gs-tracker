@@ -105,7 +105,6 @@ class SEC13FFetcher:
             if index < len(filing_dates):
                 filing_info["filing_date"] = filing_dates[index]
             filing_info["period_of_report"] = report_date
-            filing_info["xml_url"] = xml_url
 
         accession_no_dash = accession_number.replace("-", "")
         cik_numeric = self.cik.lstrip("0") or GOLDMAN_CIK.lstrip("0")
@@ -120,6 +119,8 @@ class SEC13FFetcher:
             raise ValueError("No infotable XML found in filing directory")
 
         xml_url = f"{filing_dir}/{xml_name}"
+        if filing_info is not None:
+            filing_info["xml_url"] = xml_url
         return await self.parse_13f_infotable(xml_url)
 
     @staticmethod

@@ -1,6 +1,5 @@
 """Tests for src.data_fetcher."""
 import httpx
-import pandas as pd
 import pytest
 
 from src.data_fetcher import SEC13FFetcher
@@ -188,4 +187,52 @@ async def test_parse_13f_infotable_403_fatal(httpx_mock):
     with pytest.raises(httpx.HTTPStatusError):
         await fetcher.parse_13f_infotable("https://www.sec.gov/forbidden.xml")
     assert len(httpx_mock.get_requests(url="https://www.sec.gov/forbidden.xml")) == 1
+    await fetcher.close()
+
+
+@pytest.mark.asyncio
+async def test_fetch_latest_holdings_populates_filing_info(httpx_mock):
+    """filing_info dict should be populated with accession/report/filing/xml metadata."""
+    fetcher = SEC13FFetcher()
+
+    submissions = {
+        "filings": {
+            "recent": {
+                "form": ["13F-HR"],
+                "accessionNumber": ["0001193125-26-000001"],
+                "reportDate": ["2026-03-31"],
+                "filingDate": ["2026-05-15"],
+            }
+        }
+    }
+    index_json = {
+        "directory": {
+            "item": [
+                {"name": "0001193125-26-000001-infotable.xml", "type": "1", "size": "67890"},
+            ]
+        }
+    }
+
+    httpx_mock.add_response(
+        url="https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&CIK=0000886982&type=13F-HR&output=json",
+        json=submissions,
+    )
+    httpx_mock.add_response(
+        url="https://www.sec.gov/Archives/edgar/data/886982/000119312526000001/index.json",
+        json=index_json,
+    )
+    httpx_mock.add_response(
+        url="https://www.sec.gov/Archives/edgar/data/886982/000119312526000001/0001193125-26-000001-infotable.xml",
+        text=SAMPLE_13F_XML,
+    )
+
+    filing_info: dict = {}
+    df = await fetcher.fetch_latest_holdings(filing_info)
+
+    assert len(df) == 1
+    assert filing_info["accession_number"] == "0001193125-26-000001"
+    assert filing_info["report_date"] == "2026-03-31"
+    assert filing_info["filing_date"] == "2026-05-15"
+    assert filing_info["period_of_report"] == "2026-03-31"
+    assert filing_info["xml_url"].endswith("/0001193125-26-000001-infotable.xml")
     await fetcher.close()
