@@ -53,6 +53,19 @@ def test_api_reports(tmp_path, monkeypatch):
     assert data[0]["path"] == "/reports/2026-Q1.html"
 
 
+def test_api_reports_sorted_newest_first(tmp_path, monkeypatch):
+    """Dashboard badges reports[0] as latest, so the API must return newest first."""
+    monkeypatch.setattr("src.web.REPORT_OUTPUT_DIR", tmp_path)
+    (tmp_path / "2025-Q4.html").write_text("<html>Q4</html>", encoding="utf-8")
+    (tmp_path / "2026-Q2.html").write_text("<html>Q2</html>", encoding="utf-8")
+    (tmp_path / "2026-Q1.html").write_text("<html>Q1</html>", encoding="utf-8")
+
+    response = client.get("/api/reports")
+    assert response.status_code == 200
+    quarters = [r["quarter"] for r in response.json()]
+    assert quarters == ["2026-Q2", "2026-Q1", "2025-Q4"]
+
+
 def test_api_reports_empty(tmp_path, monkeypatch):
     monkeypatch.setattr("src.web.REPORT_OUTPUT_DIR", tmp_path)
     response = client.get("/api/reports")

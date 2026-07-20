@@ -202,18 +202,24 @@
 
 <script>
 // ====== State ======
-let currentQuarter = '2026-Q2';
+let currentQuarter = null;
 let reportData = null;
 let reports = [];
 
 // ====== Init ======
 async function init() {
-    // Load report list from API
+    // Load report list from API (newest first); default to the latest quarter
     try {
         const resp = await fetch('/api/reports');
         reports = await resp.json();
         renderQuarterList();
+        if (reports.length > 0) currentQuarter = reports[0].quarter;
     } catch(e) { console.error('Failed to load reports', e); }
+
+    if (!currentQuarter) {
+        document.getElementById('mainContent').innerHTML = '<div class="loading">暂无报告数据</div>';
+        return;
+    }
 
     // Load current quarter
     await loadQuarter(currentQuarter);

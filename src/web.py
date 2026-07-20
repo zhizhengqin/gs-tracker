@@ -29,10 +29,10 @@ DASHBOARD_TEMPLATE = PROJECT_ROOT / "templates" / "dashboard.html"
 
 
 def _list_report_files() -> List[Path]:
-    """Return sorted HTML report files in the output directory."""
+    """Return HTML report files sorted newest-first (quarter names sort lexically)."""
     if not REPORT_OUTPUT_DIR.exists():
         return []
-    return sorted(REPORT_OUTPUT_DIR.glob("*.html"))
+    return sorted(REPORT_OUTPUT_DIR.glob("*.html"), reverse=True)
 
 
 @app.get("/", response_class=HTMLResponse)
