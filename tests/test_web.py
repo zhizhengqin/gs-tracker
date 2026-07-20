@@ -1,7 +1,12 @@
 """Tests for src.web."""
+import asyncio
+import time
+from unittest.mock import AsyncMock
+
 import pytest
 from fastapi.testclient import TestClient
 
+import src.web
 from src import storage
 from src.web import app
 
@@ -150,3 +155,66 @@ def test_api_signals_empty_run_returns_empty_list(signals_db):
     assert data["signals"] == []
     assert data["source_status"] == {"13F": "ok"}
     assert data["errors"] == []
+
+
+# ====== Pipeline trigger endpoints ======
+
+
+@pytest.fixture
+def reset_pipeline_state():
+    """Reset the module-level pipeline state before and after each test."""
+    src.web._pipeline_state.update(
+        running=False,
+        last_started_at=None,
+        last_finished_at=None,
+        last_error=None,
+    )
+    yield src.web._pipeline_state
+    src.web._pipeline_state.update(
+        running=False,
+        last_started_at=None,
+        last_finished_at=None,
+        last_error=None,
+    )
+
+
+def test_pipeline_run_returns_202_and_completes(reset_pipeline_state, monkeypatch):
+    mock_run = AsyncMock()
+    monkeypatch.setattr("src.web.run_pipeline", mock_run)
+
+    response = client.post("/api/pipeline/run")
+    assert response.status_code == 202
+
+    # The background task runs on the app's loop; poll until it finishes
+    for _ in range(50):
+        status = client.get("/api/pipeline/status").json()
+        if not status["running"]:
+            break
+        time.sleep(0.05)
+
+    mock_run.assert_awaited_once()
+    status = client.get("/api/pipeline/status").json()
+    assert status["running"] is False
+    assert status["last_error"] is None
+    assert status["last_started_at"] is not None
+    assert status["last_finished_at"] is not None
+
+
+def test_pipeline_run_conflict_while_running(reset_pipeline_state):
+    src.web._pipeline_state["running"] = True
+
+    response = client.post("/api/pipeline/run")
+    assert response.status_code == 409
+    assert "运行中" in response.json()["detail"]
+
+
+def test_pipeline_run_records_error(reset_pipeline_state, monkeypatch):
+    mock_run = AsyncMock(side_effect=RuntimeError("API key missing"))
+    monkeypatch.setattr("src.web.run_pipeline", mock_run)
+
+    asyncio.run(src.web._run_pipeline_tracked())
+
+    state = src.web._pipeline_state
+    assert state["running"] is False
+    assert "API key missing" in state["last_error"]
+    assert state["last_finished_at"] is not None

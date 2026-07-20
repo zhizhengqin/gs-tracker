@@ -2,14 +2,15 @@
 import asyncio
 import logging
 from contextlib import asynccontextmanager
-from datetime import timezone
+from datetime import datetime, timezone
 from pathlib import Path
-from typing import List
+from typing import Any, Dict, List
 
 from fastapi import FastAPI, HTTPException, Path as PathParam
 from fastapi.responses import HTMLResponse
 
 from src.config import PROJECT_ROOT, REPORT_OUTPUT_DIR
+from src.main import run_pipeline
 from src.signals.base import Signal
 from src.storage import get_signal_run, get_signals, init_db
 
@@ -117,3 +118,53 @@ async def api_signals(
 async def health() -> dict:
     """Health check endpoint."""
     return {"status": "ok"}
+
+
+# ====== Manual pipeline trigger ======
+
+_pipeline_state: Dict[str, Any] = {
+    "running": False,
+    "last_started_at": None,
+    "last_finished_at": None,
+    "last_error": None,
+}
+
+
+async def _run_pipeline_tracked() -> None:
+    """Run the full pipeline, recording lifecycle state for the status endpoint."""
+    _pipeline_state.update(
+        running=True,
+        last_error=None,
+        last_started_at=datetime.now(timezone.utc).isoformat(),
+    )
+    try:
+        await run_pipeline()
+    except Exception as exc:
+        logger.exception("Manual pipeline run failed")
+        _pipeline_state["last_error"] = str(exc)
+    finally:
+        _pipeline_state.update(
+            running=False,
+            last_finished_at=datetime.now(timezone.utc).isoformat(),
+        )
+
+
+@app.post("/api/pipeline/run", status_code=202)
+async def api_pipeline_run() -> dict:
+    """Trigger a full pipeline run in the background (409 if already running)."""
+    if _pipeline_state["running"]:
+        raise HTTPException(status_code=409, detail="流水线正在运行中，请稍候")
+    # Mark running synchronously so the first status poll never sees a stale idle state
+    _pipeline_state.update(
+        running=True,
+        last_error=None,
+        last_started_at=datetime.now(timezone.utc).isoformat(),
+    )
+    asyncio.create_task(_run_pipeline_tracked())
+    return {"status": "已启动"}
+
+
+@app.get("/api/pipeline/status")
+async def api_pipeline_status() -> dict:
+    """Return the current pipeline run state for dashboard polling."""
+    return dict(_pipeline_state)

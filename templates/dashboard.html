@@ -63,6 +63,18 @@
             border-top: 1px solid rgba(255,255,255,0.06);
         }
 
+        .run-btn {
+            width: 100%; padding: 10px 14px; border: none; border-radius: 8px;
+            background: var(--accent); color: #fff; font-size: 0.9em; font-weight: 600;
+            cursor: pointer; transition: opacity 0.2s;
+        }
+        .run-btn:hover:not(:disabled) { opacity: 0.85; }
+        .run-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        .run-msg { margin-top: 8px; font-size: 0.78em; line-height: 1.4; min-height: 1em; }
+        .run-msg.ok { color: #7be3a8; }
+        .run-msg.err { color: #ff9a9a; }
+        .run-msg.info { color: #c4c9e0; }
+
         /* ====== Main Content ====== */
         .main {
             margin-left: var(--sidebar-w); flex: 1; padding: 28px 32px; min-height: 100vh;
@@ -189,6 +201,12 @@
         </div>
     </div>
 
+    <div class="sidebar-section">
+        <h3>⚡ 操作</h3>
+        <button class="run-btn" id="runPipelineBtn" onclick="runPipeline()">▶️ 手动运行流水线</button>
+        <div class="run-msg" id="runPipelineMsg"></div>
+    </div>
+
     <div class="sidebar-footer">
         GS-Tracker v1.0 · 数据来源 SEC EDGAR / RSS<br>
         本内容仅供学习参考，不构成投资建议
@@ -228,6 +246,8 @@ async function init() {
     document.querySelectorAll('#navTabs li').forEach(li => {
         li.addEventListener('click', () => switchTab(li.dataset.tab));
     });
+
+    syncPipelineButton();
 }
 
 let loadSeq = 0;
@@ -290,6 +310,85 @@ async function loadQuarter(quarter) {
 
     renderAll();
     updateQuarterListActive();
+}
+
+// ====== Manual pipeline trigger ======
+function setRunMsg(text, cls) {
+    const el = document.getElementById('runPipelineMsg');
+    el.textContent = text;  // textContent, never innerHTML — error text is untrusted
+    el.className = 'run-msg' + (cls ? ' ' + cls : '');
+}
+
+async function runPipeline() {
+    const btn = document.getElementById('runPipelineBtn');
+    btn.disabled = true;
+    setRunMsg('正在启动…', 'info');
+    try {
+        const resp = await fetch('/api/pipeline/run', {method: 'POST'});
+        if (resp.status === 409) {
+            setRunMsg('流水线正在运行中，请稍候', 'info');
+        } else if (!resp.ok) {
+            setRunMsg('启动失败，请稍后重试', 'err');
+            btn.disabled = false;
+            return;
+        } else {
+            setRunMsg('⏳ 流水线运行中…（通常需要几分钟）', 'info');
+        }
+        pollPipelineStatus();
+    } catch (e) {
+        setRunMsg('网络错误，无法启动', 'err');
+        btn.disabled = false;
+    }
+}
+
+async function pollPipelineStatus() {
+    const btn = document.getElementById('runPipelineBtn');
+    while (true) {
+        await new Promise(r => setTimeout(r, 5000));
+        let st;
+        try {
+            st = await (await fetch('/api/pipeline/status')).json();
+        } catch (e) {
+            continue;  // transient network error — keep polling
+        }
+        if (st.running) {
+            setRunMsg('⏳ 流水线运行中…（通常需要几分钟）', 'info');
+            continue;
+        }
+        btn.disabled = false;
+        if (st.last_error) {
+            setRunMsg('❌ 运行失败：' + st.last_error, 'err');
+        } else {
+            setRunMsg('✅ 运行完成，正在刷新数据…', 'ok');
+            await refreshReports();
+            setRunMsg('✅ 数据已更新', 'ok');
+        }
+        return;
+    }
+}
+
+async function refreshReports() {
+    try {
+        const resp = await fetch('/api/reports');
+        reports = await resp.json();
+        renderQuarterList();
+        if (reports.length > 0) {
+            currentQuarter = reports[0].quarter;  // newest first — a new run may add a quarter
+            await loadQuarter(currentQuarter);
+        }
+    } catch (e) { console.error('Failed to refresh reports', e); }
+}
+
+// If a pipeline is already running when the page opens, reflect it and poll
+async function syncPipelineButton() {
+    try {
+        const st = await (await fetch('/api/pipeline/status')).json();
+        if (st.running) {
+            document.getElementById('runPipelineBtn').disabled = true;
+            setRunMsg('⏳ 流水线运行中…（通常需要几分钟）', 'info');
+            pollPipelineStatus();
+        }
+    } catch (e) { /* status endpoint unreachable — leave button as-is */ }
 }
 
 // ====== Data extractors from static HTML ======
