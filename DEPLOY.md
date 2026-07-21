@@ -158,7 +158,10 @@ printf "gsadmin:$(openssl passwd -apr1)\n" > .htpasswd
 
 **6.1 先给数据目录放权**（容器里的程序以非 root 用户运行，写不了 root 克隆下来的目录，不放权会启动崩溃、浏览器显示 502）：
 
+> 💡 每条命令都以 `cd ~/gs-tracker` 开头——如果你是新打开的 SSH 窗口，默认在家目录，直接 chmod 会提示找不到目录。
+
 ```bash
+cd ~/gs-tracker
 chmod -R 777 data output
 ```
 
