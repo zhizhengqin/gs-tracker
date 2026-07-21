@@ -156,6 +156,14 @@ printf "gsadmin:$(openssl passwd -apr1)\n" > .htpasswd
 
 ## 第 6 步：首次启动！
 
+**6.1 先给数据目录放权**（容器里的程序以非 root 用户运行，写不了 root 克隆下来的目录，不放权会启动崩溃、浏览器显示 502）：
+
+```bash
+chmod -R 777 data output
+```
+
+**6.2 启动**：
+
 ```bash
 docker compose -f deploy/docker-compose.yml up -d --build
 ```
@@ -270,7 +278,7 @@ cat ~/.ssh/github_actions
 | `ssh: connect to host ... port 22: Operation timed out` | 安全组没放行 22 端口，或 IP 输错 → 检查第 7 步 |
 | git clone 报 `GnuTLS recv error` 或超时 | 国内直连 GitHub 不稳 → 第 3.1 步镜像没配或失效，按第 3 步换一个备用镜像地址再 clone |
 | 浏览器一直转圈打不开 | 安全组没放行 80 → 第 7 步；或容器没起来 → 服务器上 `docker compose -f deploy/docker-compose.yml ps` 看状态 |
-| 浏览器显示 `502 Bad Gateway` | app 容器挂了 → `docker compose -f deploy/docker-compose.yml logs --tail=50 app` 看报错 |
+| 浏览器显示 `502 Bad Gateway` | 最常见：data/output 目录权限（容器内非 root 用户写不了）→ `chmod -R 777 data output` 然后 `docker compose -f deploy/docker-compose.yml restart`；仍不好就 `docker compose -f deploy/docker-compose.yml logs --tail=50 app` 看报错 |
 | 第 6 步 build 卡在下载镜像十几分钟不动 | 镜像加速没生效 → 重做第 2 步的 daemon.json 那段；还不行就把地址换成 `https://docker.1ms.run` 或 `https://docker.xuanyuan.me`，改完 `systemctl restart docker` |
 | 打开页面显示 401/登录框密码总错 | 重新跑第 5 步生成密码，然后 `docker compose -f deploy/docker-compose.yml restart nginx` |
 | nginx 容器起不来，日志说 `.htpasswd` 是目录 | 第 5 步没做就先启动了 → 补做第 5 步，`rm -rf .htpasswd` 如果它是目录，重新生成，再 `up -d` |
