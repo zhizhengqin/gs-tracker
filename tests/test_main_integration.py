@@ -148,6 +148,7 @@ async def test_run_pipeline_persists_signals(tmp_path, monkeypatch):
                                     mock_save_payload.assert_called_once_with(
                                         "2026-Q2",
                                         fake_signals,
+                                        job="reconciliation",
                                         source_status={"13F": "ok", "news": "error"},
                                         errors=["news failed"],
                                     )

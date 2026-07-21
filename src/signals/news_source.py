@@ -1,7 +1,7 @@
 """RSS news signal source."""
 import logging
 from datetime import datetime, timedelta, timezone
-from typing import List, Optional
+from typing import List, Optional, Tuple
 
 import feedparser
 import httpx
@@ -14,6 +14,34 @@ logger = logging.getLogger(__name__)
 GS_KEYWORDS = [
     "goldman sachs", "goldman", "高盛",
 ]
+
+# Viewpoint/analysis keywords — GS-authored or GS-attributed content.
+# Matching these indicates a signal where GS is the *source* of analysis,
+# not just mentioned in passing.
+GS_VIEWPOINT_KEYWORDS = [
+    "hatzius",           # Jan Hatzius — GS chief economist
+    "kostin",            # David Kostin — GS chief US equity strategist
+    "goldman sachs says",
+    "goldman sachs expects",
+    "goldman sachs upgrades",
+    "goldman sachs downgrades",
+    "goldman sachs forecast",
+    "goldman sachs predicts",
+    "goldman sachs warns",
+    "goldman sachs sees",
+    "goldman strategists",
+    "goldman analysts",
+    "goldman economists",
+    "高盛 研报",
+    "高盛 观点",
+    "高盛 预计",
+    "高盛 预测",
+    "高盛 上调",
+    "高盛 下调",
+    "高盛 维持",
+    "高盛 警告",
+]
+
 HOLDING_KEYWORDS = [
     "apple", "aapl", "microsoft", "msft", "nvidia", "nvda",
     "amazon", "amzn", "meta", "googl", "google", "tesla", "tsla",
@@ -79,8 +107,9 @@ class NewsSource:
             text_lower = (title + " " + summary_text).lower()
 
             has_gs = any(kw in text_lower for kw in GS_KEYWORDS)
+            has_viewpoint = any(kw in text_lower for kw in GS_VIEWPOINT_KEYWORDS)
             has_holding = any(kw in text_lower for kw in HOLDING_KEYWORDS)
-            if not (has_gs or has_holding):
+            if not (has_gs or has_viewpoint or has_holding):
                 continue
 
             published_at = datetime.now(timezone.utc)
@@ -99,7 +128,15 @@ class NewsSource:
                 if kw in text_lower:
                     companies.append(kw.upper())
 
-            strength = SignalStrength.HIGH if has_gs else SignalStrength.MEDIUM
+            # Viewpoint keywords → HIGH (GS-authored analysis, the core value)
+            # Basic GS mention → MEDIUM (news about GS)
+            # Holding-only match → LOW (e.g. Apple news without GS context)
+            if has_viewpoint:
+                strength = SignalStrength.HIGH
+            elif has_gs:
+                strength = SignalStrength.MEDIUM
+            else:
+                strength = SignalStrength.LOW
 
             signals.append(Signal(
                 title=title,
@@ -112,6 +149,35 @@ class NewsSource:
             ))
 
         return signals
+
+    async def fetch_since(
+        self, watermark: Optional[str] = None
+    ) -> Tuple[List[Signal], Optional[str]]:
+        """Fetch RSS items newer than *watermark* (ISO date string YYYY-MM-DD).
+
+        Returns (signals, new_watermark). When watermark is None, uses the
+        standard SIGNAL_LOOKBACK_DAYS cutoff.
+        """
+        all_signals = await self.fetch("")  # empty quarter → lookback-based cutoff
+
+        if not all_signals:
+            return [], watermark
+
+        # Filter by watermark: keep signals published strictly after the watermark
+        if watermark:
+            try:
+                wm_date = datetime.strptime(watermark, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+                all_signals = [s for s in all_signals if s.published_at > wm_date]
+            except ValueError:
+                logger.warning("Invalid watermark format: %s, ignoring filter", watermark)
+
+        # Compute new watermark = latest published_at among results
+        new_watermark = watermark
+        if all_signals:
+            latest = max(s.published_at for s in all_signals)
+            new_watermark = latest.strftime("%Y-%m-%d")
+
+        return all_signals, new_watermark
 
     async def close(self) -> None:
         await self.client.aclose()

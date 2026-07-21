@@ -213,3 +213,71 @@ class TestPreviousQuarter:
     def test_q3_returns_q2(self):
         from src.main import _previous_quarter
         assert _previous_quarter("2026-Q3") == "2026-Q2"
+
+
+class TestDailyIntel:
+    """Smoke tests for the daily intelligence job — no LLM, no 13F."""
+
+    @pytest.mark.asyncio
+    async def test_run_daily_intel_returns_status_dict(self, tmp_path, monkeypatch):
+        """Daily intel should complete without LLM calls and return structured status."""
+        monkeypatch.setattr("src.main.REPORT_OUTPUT_DIR", tmp_path)
+        monkeypatch.setattr("src.config.REPORT_OUTPUT_DIR", tmp_path)
+        monkeypatch.setattr("src.main.RSS_FEEDS", [])
+
+        with patch("src.main.NewsSource") as MockNews:
+            MockNews.return_value.fetch_since = AsyncMock(return_value=([], None))
+            MockNews.return_value.close = AsyncMock()
+            with patch("src.main.Sec8kSource") as Mock8k:
+                Mock8k.return_value.fetch = AsyncMock(return_value=[])
+                Mock8k.return_value.close = AsyncMock()
+                # 8-K source doesn't have fetch_since — delete auto-created MagicMock attr
+                del Mock8k.return_value.fetch_since
+                with patch("src.main.ThirteenDGSource") as Mock13dg:
+                    Mock13dg.return_value.fetch_since = AsyncMock(return_value=([], None))
+                    Mock13dg.return_value.close = AsyncMock()
+                    with patch("src.main.get_source_state", return_value=None):
+                        with patch("src.main.save_source_state"):
+                            with patch("src.main.save_signals_incremental"):
+                                with patch("src.main.save_signal_run"):
+                                    with patch("src.main.cleanup_expired_signals"):
+                                        from src.main import run_daily_intel
+
+                                        result = await run_daily_intel()
+
+        assert "new_signals" in result
+        assert "total_scored" in result
+        assert "source_status" in result
+        assert "errors" in result
+        assert isinstance(result["source_status"], dict)
+        assert isinstance(result["errors"], list)
+
+    @pytest.mark.asyncio
+    async def test_run_daily_intel_handles_source_failure(self, tmp_path, monkeypatch):
+        """One source failing should not crash the job — partial result returned."""
+        monkeypatch.setattr("src.main.REPORT_OUTPUT_DIR", tmp_path)
+        monkeypatch.setattr("src.config.REPORT_OUTPUT_DIR", tmp_path)
+        monkeypatch.setattr("src.main.RSS_FEEDS", [])
+
+        with patch("src.main.NewsSource") as MockNews2:
+            MockNews2.return_value.fetch_since = AsyncMock(return_value=([], None))
+            MockNews2.return_value.close = AsyncMock()
+            with patch("src.main.ThirteenDGSource") as Mock13dg:
+                Mock13dg.return_value.fetch_since = AsyncMock(return_value=([], None))
+                Mock13dg.return_value.close = AsyncMock()
+                with patch("src.main.Sec8kSource") as Mock8k:
+                    Mock8k.return_value.fetch = AsyncMock(side_effect=RuntimeError("SEC down"))
+                    Mock8k.return_value.close = AsyncMock()
+                    del Mock8k.return_value.fetch_since
+                    with patch("src.main.get_source_state", return_value=None):
+                        with patch("src.main.save_source_state"):
+                            with patch("src.main.save_signals_incremental"):
+                                with patch("src.main.save_signal_run"):
+                                    with patch("src.main.cleanup_expired_signals"):
+                                        from src.main import run_daily_intel
+
+                                        result = await run_daily_intel()
+
+        assert result["new_signals"] == 0
+        assert len(result["errors"]) >= 1
+        assert "SEC down" in str(result["errors"])

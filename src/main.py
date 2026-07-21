@@ -20,16 +20,24 @@ from src.notifier import Notification, Notifier, _format_summary
 from src.quarter_compare import QuarterComparator
 from src.reporter import ReportGenerator
 from src.signals.aggregator import SignalAggregator
+from src.signals.base import Signal
 from src.signals.news_source import NewsSource
+from src.signals.scorer import SignalScorer
 from src.signals.sec_8k_source import Sec8kSource
+from src.signals.thirteen_dg_source import ThirteenDGSource
 from src.storage import (
+    cleanup_expired_signals,
     get_holdings,
+    get_recent_signals,
+    get_source_state,
     init_db,
     is_notification_sent,
     mark_notification_sent,
     save_holdings,
     save_signal_payload,
     save_signal_run,
+    save_signals_incremental,
+    save_source_state,
 )
 
 logging.basicConfig(
@@ -37,6 +45,101 @@ logging.basicConfig(
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
 )
 logger = logging.getLogger(__name__)
+
+
+async def run_daily_intel() -> dict:
+    """Run the lightweight daily intelligence job — no LLM calls, no 13F re-download.
+
+    Fetches from daily sources (news, 8-K), merges with last-30d signals
+    for cross-source rescoring, and persists via fingerprint-based upsert.
+    """
+    ensure_directories()
+    init_db()
+
+    sec8k_source = Sec8kSource()
+    thirteendg_source = ThirteenDGSource()
+    news_source = NewsSource(rss_urls=RSS_FEEDS) if RSS_FEEDS else None
+    sources: list[tuple[str, object]] = [
+        ("8-K", sec8k_source),
+        ("13D/13G", thirteendg_source),
+    ]
+    if news_source:
+        sources.append(("news", news_source))
+
+    new_signals: list[Signal] = []
+    source_status: dict[str, str] = {}
+    errors: list[str] = []
+
+    async def _fetch_one(name: str, src: object) -> list[Signal]:
+        try:
+            # Use fetch_since with watermark for sources that support it
+            if hasattr(src, "fetch_since"):
+                wm = get_source_state(name, "default") if name != "8-K" else None
+                result, new_wm = await src.fetch_since(watermark=wm)
+                if new_wm and new_wm != wm:
+                    save_source_state(name, "default", new_wm)
+                source_status[name] = "ok"
+                return result
+            else:
+                result = await src.fetch("")
+                source_status[name] = "ok"
+                return result
+        except Exception as exc:
+            logger.exception("%s source failed in daily intel", name)
+            errors.append(f"{name}: {exc}")
+            source_status[name] = "error"
+            return []
+
+    tasks = [asyncio.create_task(_fetch_one(n, s)) for n, s in sources]
+    results = await asyncio.gather(*tasks)
+    for sigs in results:
+        new_signals.extend(sigs)
+
+    # Merge with last-30d signals for cross-source rescoring
+    recent = get_recent_signals(days=30)
+    combined = new_signals + recent
+
+    if combined:
+        scorer = SignalScorer()
+        scored = scorer.score(combined)
+        id_to_signal = {s.id: s for s in combined}
+        for sc in scored:
+            sig = sc.signal
+            sig.cross_refs = [
+                f"{id_to_signal[rid].source}:{id_to_signal[rid].title}"
+                for rid in sc.cross_refs
+                if rid in id_to_signal
+            ]
+            sig.strength = sc.final_strength
+
+    from datetime import datetime, timezone
+    now = datetime.now(timezone.utc)
+    quarter = f"{now.year}-Q{(now.month - 1) // 3 + 1}"
+    try:
+        save_signals_incremental(quarter, combined if combined else new_signals)
+        save_signal_run(quarter, job="daily", source_status=source_status, errors=errors)
+    except Exception:
+        logger.exception("Failed to persist daily intel signals")
+
+    try:
+        cleanup_expired_signals(90)
+    except Exception:
+        logger.exception("Daily cleanup failed")
+
+    try:
+        await sec8k_source.close()
+        await thirteendg_source.close()
+        if news_source:
+            await news_source.close()
+    except Exception:
+        logger.exception("Source close failed in daily intel")
+
+    return {
+        "new_signals": len(new_signals),
+        "total_scored": len(combined),
+        "source_status": source_status,
+        "errors": errors,
+    }
 
 
 async def run_pipeline() -> None:
@@ -101,6 +204,7 @@ async def run_pipeline() -> None:
         try:
             save_signal_run(
                 quarter,
+                job="reconciliation",
                 source_status={},
                 errors=[f"信号聚合失败: {exc}"],
             )
@@ -114,6 +218,7 @@ async def run_pipeline() -> None:
             save_signal_payload(
                 quarter,
                 aggregation_signals,
+                job="reconciliation",
                 source_status=aggregation_status,
                 errors=aggregation_errors,
             )

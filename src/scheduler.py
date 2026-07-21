@@ -39,6 +39,22 @@ class GSScheduler:
             misfire_grace_time=3600,
         )
 
+    def schedule_daily_intel(self) -> None:
+        """Schedule the lightweight daily intelligence job (Mon-Fri, 17:00 CST).
+
+        17:00 Beijing ≈ 04:00-05:00 US Eastern — captures overnight
+        disclosures and news from the previous US trading day.
+        """
+        self.scheduler.add_job(
+            self.run_daily_intel,
+            CronTrigger(day_of_week="mon-fri", hour=17, minute=0),
+            id="daily_intel",
+            replace_existing=True,
+            max_instances=1,
+            coalesce=True,
+            misfire_grace_time=1800,
+        )
+
     async def run_quarterly_pipeline(self) -> None:
         """Run the full quarterly fetch + analyze + report pipeline."""
         from src.main import run_pipeline
@@ -47,6 +63,22 @@ class GSScheduler:
             await run_pipeline()
         except Exception:
             logger.exception("Quarterly pipeline failed")
+
+    async def run_daily_intel(self) -> None:
+        """Run the lightweight daily intelligence job."""
+        from src.main import run_daily_intel
+
+        try:
+            result = await run_daily_intel()
+            logger.info(
+                "Daily intel: %d new signals, %d total scored, status=%s, errors=%d",
+                result["new_signals"],
+                result["total_scored"],
+                result["source_status"],
+                len(result["errors"]),
+            )
+        except Exception:
+            logger.exception("Daily intel job failed")
 
     def shutdown(self) -> None:
         try:
@@ -70,6 +102,7 @@ async def main(
         await scheduler.run_quarterly_pipeline()
 
     scheduler.schedule_quarterly_check()
+    scheduler.schedule_daily_intel()
     scheduler.start()
 
     stop_event = shutdown_event or asyncio.Event()

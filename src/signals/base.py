@@ -36,11 +36,28 @@ class SignalSource(Protocol):
     """Protocol documenting expected signal source interface.
 
     This is a documentation annotation, not enforced at runtime.
-    Concrete implementations return List[Signal] from fetch().
+
+    Required:
+        source_name: str — unique identifier used by scorer and storage.
+        fetch(quarter) → List[Signal] — quarterly/backward-compat fetch.
+        close() → None — release HTTP client resources.
+
+    Optional (daily intel):
+        fetch_since(watermark: str | None) → (List[Signal], str | None)
+            Incremental fetch — returns only signals newer than *watermark*
+            plus the new watermark to persist. When watermark is None,
+            fetches all available (subject to internal limits).
+            Implement this for sources that produce accumulating data
+            (13D/G, news RSS, macro observations). Not needed for sources
+            whose backend already returns only the latest (8-K submissions).
     """
 
     source_name: str
 
     async def fetch(self, quarter: str) -> List[Signal]: ...
+
+    async def fetch_since(
+        self, watermark: Optional[str] = None
+    ) -> Tuple[List[Signal], Optional[str]]: ...
 
     async def close(self) -> None: ...

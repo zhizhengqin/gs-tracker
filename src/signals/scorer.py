@@ -16,7 +16,10 @@ STRENGTH_WEIGHT: Dict[SignalStrength, float] = {
 SOURCE_CREDIBILITY: Dict[str, float] = {
     "13F": 1.2,
     "8-K": 1.2,
+    "13D/13G": 1.1,
+    "research_view": 1.0,
     "news": 0.8,
+    "macro_view": 0.7,
 }
 DECAY_HALF_LIFE_DAYS = 14.0
 CROSS_SIGNAL_BONUS = 2.0

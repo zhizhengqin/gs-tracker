@@ -12,7 +12,7 @@ from fastapi.responses import HTMLResponse
 from src.config import PROJECT_ROOT, REPORT_OUTPUT_DIR
 from src.main import run_pipeline
 from src.signals.base import Signal
-from src.storage import get_signal_run, get_signals, init_db
+from src.storage import get_recent_signals, get_signal_run, get_signals, init_db
 
 logger = logging.getLogger(__name__)
 
@@ -111,6 +111,19 @@ async def api_signals(
         "signals": [_signal_to_dict(s) for s in signals],
         "source_status": run["source_status"],
         "errors": run["errors"],
+    }
+
+
+@app.get("/api/signals/recent")
+async def api_signals_recent(days: int = 30) -> dict:
+    """Return signals from the last N days, ordered by published_at descending."""
+    if days < 1 or days > 365:
+        raise HTTPException(status_code=422, detail="days 参数必须在 1 到 365 之间")
+    signals = await asyncio.to_thread(get_recent_signals, days)
+    return {
+        "days": days,
+        "count": len(signals),
+        "signals": [_signal_to_dict(s) for s in signals],
     }
 
 

@@ -1,7 +1,7 @@
 """SEC 8-K filing signal source."""
 import logging
 from datetime import datetime, timezone
-from typing import Dict, List
+from typing import Dict, List, Optional, Tuple
 
 import httpx
 
