@@ -10,6 +10,13 @@ echo "==> Pulling latest code from origin/main"
 git fetch origin main
 git reset --hard origin/main
 
+# bash reads this script incrementally, so a mid-run self-update would
+# resume at the old byte offset and silently skip steps. Everything above
+# MUST stay byte-identical across versions; the fresh script takes over here.
+if [ "${1:-}" != "--reexec" ]; then
+    exec bash deploy/update.sh --reexec
+fi
+
 echo "==> Rebuilding and restarting containers"
 docker compose -f deploy/docker-compose.yml up -d --build
 
