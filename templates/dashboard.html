@@ -402,6 +402,30 @@ function extractMeta(doc, label) {
     return '';
 }
 
+// Old reports merged sentiment and confidence into one <p>, so the raw strings
+// can be like "偏多（科技板块）（置信度：85%）". Parse defensively.
+function parseConfidence(raw) {
+    if (!raw) return 0;
+    const s = String(raw);
+    let v = parseFloat(s.replace(/[%％]/g, ''));
+    if (isNaN(v)) {
+        const m = s.match(/(\d+(?:\.\d+)?)\s*[%％]/);
+        v = m ? parseFloat(m[1]) : NaN;
+    }
+    if (isNaN(v)) return 0;
+    if (v > 1) v = v / 100;
+    return Math.min(Math.max(v, 0), 1);
+}
+
+function cleanSentiment(raw) {
+    if (!raw) return '—';
+    const s = String(raw)
+        .replace(/（置信度[^）]*）/g, '')
+        .replace(/\(置信度[^)]*\)/g, '')
+        .trim();
+    return s || '—';
+}
+
 function extractSection(doc, label) {
     const spans = doc.querySelectorAll('.label');
     for (const s of spans) {
@@ -478,11 +502,12 @@ function switchTab(tab) {
 function renderOverview(d) {
     const sigCount = d.signals.length;
     const highCount = d.signals.filter(s => s.strength === 'high').length;
-    const confidence = d.confidence ? parseFloat(d.confidence) : 0;
+    const confidence = parseConfidence(d.confidence);
+    const sentiment = cleanSentiment(d.sentiment);
 
     let sentimentClass = 'neutral';
-    if (d.sentiment.includes('偏多') || d.sentiment.includes('bullish')) sentimentClass = 'bullish';
-    else if (d.sentiment.includes('偏空') || d.sentiment.includes('bearish')) sentimentClass = 'bearish';
+    if (sentiment.includes('偏多') || sentiment.includes('bullish')) sentimentClass = 'bullish';
+    else if (sentiment.includes('偏空') || sentiment.includes('bearish')) sentimentClass = 'bearish';
 
     return `
         <div class="page-header">
@@ -503,7 +528,7 @@ function renderOverview(d) {
                 <div class="label">高优先级信号</div>
             </div>
             <div class="stat-card">
-                <span class="sentiment-tag ${sentimentClass}">${d.sentiment || '—'}</span>
+                <span class="sentiment-tag ${sentimentClass}">${sentiment}</span>
                 <div class="label" style="margin-top: 4px;">AI 情绪判断
                     <span class="confidence-bar"><span class="fill" style="width:${confidence * 100}%"></span></span>
                     ${(confidence * 100).toFixed(0)}%
@@ -542,7 +567,7 @@ function renderOverview(d) {
 
 function renderAnalysis(d) {
     const a = d.analysis;
-    let confidence = d.confidence ? parseFloat(d.confidence) : 0;
+    const confidence = parseConfidence(d.confidence);
     return `
         <div class="page-header">
             <h2>🤖 AI 分析洞察</h2>
