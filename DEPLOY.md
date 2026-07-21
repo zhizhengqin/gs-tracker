@@ -105,13 +105,15 @@ cd gs-tracker
 
 `.env` 是存放密钥的配置文件，**不会**上传到 GitHub，只在服务器上。
 
-**4.1 先在你自己的 Mac 上查出 Kimi token**（另开一个终端窗口，别关服务器那个）：
+**4.1 先在你自己的 Mac 上找到 Kimi token**（另开一个终端窗口，别关服务器那个）：
+
+token 存在 Claude Code 的配置文件里（注意：`echo $ANTHROPIC_AUTH_TOKEN` 在你自己的终端是空的，因为变量是 Claude Code 启动时注入的，不在你的 shell 里）。运行：
 
 ```bash
-本机$ echo $ANTHROPIC_AUTH_TOKEN
+本机$ cat ~/.claude/settings.json
 ```
 
-会输出一串 `sk-kimi-` 开头的字符，**选中复制下来**（这是你的密钥，别发给任何人）。
+在输出里找到 `"ANTHROPIC_AUTH_TOKEN": "sk-kimi-......"` 这一行，**复制引号里面那串 `sk-kimi-` 开头的值**（这是你的密钥，别发给任何人、别截图发到群里）。
 
 **4.2 回到服务器窗口**，创建配置文件：
 
