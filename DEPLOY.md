@@ -238,7 +238,27 @@ cat ~/.ssh/github_actions
 | `DEPLOY_USER` | `root` |
 | `DEPLOY_SSH_KEY` | 刚才复制的那一大段私钥（全选粘贴） |
 
-**8.3 不用做任何其他配置** —— 自动部署流水线文件 `.github/workflows/deploy.yml` 我已经写好放在仓库里了，跟着代码一起推上去就自动生效。
+**8.3 备选方案：命令行一键配置（网页配不好时用这个，全程在你 Mac 终端执行）**
+
+前提：Mac 上装了 GitHub CLI 且已登录（`gh auth status` 能看到账号即可，没有就先 `brew install gh && gh auth login`）。
+
+```bash
+# 1. 生成部署专用钥匙（如果提示 Overwrite (y/n)? 说明已生成过，输入 n 跳过）
+ssh-keygen -t ed25519 -f ~/.ssh/gs_tracker_deploy -N "" -C "github-actions-gs-tracker"
+
+# 2. 把公钥授权到服务器（提示输入服务器 root 密码，输入时屏幕不显示是正常的）
+ssh-copy-id -i ~/.ssh/gs_tracker_deploy.pub root@111.228.23.109
+
+# 3. 三个 Secrets 一次配好（没有任何输出就是成功）
+gh secret set DEPLOY_HOST --repo zhizhengqin/gs-tracker --body "111.228.23.109"
+gh secret set DEPLOY_USER --repo zhizhengqin/gs-tracker --body "root"
+gh secret set DEPLOY_SSH_KEY --repo zhizhengqin/gs-tracker < ~/.ssh/gs_tracker_deploy
+
+# 4. 检查：应该列出 DEPLOY_HOST / DEPLOY_USER / DEPLOY_SSH_KEY 三行
+gh secret list --repo zhizhengqin/gs-tracker
+```
+
+**8.4 不用做任何其他配置** —— 自动部署流水线文件 `.github/workflows/deploy.yml` 我已经写好放在仓库里了，跟着代码一起推上去就自动生效。
 
 > ⚠️ 注意：流水线文件第一次推上去时，那次自动部署**会失败（红色叉）**，因为当时还没有配 Secrets，这是正常的，配完 Secrets 重新跑一次就绿了（第 9 步）。
 
@@ -289,7 +309,7 @@ cat ~/.ssh/github_actions
 | `ps` 里 scheduler 显示 `(unhealthy)` | 先看日志确认程序本身是否正常：`docker compose -f deploy/docker-compose.yml logs --tail=30 scheduler`——能看到定时任务日志说明程序没问题，只是旧版健康检查命令用了镜像里不存在的 `pgrep` → `bash deploy/update.sh` 拉取最新配置重建即恢复 `(healthy)` |
 | nginx 容器起不来，日志说 `.htpasswd` 是目录 | 第 5 步没做就先启动了 → 补做第 5 步，`rm -rf .htpasswd` 如果它是目录，重新生成，再 `up -d` |
 | 报告里 AI 分析全是「服务暂不可用」 | `.env` 里 token 没贴对 → `nano .env` 检查 `ANTHROPIC_AUTH_TOKEN`，改完 `up -d` 重启 |
-| Actions 显示红色失败 | 点进去看日志：Secrets 名拼错 / 私钥没复制全（必须有 BEGIN 和 END 行）/ 服务器 IP 变了 |
+| Actions 显示红色失败 | 点进去看日志：① 报 `missing server host` → Secrets 根本没存进去（网页没保存成功/配错了标签页）→ 按 8.3 命令行方案重配；② 报 `timeout`/`Connection refused` → 安全组 22 端口没对 GitHub 放行（第 7 步如果把 22 限制了来源 IP，改回 `0.0.0.0/0`）；③ 报 `permission denied` → 公钥没授权到服务器，重做 8.3 第 2 条命令 |
 | SEC 数据抓取报 503 | 先跑诊断命令第 3 节：若 `data.sec.gov` 返回 200 但日志里 `browse-edgar` 一直 503 → SEC 封了云服务器 IP 对老接口的访问，代码已切换到官方 `data.sec.gov` 接口，`bash deploy/update.sh` 拉最新代码即可；若两个都 503 → SEC 官网临时故障，等几小时点「手动运行流水线」重试 |
 | SEC 数据抓取报 403 / 收到 SEC 警告邮件 | `.env` 里 `SEC_USER_AGENT` 还是占位邮箱 `your-email@example.com` → `nano .env` 改成真实邮箱，然后 `docker compose -f deploy/docker-compose.yml up -d` 生效 |
 | 服务器重启后服务没了 | 不用管，docker-compose 配了 `restart: unless-stopped`，会自动拉起 |
