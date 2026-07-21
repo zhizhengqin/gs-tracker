@@ -12,7 +12,10 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+# Default to a China-friendly PyPI mirror (JD Cloud builds pull much faster);
+# override with --build-arg PIP_INDEX_URL=https://pypi.org/simple if needed.
+ARG PIP_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple
+RUN pip install --no-cache-dir -i ${PIP_INDEX_URL} -r requirements.txt
 
 COPY src/ ./src/
 COPY templates/ ./templates/
