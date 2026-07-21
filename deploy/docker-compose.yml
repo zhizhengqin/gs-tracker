@@ -52,10 +52,13 @@ services:
       - gs-tracker
     command: python -m src.scheduler --run-now
     healthcheck:
+      # python:3.11-slim has no pgrep; inspect /proc/1/cmdline with Python instead
       test:
         [
-          "CMD-SHELL",
-          "pgrep -f 'python -m src.scheduler' || exit 1",
+          "CMD",
+          "python",
+          "-c",
+          "import sys; sys.exit(0 if b'src.scheduler' in open('/proc/1/cmdline', 'rb').read() else 1)",
         ]
       interval: 30s
       timeout: 10s
