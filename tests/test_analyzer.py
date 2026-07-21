@@ -49,6 +49,7 @@ async def test_analyze_holdings_parses_json_response(monkeypatch):
         content = [type("Block", (), {"text": fake_json})()]
 
     called = False
+
     async def fake_create(*args, **kwargs):
         nonlocal called
         called = True
@@ -199,3 +200,152 @@ async def test_analyze_holdings_claude_retry_then_success(monkeypatch):
     assert result.summary == "总体摘要"
     assert result.sentiment == "bullish"
     assert result.confidence == 0.75
+
+
+# ====== LLM provider configuration ======
+
+
+class _FakeClient:
+    """Capture AsyncAnthropic constructor kwargs without any network access."""
+
+    def __init__(self, **kwargs):
+        self.kwargs = kwargs
+
+
+def test_init_passes_config_base_url_and_auth_token(monkeypatch):
+    """Kimi-style config (base_url + auth_token, no api_key) must reach the client."""
+    monkeypatch.setattr("src.analyzer.anthropic.AsyncAnthropic", _FakeClient)
+    monkeypatch.setattr("src.analyzer.ANTHROPIC_API_KEY", "")
+    monkeypatch.setattr("src.analyzer.ANTHROPIC_AUTH_TOKEN", "tok-123")
+    monkeypatch.setattr("src.analyzer.ANTHROPIC_BASE_URL", "https://api.kimi.com/coding")
+    monkeypatch.setattr("src.analyzer.GS_LLM_MODEL", "kimi-for-coding")
+
+    analyzer = GSAnalyzer()
+
+    assert analyzer.client.kwargs["auth_token"] == "tok-123"
+    assert analyzer.client.kwargs["base_url"] == "https://api.kimi.com/coding"
+    assert analyzer.client.kwargs["api_key"] is None
+    assert analyzer.model == "kimi-for-coding"
+
+
+def test_init_empty_config_values_become_none(monkeypatch):
+    """Empty strings must become None so the SDK's own env fallback still works."""
+    monkeypatch.setattr("src.analyzer.anthropic.AsyncAnthropic", _FakeClient)
+    monkeypatch.setattr("src.analyzer.ANTHROPIC_API_KEY", "")
+    monkeypatch.setattr("src.analyzer.ANTHROPIC_AUTH_TOKEN", "")
+    monkeypatch.setattr("src.analyzer.ANTHROPIC_BASE_URL", "")
+
+    analyzer = GSAnalyzer()
+
+    assert analyzer.client.kwargs["api_key"] is None
+    assert analyzer.client.kwargs["auth_token"] is None
+    assert analyzer.client.kwargs["base_url"] is None
+
+
+def test_init_explicit_params_override_config(monkeypatch):
+    monkeypatch.setattr("src.analyzer.anthropic.AsyncAnthropic", _FakeClient)
+    monkeypatch.setattr("src.analyzer.ANTHROPIC_API_KEY", "cfg-key")
+    monkeypatch.setattr("src.analyzer.ANTHROPIC_AUTH_TOKEN", "cfg-tok")
+    monkeypatch.setattr("src.analyzer.ANTHROPIC_BASE_URL", "https://cfg.example.com")
+    monkeypatch.setattr("src.analyzer.GS_LLM_MODEL", "cfg-model")
+
+    analyzer = GSAnalyzer(
+        api_key="arg-key",
+        auth_token="arg-tok",
+        base_url="https://arg.example.com",
+        model="arg-model",
+    )
+
+    assert analyzer.client.kwargs["api_key"] == "arg-key"
+    assert analyzer.client.kwargs["auth_token"] == "arg-tok"
+    assert analyzer.client.kwargs["base_url"] == "https://arg.example.com"
+    assert analyzer.model == "arg-model"
+
+
+@pytest.mark.asyncio
+async def test_analyze_holdings_non_retriable_error_returns_placeholder(monkeypatch):
+    """Non-retriable API errors (e.g. unknown model on the provider) must not
+    crash the pipeline; fall back to placeholder analysis without retrying."""
+    monkeypatch.setattr("src.analyzer.ANTHROPIC_API_KEY", "test-key")
+    analyzer = GSAnalyzer()
+
+    calls = []
+
+    async def bad_model_create(*args, **kwargs):
+        calls.append(1)
+        request = httpx.Request("POST", "https://api.kimi.com/coding/v1/messages")
+        response = httpx.Response(404, request=request)
+        raise anthropic.NotFoundError("model not found", response=response, body=None)
+
+    monkeypatch.setattr(analyzer.client.messages, "create", bad_model_create)
+
+    import pandas as pd
+    df = pd.DataFrame({
+        "cusip": ["A"],
+        "name_of_issuer": ["Apple"],
+        "value": [1000000.0],
+        "shares": [1000],
+    })
+    result = await analyzer.analyze_holdings(df)
+
+    assert len(calls) == 1  # no retry on non-retriable errors
+    assert "AI 分析服务暂不可用" in result.summary
+    assert result.confidence == 0.0
+
+
+@pytest.mark.asyncio
+async def test_analyze_holdings_skips_thinking_blocks(monkeypatch):
+    """Kimi thinking models return a ThinkingBlock before the TextBlock;
+    text must be collected from blocks that actually carry text."""
+    monkeypatch.setattr("src.analyzer.ANTHROPIC_API_KEY", "test-key")
+    analyzer = GSAnalyzer()
+
+    thinking_block = type("ThinkingBlock", (), {"thinking": "嗯……"})()  # no .text attr
+    text_block = type("TextBlock", (), {"text": "最终分析"})()
+
+    class FakeResponse:
+        content = [thinking_block, text_block]
+
+    async def fake_create(*args, **kwargs):
+        return FakeResponse()
+
+    monkeypatch.setattr(analyzer.client.messages, "create", fake_create)
+
+    import pandas as pd
+    df = pd.DataFrame({
+        "cusip": ["A"],
+        "name_of_issuer": ["Apple"],
+        "value": [1000000.0],
+        "shares": [1000],
+    })
+    result = await analyzer.analyze_holdings(df)
+    assert result.summary == "最终分析"
+    assert result.confidence == 0.5
+
+
+@pytest.mark.asyncio
+async def test_analyze_holdings_all_thinking_blocks_no_crash(monkeypatch):
+    """If every block is a thinking block (tiny budget), degrade gracefully."""
+    monkeypatch.setattr("src.analyzer.ANTHROPIC_API_KEY", "test-key")
+    analyzer = GSAnalyzer()
+
+    thinking_block = type("ThinkingBlock", (), {"thinking": "嗯……"})()
+
+    class FakeResponse:
+        content = [thinking_block]
+
+    async def fake_create(*args, **kwargs):
+        return FakeResponse()
+
+    monkeypatch.setattr(analyzer.client.messages, "create", fake_create)
+
+    import pandas as pd
+    df = pd.DataFrame({
+        "cusip": ["A"],
+        "name_of_issuer": ["Apple"],
+        "value": [1000000.0],
+        "shares": [1000],
+    })
+    result = await analyzer.analyze_holdings(df)
+    assert isinstance(result, AnalysisResult)
+    assert result.summary == ""

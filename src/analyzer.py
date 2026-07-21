@@ -9,7 +9,14 @@ from typing import Any, List, Optional
 import anthropic
 import pandas as pd
 
-from src.config import ANTHROPIC_API_KEY, ANTHROPIC_BACKOFF_BASE, ANTHROPIC_MAX_RETRIES
+from src.config import (
+    ANTHROPIC_API_KEY,
+    ANTHROPIC_AUTH_TOKEN,
+    ANTHROPIC_BACKOFF_BASE,
+    ANTHROPIC_BASE_URL,
+    ANTHROPIC_MAX_RETRIES,
+    GS_LLM_MODEL,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -31,11 +38,27 @@ class AnalysisResult:
 
 
 class GSAnalyzer:
-    """Analyze holdings and multi-source signals via Claude API."""
+    """Analyze holdings and multi-source signals via an Anthropic-compatible API.
 
-    def __init__(self, api_key: Optional[str] = None, model: str = "claude-sonnet-4-20250514") -> None:
-        self.client = anthropic.AsyncAnthropic(api_key=api_key or ANTHROPIC_API_KEY)
-        self.model = model
+    Works with the official Anthropic API (ANTHROPIC_API_KEY) or any
+    Anthropic-compatible gateway such as Kimi (ANTHROPIC_BASE_URL +
+    ANTHROPIC_AUTH_TOKEN). Empty config values become None so the SDK's
+    own environment fallback chain still applies.
+    """
+
+    def __init__(
+        self,
+        api_key: Optional[str] = None,
+        auth_token: Optional[str] = None,
+        base_url: Optional[str] = None,
+        model: Optional[str] = None,
+    ) -> None:
+        self.client = anthropic.AsyncAnthropic(
+            api_key=api_key or ANTHROPIC_API_KEY or None,
+            auth_token=auth_token or ANTHROPIC_AUTH_TOKEN or None,
+            base_url=base_url or ANTHROPIC_BASE_URL or None,
+        )
+        self.model = model or GS_LLM_MODEL
 
     def _build_prompt(
         self,
@@ -192,7 +215,6 @@ class GSAnalyzer:
         """Generate an AI analysis for a single quarter holdings report."""
         prompt = self._build_prompt(holdings_df, previous_df)
         analysis_text = ""
-        last_exception: Optional[Exception] = None
 
         retriable_errors = (
             anthropic.RateLimitError,
@@ -206,17 +228,26 @@ class GSAnalyzer:
             try:
                 response = await self.client.messages.create(
                     model=self.model,
-                    max_tokens=2048,
+                    max_tokens=4096,
                     messages=[{"role": "user", "content": prompt}],
                 )
                 if response.content:
-                    analysis_text = response.content[0].text
+                    # Thinking models (e.g. Kimi) return ThinkingBlocks before the
+                    # TextBlock; collect text only from blocks that carry it.
+                    analysis_text = "".join(
+                        block.text for block in response.content if getattr(block, "text", None)
+                    )
                 break
             except retriable_errors as exc:
-                last_exception = exc
                 logger.warning("Claude API call failed on attempt %d: %s", attempt + 1, exc)
                 if attempt < ANTHROPIC_MAX_RETRIES - 1:
                     await asyncio.sleep(ANTHROPIC_BACKOFF_BASE * (2 ** attempt))
+            except anthropic.APIError as exc:
+                # Non-retriable (auth failure, unknown model, bad request, ...):
+                # retrying cannot help, so degrade to placeholder immediately
+                # instead of crashing the whole pipeline run.
+                logger.error("LLM API returned a non-retriable error: %s", exc)
+                return self._placeholder_analysis(holdings_df)
         else:
             logger.error(
                 "Claude API failed after %d attempts; returning placeholder analysis",

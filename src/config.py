@@ -9,6 +9,11 @@ load_dotenv()
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
+# Anthropic-compatible providers (e.g. Kimi): Bearer token + gateway base URL
+ANTHROPIC_AUTH_TOKEN = os.getenv("ANTHROPIC_AUTH_TOKEN", "")
+ANTHROPIC_BASE_URL = os.getenv("ANTHROPIC_BASE_URL", "")
+# Model selection: GS_LLM_MODEL wins, then Claude Code's ANTHROPIC_MODEL, then Kimi default
+GS_LLM_MODEL = os.getenv("GS_LLM_MODEL") or os.getenv("ANTHROPIC_MODEL") or "kimi-for-coding"
 ANTHROPIC_MAX_RETRIES = int(os.getenv("ANTHROPIC_MAX_RETRIES", "3"))
 ANTHROPIC_BACKOFF_BASE = float(os.getenv("ANTHROPIC_BACKOFF_BASE", "1.0"))
 DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///data/db/gs_tracker.db")
