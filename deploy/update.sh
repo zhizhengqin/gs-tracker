@@ -13,6 +13,11 @@ git reset --hard origin/main
 echo "==> Rebuilding and restarting containers"
 docker compose -f deploy/docker-compose.yml up -d --build
 
+echo "==> Reloading nginx (pick up bind-mounted config, refresh upstream)"
+# nginx keeps running with the config it loaded at startup; reload so it
+# re-reads nginx.conf (dynamic upstream resolution) without downtime.
+docker compose -f deploy/docker-compose.yml exec -T nginx nginx -s reload
+
 echo "==> Pruning old images"
 docker image prune -f >/dev/null
 
