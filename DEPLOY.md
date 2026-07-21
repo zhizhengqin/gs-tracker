@@ -290,6 +290,45 @@ cat ~/.ssh/github_actions
 | SEC 数据抓取报 503 | SEC 官网临时故障，等几小时点「手动运行流水线」重试，不是系统问题 |
 | 服务器重启后服务没了 | 不用管，docker-compose 配了 `restart: unless-stopped`，会自动拉起 |
 
+### 还是解决不了？一键收集诊断信息
+
+在服务器上**整段复制**下面命令块执行（会自动隐去密钥内容，输出可以放心发给开发者/AI 排查）：
+
+```bash
+cd ~/gs-tracker
+echo "===== 1. 容器状态 ====="
+docker compose -f deploy/docker-compose.yml ps
+echo "===== 2. app 容器最近 50 行日志 ====="
+docker compose -f deploy/docker-compose.yml logs --tail=50 app
+echo "===== 3. nginx 容器最近 20 行日志 ====="
+docker compose -f deploy/docker-compose.yml logs --tail=20 nginx
+echo "===== 4. 关键文件与配置检查（密钥只显示长度） ====="
+ls -la .env .htpasswd 2>&1
+python3 -c "
+for line in open('.env'):
+    line = line.strip()
+    if not line or line.startswith('#') or '=' not in line:
+        continue
+    k, v = line.split('=', 1)
+    if 'TOKEN' in k or 'KEY' in k or 'PASS' in k:
+        print(f'{k} = 已设置(长度{len(v)})' if v else f'{k} = 【空！需要填】')
+    else:
+        print(f'{k} = {v}')
+" 2>&1
+echo "===== 5. 数据目录权限 ====="
+ls -ld data output data/db output/reports 2>&1
+echo "===== 6. 绕过 nginx 直连 app 健康检查 ====="
+docker compose -f deploy/docker-compose.yml exec -T app python -c "import urllib.request; print(urllib.request.urlopen('http://localhost:8000/api/health').read().decode())" 2>&1
+```
+
+**怎么看结果（自查）**：
+
+- 第 1 节里 `app` 不是 `running` 而是 `Restarting`/`Exited` → app 崩了，原因在第 2 节日志里（常见：`Permission denied` = 权限没放好，重做第 6.1 步）
+- 第 4 节里 `.htpasswd` 显示为**目录**（行首是 `d`）→ 先启动后建密码导致的，执行：`docker compose -f deploy/docker-compose.yml down && rm -rf .htpasswd`，然后重做第 5 步和第 6 步
+- 第 4 节里 `ANTHROPIC_AUTH_TOKEN = 【空！需要填】` → `.env` 没改对，重做第 4 步
+- 第 6 节输出 `{"status":"ok"}` 但浏览器还是 502 → app 正常、nginx 网络异常，执行 `docker compose -f deploy/docker-compose.yml down && docker compose -f deploy/docker-compose.yml up -d` 重建网络
+- 自己看不出就把**全部输出**发给我
+
 ---
 
 ## 附录 A：不想配 GitHub Secrets？备选方案（服务器定时自动拉取）
