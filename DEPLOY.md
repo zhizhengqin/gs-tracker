@@ -285,6 +285,8 @@ cat ~/.ssh/github_actions
 | 浏览器显示 `502 Bad Gateway` | 按顺序排查：① `docker compose -f deploy/docker-compose.yml ps` 看 app 是否在重启循环 → 是则 `logs --tail=50 app` 看报错（常见：缺依赖、data/output 权限——`chmod -R 777 data output` 后 `restart`）；② app 显示 healthy 但 nginx 日志报 `connect() failed` → nginx 记住了 app 容器的旧 IP，执行 `docker compose -f deploy/docker-compose.yml restart nginx` 让它重新解析 |
 | 第 6 步 build 卡在下载镜像十几分钟不动 | 镜像加速没生效 → 重做第 2 步的 daemon.json 那段；还不行就把地址换成 `https://docker.1ms.run` 或 `https://docker.xuanyuan.me`，改完 `systemctl restart docker` |
 | 打开页面显示 401/登录框密码总错 | 重新跑第 5 步生成密码，然后 `docker compose -f deploy/docker-compose.yml restart nginx` |
+| 容器状态一直是 `Restarting` | `docker compose -f deploy/docker-compose.yml logs --tail=50 app`（或换成 `scheduler`）看报错：若是 `ModuleNotFoundError: No module named 'xxx'` → 代码用到了新依赖但服务器镜像没装 → `bash deploy/update.sh` 拉最新代码重建（仓库里有自动体检测试，`requirements.txt` 漏依赖会在测试阶段被拦住，不会再到服务器上才炸） |
+| `ps` 里 scheduler 显示 `(unhealthy)` | 先看日志确认程序本身是否正常：`docker compose -f deploy/docker-compose.yml logs --tail=30 scheduler`——能看到定时任务日志说明程序没问题，只是旧版健康检查命令用了镜像里不存在的 `pgrep` → `bash deploy/update.sh` 拉取最新配置重建即恢复 `(healthy)` |
 | nginx 容器起不来，日志说 `.htpasswd` 是目录 | 第 5 步没做就先启动了 → 补做第 5 步，`rm -rf .htpasswd` 如果它是目录，重新生成，再 `up -d` |
 | 报告里 AI 分析全是「服务暂不可用」 | `.env` 里 token 没贴对 → `nano .env` 检查 `ANTHROPIC_AUTH_TOKEN`，改完 `up -d` 重启 |
 | Actions 显示红色失败 | 点进去看日志：Secrets 名拼错 / 私钥没复制全（必须有 BEGIN 和 END 行）/ 服务器 IP 变了 |
@@ -330,6 +332,26 @@ docker compose -f deploy/docker-compose.yml exec -T app python -c "import urllib
 - 第 4 节里 `ANTHROPIC_AUTH_TOKEN = 【空！需要填】` → `.env` 没改对，重做第 4 步
 - 第 6 节输出 `{"status":"ok"}` 但浏览器还是 502 → app 正常，是 nginx 记住了 app 容器的旧 IP（app 重建后 IP 会变），执行 `docker compose -f deploy/docker-compose.yml restart nginx` 让它重新解析（新配置已改为动态解析，重启一次后不会再复发）
 - 自己看不出就把**全部输出**发给我
+
+### app 健康但浏览器一直 502：标准处理流程
+
+**症状**：`ps` 显示 app 是 `(healthy)`，诊断命令第 6 节返回 `{"status":"ok"}`，但浏览器始终 502，nginx 日志里是 `connect() failed` 或 `Host is unreachable`。
+
+**原因**：nginx 只在启动时解析一次 app 容器的 IP 地址；app 容器每次部署都会重建、分到新 IP，nginx 还在向旧地址发请求。
+
+**处理**（在服务器上依次执行）：
+
+```bash
+cd ~/gs-tracker && bash deploy/update.sh
+docker compose -f deploy/docker-compose.yml restart nginx
+docker compose -f deploy/docker-compose.yml ps
+```
+
+1. 第一行：拉取最新修复（含 nginx 动态解析配置）并重建有变化的容器
+2. 第二行：让 nginx 立即加载新配置——502 到这一步消失
+3. 第三行：确认三个容器状态正常（scheduler 变 `(healthy)` 需要等约 1 分钟）
+
+浏览器刷新 `http://111.228.23.109` 验证。最新配置已让 nginx **每次请求都重新解析 IP**（`resolver 127.0.0.11`），执行过一次后，以后每次自动部署都不会再复发。
 
 ---
 
