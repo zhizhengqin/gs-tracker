@@ -270,6 +270,7 @@ cat ~/.ssh/github_actions
 | 看运行日志 | 服务器上 `docker compose -f deploy/docker-compose.yml logs -f app`（把 `app` 换成 `scheduler` / `nginx` 看对应日志，`Ctrl+C` 退出） |
 | 重启服务 | 服务器上 `docker compose -f deploy/docker-compose.yml restart` |
 | 改密钥/配置 | 服务器上 `nano .env`，改完 `docker compose -f deploy/docker-compose.yml up -d` |
+| 把 SEC 联系邮箱改成自己的 | `nano .env` 找到 `SEC_USER_AGENT="GS-Tracker your-email@example.com"`，把占位邮箱换成真实邮箱（SEC 官方要求留联系方式），保存后 `docker compose -f deploy/docker-compose.yml up -d` 生效 |
 | 手动触发一次部署（不 push） | GitHub 仓库页 → Actions → Deploy to JD Cloud → **Run workflow** |
 
 ---
@@ -288,6 +289,7 @@ cat ~/.ssh/github_actions
 | 报告里 AI 分析全是「服务暂不可用」 | `.env` 里 token 没贴对 → `nano .env` 检查 `ANTHROPIC_AUTH_TOKEN`，改完 `up -d` 重启 |
 | Actions 显示红色失败 | 点进去看日志：Secrets 名拼错 / 私钥没复制全（必须有 BEGIN 和 END 行）/ 服务器 IP 变了 |
 | SEC 数据抓取报 503 | SEC 官网临时故障，等几小时点「手动运行流水线」重试，不是系统问题 |
+| SEC 数据抓取报 403 / 收到 SEC 警告邮件 | `.env` 里 `SEC_USER_AGENT` 还是占位邮箱 `your-email@example.com` → `nano .env` 改成真实邮箱，然后 `docker compose -f deploy/docker-compose.yml up -d` 生效 |
 | 服务器重启后服务没了 | 不用管，docker-compose 配了 `restart: unless-stopped`，会自动拉起 |
 
 ### 还是解决不了？一键收集诊断信息
