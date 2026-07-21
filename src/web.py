@@ -97,6 +97,19 @@ def _signal_to_dict(signal: Signal) -> dict:
     }
 
 
+@app.get("/api/signals/recent")
+async def api_signals_recent(days: int = 30) -> dict:
+    """Return signals from the last N days, ordered by published_at descending."""
+    if days < 1 or days > 365:
+        raise HTTPException(status_code=422, detail="days 参数必须在 1 到 365 之间")
+    signals = await asyncio.to_thread(get_recent_signals, days)
+    return {
+        "days": days,
+        "count": len(signals),
+        "signals": [_signal_to_dict(s) for s in signals],
+    }
+
+
 @app.get("/api/signals/{quarter}")
 async def api_signals(
     quarter: str = PathParam(pattern=r"^\d{4}-Q[1-4]$"),
@@ -111,19 +124,6 @@ async def api_signals(
         "signals": [_signal_to_dict(s) for s in signals],
         "source_status": run["source_status"],
         "errors": run["errors"],
-    }
-
-
-@app.get("/api/signals/recent")
-async def api_signals_recent(days: int = 30) -> dict:
-    """Return signals from the last N days, ordered by published_at descending."""
-    if days < 1 or days > 365:
-        raise HTTPException(status_code=422, detail="days 参数必须在 1 到 365 之间")
-    signals = await asyncio.to_thread(get_recent_signals, days)
-    return {
-        "days": days,
-        "count": len(signals),
-        "signals": [_signal_to_dict(s) for s in signals],
     }
 
 
