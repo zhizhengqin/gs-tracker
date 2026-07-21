@@ -233,17 +233,20 @@ class TestDailyIntel:
                 Mock8k.return_value.close = AsyncMock()
                 # 8-K source doesn't have fetch_since — delete auto-created MagicMock attr
                 del Mock8k.return_value.fetch_since
-                with patch("src.main.ThirteenDGSource") as Mock13dg:
-                    Mock13dg.return_value.fetch_since = AsyncMock(return_value=([], None))
-                    Mock13dg.return_value.close = AsyncMock()
-                    with patch("src.main.get_source_state", return_value=None):
-                        with patch("src.main.save_source_state"):
-                            with patch("src.main.save_signals_incremental"):
-                                with patch("src.main.save_signal_run"):
-                                    with patch("src.main.cleanup_expired_signals"):
-                                        from src.main import run_daily_intel
+                with patch("src.main.ResearchViewSource") as MockResearch:
+                    MockResearch.return_value.fetch_since = AsyncMock(return_value=([], None))
+                    MockResearch.return_value.close = AsyncMock()
+                    with patch("src.main.ThirteenDGSource") as Mock13dg:
+                        Mock13dg.return_value.fetch_since = AsyncMock(return_value=([], None))
+                        Mock13dg.return_value.close = AsyncMock()
+                        with patch("src.main.get_source_state", return_value=None):
+                            with patch("src.main.save_source_state"):
+                                with patch("src.main.save_signals_incremental"):
+                                    with patch("src.main.save_signal_run"):
+                                        with patch("src.main.cleanup_expired_signals"):
+                                            from src.main import run_daily_intel
 
-                                        result = await run_daily_intel()
+                                            result = await run_daily_intel()
 
         assert "new_signals" in result
         assert "total_scored" in result
@@ -262,21 +265,24 @@ class TestDailyIntel:
         with patch("src.main.NewsSource") as MockNews2:
             MockNews2.return_value.fetch_since = AsyncMock(return_value=([], None))
             MockNews2.return_value.close = AsyncMock()
-            with patch("src.main.ThirteenDGSource") as Mock13dg:
-                Mock13dg.return_value.fetch_since = AsyncMock(return_value=([], None))
-                Mock13dg.return_value.close = AsyncMock()
-                with patch("src.main.Sec8kSource") as Mock8k:
-                    Mock8k.return_value.fetch = AsyncMock(side_effect=RuntimeError("SEC down"))
-                    Mock8k.return_value.close = AsyncMock()
-                    del Mock8k.return_value.fetch_since
-                    with patch("src.main.get_source_state", return_value=None):
-                        with patch("src.main.save_source_state"):
-                            with patch("src.main.save_signals_incremental"):
-                                with patch("src.main.save_signal_run"):
-                                    with patch("src.main.cleanup_expired_signals"):
-                                        from src.main import run_daily_intel
+            with patch("src.main.ResearchViewSource") as MockResearch2:
+                MockResearch2.return_value.fetch_since = AsyncMock(return_value=([], None))
+                MockResearch2.return_value.close = AsyncMock()
+                with patch("src.main.ThirteenDGSource") as Mock13dg:
+                    Mock13dg.return_value.fetch_since = AsyncMock(return_value=([], None))
+                    Mock13dg.return_value.close = AsyncMock()
+                    with patch("src.main.Sec8kSource") as Mock8k:
+                        Mock8k.return_value.fetch = AsyncMock(side_effect=RuntimeError("SEC down"))
+                        Mock8k.return_value.close = AsyncMock()
+                        del Mock8k.return_value.fetch_since
+                        with patch("src.main.get_source_state", return_value=None):
+                            with patch("src.main.save_source_state"):
+                                with patch("src.main.save_signals_incremental"):
+                                    with patch("src.main.save_signal_run"):
+                                        with patch("src.main.cleanup_expired_signals"):
+                                            from src.main import run_daily_intel
 
-                                        result = await run_daily_intel()
+                                            result = await run_daily_intel()
 
         assert result["new_signals"] == 0
         assert len(result["errors"]) >= 1

@@ -24,6 +24,7 @@ from src.signals.base import Signal
 from src.signals.news_source import NewsSource
 from src.signals.scorer import SignalScorer
 from src.signals.sec_8k_source import Sec8kSource
+from src.signals.research_view_source import ResearchViewSource
 from src.signals.thirteen_dg_source import ThirteenDGSource
 from src.storage import (
     cleanup_expired_signals,
@@ -58,10 +59,12 @@ async def run_daily_intel() -> dict:
 
     sec8k_source = Sec8kSource()
     thirteendg_source = ThirteenDGSource()
+    research_source = ResearchViewSource()
     news_source = NewsSource(rss_urls=RSS_FEEDS) if RSS_FEEDS else None
     sources: list[tuple[str, object]] = [
         ("8-K", sec8k_source),
         ("13D/13G", thirteendg_source),
+        ("research_view", research_source),
     ]
     if news_source:
         sources.append(("news", news_source))
@@ -129,6 +132,7 @@ async def run_daily_intel() -> dict:
     try:
         await sec8k_source.close()
         await thirteendg_source.close()
+        await research_source.close()
         if news_source:
             await news_source.close()
     except Exception:
