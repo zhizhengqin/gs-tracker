@@ -78,6 +78,14 @@ docker compose version
 
 ## 第 3 步：把代码拉到服务器
 
+**3.1 先配 GitHub 镜像加速**（必做！国内云服务器直连 GitHub 经常 TLS 断连。配这一次，以后克隆和**每次自动部署拉代码**都会自动走镜像）：
+
+```bash
+git config --global url."https://gh-proxy.com/https://github.com/".insteadOf "https://github.com/"
+```
+
+**3.2 克隆代码**：
+
 ```bash
 cd ~
 git clone https://github.com/zhizhengqin/gs-tracker.git
@@ -85,6 +93,11 @@ cd gs-tracker
 ```
 
 > 仓库是公开的，不需要账号密码。看到 `README.md`、`src/`、`deploy/` 这些文件就对了。
+> 如果 clone 还是报 `GnuTLS recv error` 或超时，换备用镜像再试一次：
+> ```bash
+> git config --global url."https://ghfast.top/https://github.com/".insteadOf "https://github.com/"
+> git clone https://github.com/zhizhengqin/gs-tracker.git
+> ```
 
 ---
 
@@ -253,6 +266,7 @@ cat ~/.ssh/github_actions
 | 症状 | 原因和解决 |
 |---|---|
 | `ssh: connect to host ... port 22: Operation timed out` | 安全组没放行 22 端口，或 IP 输错 → 检查第 7 步 |
+| git clone 报 `GnuTLS recv error` 或超时 | 国内直连 GitHub 不稳 → 第 3.1 步镜像没配或失效，按第 3 步换一个备用镜像地址再 clone |
 | 浏览器一直转圈打不开 | 安全组没放行 80 → 第 7 步；或容器没起来 → 服务器上 `docker compose -f deploy/docker-compose.yml ps` 看状态 |
 | 浏览器显示 `502 Bad Gateway` | app 容器挂了 → `docker compose -f deploy/docker-compose.yml logs --tail=50 app` 看报错 |
 | 第 6 步 build 卡在下载镜像十几分钟不动 | 镜像加速没生效 → 重做第 2 步的 daemon.json 那段；还不行就把地址换成 `https://docker.1ms.run` 或 `https://docker.xuanyuan.me`，改完 `systemctl restart docker` |
