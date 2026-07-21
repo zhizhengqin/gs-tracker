@@ -40,6 +40,21 @@ async def test_fetcher_cik_zero_padded():
 
 
 @pytest.mark.asyncio
+async def test_fetch_submissions_uses_data_sec_gov_api(httpx_mock):
+    """SEC returns 503 for the legacy browse-edgar CGI when called from
+    datacenter IPs (JD Cloud), while the supported data.sec.gov API works.
+    The fetcher must use the latter."""
+    fetcher = SEC13FFetcher()
+    httpx_mock.add_response(
+        url="https://data.sec.gov/submissions/CIK0000886982.json",
+        json={"filings": {"recent": {"form": [], "accessionNumber": [], "reportDate": []}}},
+    )
+    result = await fetcher.fetch_submissions()
+    assert "filings" in result
+    await fetcher.close()
+
+
+@pytest.mark.asyncio
 async def test_parse_13f_infotable(httpx_mock):
     fetcher = SEC13FFetcher()
     httpx_mock.add_response(url="https://www.sec.gov/test.xml", text=SAMPLE_13F_XML)
@@ -75,7 +90,7 @@ async def test_fetch_latest_holdings_parses_index_json(httpx_mock):
     }
 
     httpx_mock.add_response(
-        url="https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&CIK=0000886982&type=13F-HR&output=json",
+        url="https://data.sec.gov/submissions/CIK0000886982.json",
         json=submissions,
     )
     httpx_mock.add_response(
@@ -109,7 +124,7 @@ async def test_fetch_latest_holdings_missing_infotable_raises(httpx_mock):
     index_json = {"directory": {"item": [{"name": "primary_doc.xml", "type": "1", "size": "12345"}]}}
 
     httpx_mock.add_response(
-        url="https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&CIK=0000886982&type=13F-HR&output=json",
+        url="https://data.sec.gov/submissions/CIK0000886982.json",
         json=submissions,
     )
     httpx_mock.add_response(
@@ -214,7 +229,7 @@ async def test_fetch_latest_holdings_populates_filing_info(httpx_mock):
     }
 
     httpx_mock.add_response(
-        url="https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&CIK=0000886982&type=13F-HR&output=json",
+        url="https://data.sec.gov/submissions/CIK0000886982.json",
         json=submissions,
     )
     httpx_mock.add_response(
@@ -258,7 +273,7 @@ async def test_missing_infotable_leaves_filing_info_without_xml_url(httpx_mock):
     }
 
     httpx_mock.add_response(
-        url="https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&CIK=0000886982&type=13F-HR&output=json",
+        url="https://data.sec.gov/submissions/CIK0000886982.json",
         json=submissions,
     )
     httpx_mock.add_response(

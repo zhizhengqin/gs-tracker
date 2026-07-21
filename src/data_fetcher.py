@@ -29,6 +29,10 @@ class SEC13FFetcher:
     """Fetch and parse 13F-HR filings from SEC EDGAR."""
 
     BASE_URL = "https://www.sec.gov"
+    # Supported submissions API. The legacy www.sec.gov/cgi-bin/browse-edgar
+    # endpoint returns 503 for datacenter IPs (SEC blocks cloud providers),
+    # while data.sec.gov works; both return the same filings.recent structure.
+    SUBMISSIONS_API = "https://data.sec.gov/submissions"
 
     def __init__(self, cik: str = GOLDMAN_CIK, user_agent: str = SEC_USER_AGENT) -> None:
         self.cik = cik.zfill(10)
@@ -70,7 +74,7 @@ class SEC13FFetcher:
 
     async def fetch_submissions(self) -> dict:
         """Fetch company submissions JSON from EDGAR."""
-        url = f"{self.BASE_URL}/cgi-bin/browse-edgar?action=getcompany&CIK={self.cik}&type=13F-HR&output=json"
+        url = f"{self.SUBMISSIONS_API}/CIK{self.cik}.json"
         response = await self._get_with_retry(url)
         return response.json()
 

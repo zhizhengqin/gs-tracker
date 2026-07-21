@@ -290,7 +290,7 @@ cat ~/.ssh/github_actions
 | nginx 容器起不来，日志说 `.htpasswd` 是目录 | 第 5 步没做就先启动了 → 补做第 5 步，`rm -rf .htpasswd` 如果它是目录，重新生成，再 `up -d` |
 | 报告里 AI 分析全是「服务暂不可用」 | `.env` 里 token 没贴对 → `nano .env` 检查 `ANTHROPIC_AUTH_TOKEN`，改完 `up -d` 重启 |
 | Actions 显示红色失败 | 点进去看日志：Secrets 名拼错 / 私钥没复制全（必须有 BEGIN 和 END 行）/ 服务器 IP 变了 |
-| SEC 数据抓取报 503 | SEC 官网临时故障，等几小时点「手动运行流水线」重试，不是系统问题 |
+| SEC 数据抓取报 503 | 先跑诊断命令第 3 节：若 `data.sec.gov` 返回 200 但日志里 `browse-edgar` 一直 503 → SEC 封了云服务器 IP 对老接口的访问，代码已切换到官方 `data.sec.gov` 接口，`bash deploy/update.sh` 拉最新代码即可；若两个都 503 → SEC 官网临时故障，等几小时点「手动运行流水线」重试 |
 | SEC 数据抓取报 403 / 收到 SEC 警告邮件 | `.env` 里 `SEC_USER_AGENT` 还是占位邮箱 `your-email@example.com` → `nano .env` 改成真实邮箱，然后 `docker compose -f deploy/docker-compose.yml up -d` 生效 |
 | 服务器重启后服务没了 | 不用管，docker-compose 配了 `restart: unless-stopped`，会自动拉起 |
 
