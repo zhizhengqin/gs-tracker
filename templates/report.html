@@ -23,7 +23,8 @@
         <div class="card">
             <h1>高盛动向情报板 — {{ quarter }}</h1>
             <p>报告生成时间：{{ generated_at }}</p>
-            <p><span class="label">情绪信号：</span>{{ analysis.sentiment }}（置信度：{{ "%.0f"|format(analysis.confidence * 100) }}%）</p>
+            <p><span class="label">情绪信号：</span>{{ {'bullish': '偏多', 'bearish': '偏空', 'neutral': '中性'}.get(analysis.sentiment, analysis.sentiment) }}</p>
+            <p><span class="label">置信度：</span>{{ "%.0f"|format(analysis.confidence * 100) }}%</p>
         </div>
 
         <div class="card">
