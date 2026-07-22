@@ -203,7 +203,9 @@
 
     <div class="sidebar-section">
         <h3>⚡ 操作</h3>
-        <button class="run-btn" id="runPipelineBtn" onclick="runPipeline()">▶️ 手动运行流水线</button>
+        <button class="run-btn" id="runDailyBtn" onclick="runDailyIntel()">📡 手动运行每日情报</button>
+        <div class="run-msg" id="runDailyMsg"></div>
+        <button class="run-btn" id="runPipelineBtn" onclick="runPipeline()" style="margin-top:8px">▶️ 手动运行季度对账</button>
         <div class="run-msg" id="runPipelineMsg"></div>
     </div>
 
@@ -367,6 +369,63 @@ async function pollPipelineStatus() {
     }
 }
 
+// ====== Manual daily intel trigger ======
+function setDailyMsg(text, cls) {
+    const el = document.getElementById('runDailyMsg');
+    el.textContent = text;
+    el.className = 'run-msg' + (cls ? ' ' + cls : '');
+}
+
+async function runDailyIntel() {
+    const btn = document.getElementById('runDailyBtn');
+    btn.disabled = true;
+    setDailyMsg('正在启动…', 'info');
+    try {
+        const resp = await fetch('/api/pipeline/run-daily', {method: 'POST'});
+        if (resp.status === 409) {
+            setDailyMsg('每日情报正在运行中，请稍候', 'info');
+        } else if (!resp.ok) {
+            setDailyMsg('启动失败，请稍后重试', 'err');
+            btn.disabled = false;
+            return;
+        } else {
+            setDailyMsg('⏳ 正在抓取最新信号…（秒级完成）', 'info');
+        }
+        pollDailyStatus();
+    } catch (e) {
+        setDailyMsg('网络错误，无法启动', 'err');
+        btn.disabled = false;
+    }
+}
+
+async function pollDailyStatus() {
+    const btn = document.getElementById('runDailyBtn');
+    while (true) {
+        await new Promise(r => setTimeout(r, 2000));
+        let st;
+        try {
+            st = await (await fetch('/api/pipeline/run-daily/status')).json();
+        } catch (e) {
+            continue;
+        }
+        if (st.running) {
+            setDailyMsg('⏳ 正在抓取最新信号…', 'info');
+            continue;
+        }
+        btn.disabled = false;
+        if (st.last_error) {
+            setDailyMsg('❌ 运行失败：' + st.last_error, 'err');
+        } else {
+            setDailyMsg('✅ 情报已更新', 'ok');
+            // Reload current quarter to show new signals
+            if (currentQuarter) {
+                await loadQuarter(currentQuarter);
+            }
+        }
+        return;
+    }
+}
+
 async function refreshReports() {
     try {
         const resp = await fetch('/api/reports');
@@ -387,6 +446,14 @@ async function syncPipelineButton() {
             document.getElementById('runPipelineBtn').disabled = true;
             setRunMsg('⏳ 流水线运行中…（通常需要几分钟）', 'info');
             pollPipelineStatus();
+        }
+    } catch (e) { /* status endpoint unreachable — leave button as-is */ }
+    try {
+        const ds = await (await fetch('/api/pipeline/run-daily/status')).json();
+        if (ds.running) {
+            document.getElementById('runDailyBtn').disabled = true;
+            setDailyMsg('⏳ 正在抓取最新信号…', 'info');
+            pollDailyStatus();
         }
     } catch (e) { /* status endpoint unreachable — leave button as-is */ }
 }

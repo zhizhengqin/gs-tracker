@@ -177,6 +177,60 @@ async def api_pipeline_run() -> dict:
     return {"status": "已启动"}
 
 
+# ====== Manual daily intel trigger ======
+
+_daily_intel_state: Dict[str, Any] = {
+    "running": False,
+    "last_started_at": None,
+    "last_finished_at": None,
+    "last_error": None,
+}
+
+
+async def _run_daily_intel_tracked() -> None:
+    from src.main import run_daily_intel
+
+    _daily_intel_state.update(
+        running=True,
+        last_error=None,
+        last_started_at=datetime.now(timezone.utc).isoformat(),
+    )
+    try:
+        result = await run_daily_intel()
+        logger.info(
+            "Manual daily intel: %d new signals, status=%s",
+            result["new_signals"], result["source_status"],
+        )
+    except Exception as exc:
+        logger.exception("Manual daily intel failed")
+        _daily_intel_state["last_error"] = str(exc)
+    finally:
+        _daily_intel_state.update(
+            running=False,
+            last_finished_at=datetime.now(timezone.utc).isoformat(),
+        )
+
+
+@app.post("/api/pipeline/run-daily", status_code=202)
+async def api_daily_intel_run() -> dict:
+    """Trigger a daily intelligence job in the background (409 if already running)."""
+    if _daily_intel_state["running"]:
+        raise HTTPException(status_code=409, detail="每日情报正在运行中，请稍候")
+    _daily_intel_state.update(
+        running=True,
+        last_error=None,
+        last_started_at=datetime.now(timezone.utc).isoformat(),
+    )
+    asyncio.create_task(_run_daily_intel_tracked())
+    return {"status": "已启动"}
+
+
+@app.get("/api/pipeline/run-daily/status")
+async def api_daily_intel_status() -> dict:
+    """Return the current daily intel job state for dashboard polling."""
+    return dict(_daily_intel_state)
+
+
 @app.get("/api/pipeline/status")
 async def api_pipeline_status() -> dict:
     """Return the current pipeline run state for dashboard polling."""
