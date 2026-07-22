@@ -12,7 +12,7 @@ Categories covered (filtered from sitemap):
 """
 import logging
 import re
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import List, Optional, Tuple
 
 import httpx
@@ -100,6 +100,7 @@ class ResearchViewSource:
         # Fetch and parse each article page
         signals: list[Signal] = []
         new_watermark = watermark
+        cutoff = datetime.now(timezone.utc) - timedelta(days=90)
 
         for url in new_urls[: self.max_items]:
             try:
@@ -122,6 +123,11 @@ class ResearchViewSource:
                     ).replace(tzinfo=timezone.utc)
                 except ValueError:
                     pass
+
+            # Skip articles older than 90 days — but watermark still advances
+            # past them so the next run doesn't re-fetch the same stale batch.
+            if published_at < cutoff:
+                continue
 
             signals.append(
                 Signal(

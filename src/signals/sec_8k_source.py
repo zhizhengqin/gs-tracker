@@ -1,6 +1,6 @@
 """SEC 8-K filing signal source."""
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Dict, List, Optional, Tuple
 
 import httpx
@@ -88,11 +88,17 @@ class Sec8kSource:
         signals: List[Signal] = []
         count = 0
 
-        year_str, q = quarter.split("-")
-        year = int(year_str)
-        range_start, range_end = QUARTER_DATE_RANGES.get(q, ("-01-01", "-12-31"))
-        quarter_start = f"{year}{range_start}"
-        quarter_end = f"{year}{range_end}"
+        if quarter:
+            year_str, q = quarter.split("-")
+            year = int(year_str)
+            range_start, range_end = QUARTER_DATE_RANGES.get(q, ("-01-01", "-12-31"))
+            quarter_start = f"{year}{range_start}"
+            quarter_end = f"{year}{range_end}"
+        else:
+            # Called from daily intel path — use a 90-day sliding window
+            cutoff = datetime.now(timezone.utc) - timedelta(days=90)
+            quarter_start = cutoff.strftime("%Y-%m-%d")
+            quarter_end = datetime.now(timezone.utc).strftime("%Y-%m-%d")
 
         for i in range(len(forms)):
             if count >= self.max_items:

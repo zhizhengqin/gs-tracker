@@ -54,7 +54,13 @@ QUARTER_START_MONTHS = {"Q1": 1, "Q2": 4, "Q3": 7, "Q4": 10}
 
 
 def _quarter_start(quarter: str) -> datetime:
-    """Return the first day of the quarter as a UTC datetime."""
+    """Return the first day of the quarter as a UTC datetime.
+
+    When *quarter* is empty (called from fetch_since / daily intel path),
+    default to a 90-day lookback.
+    """
+    if not quarter:
+        return datetime.now(timezone.utc) - timedelta(days=90)
     year_str, q = quarter.split("-")
     year = int(year_str)
     month = QUARTER_START_MONTHS.get(q, 1)
