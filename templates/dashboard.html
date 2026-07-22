@@ -438,59 +438,113 @@ async function pollPipelineStatus() {
     }
 }
 
-// ====== Manual daily intel trigger ======
+// ====== Manual daily intel trigger (SSE progress) ======
 function setDailyMsg(text, cls) {
     const el = document.getElementById('runDailyMsg');
     el.textContent = text;
     el.className = 'run-msg' + (cls ? ' ' + cls : '');
 }
 
+let _dailyEventSource = null;
+
 async function runDailyIntel() {
     const btn = document.getElementById('runDailyBtn');
     btn.disabled = true;
-    setDailyMsg('正在启动…', 'info');
-    try {
-        const resp = await fetch('/api/pipeline/run-daily', {method: 'POST'});
-        if (resp.status === 409) {
-            setDailyMsg('每日情报正在运行中，请稍候', 'info');
-        } else if (!resp.ok) {
-            setDailyMsg('启动失败，请稍后重试', 'err');
-            btn.disabled = false;
-            return;
-        } else {
-            setDailyMsg('⏳ 正在抓取最新信号…（秒级完成）', 'info');
+    setDailyMsg('⏳ 正在启动…', 'info');
+
+    // Show progress panel
+    showProgressPanel();
+
+    // Close any existing SSE connection
+    if (_dailyEventSource) { _dailyEventSource.close(); _dailyEventSource = null; }
+
+    // Use SSE for real-time progress
+    _dailyEventSource = new EventSource('/api/pipeline/run-daily/stream');
+    const sourceStates = {};
+
+    _dailyEventSource.onmessage = function(e) {
+        try {
+            const data = JSON.parse(e.data);
+            if (data.event === 'start') {
+                data.sources.forEach(s => {
+                    sourceStates[s] = {status: 'waiting', count: 0, error: ''};
+                });
+                updateProgressPanel(sourceStates);
+            } else if (data.event === 'source_done') {
+                sourceStates[data.source] = {status: data.status, count: data.count, error: data.error || ''};
+                updateProgressPanel(sourceStates);
+            } else if (data.event === 'complete') {
+                _dailyEventSource.close();
+                _dailyEventSource = null;
+                btn.disabled = false;
+                const totalNew = data.new_signals || 0;
+                const hasErrors = (data.errors || []).length > 0;
+                if (hasErrors) {
+                    setDailyMsg('⚠️ 部分完成：' + totalNew + ' 条新信号，' + data.errors.length + ' 个源出错', 'err');
+                } else {
+                    setDailyMsg('✅ 情报已更新：' + totalNew + ' 条新信号', 'ok');
+                }
+                updateProgressPanel(sourceStates, true, data);
+                // Reload daily intel view
+                setTimeout(() => loadDailyIntel(dailyDays || 30), 1500);
+            }
+        } catch(ex) { console.error('SSE parse error', ex); }
+    };
+
+    _dailyEventSource.onerror = function(e) {
+        if (_dailyEventSource) {
+            _dailyEventSource.close();
+            _dailyEventSource = null;
         }
-        pollDailyStatus();
-    } catch (e) {
-        setDailyMsg('网络错误，无法启动', 'err');
         btn.disabled = false;
-    }
+        setDailyMsg('❌ SSE 连接中断，请手动刷新页面查看结果', 'err');
+        updateProgressPanel(sourceStates, true);
+    };
 }
 
-async function pollDailyStatus() {
-    const btn = document.getElementById('runDailyBtn');
-    while (true) {
-        await new Promise(r => setTimeout(r, 2000));
-        let st;
-        try {
-            st = await (await fetch('/api/pipeline/run-daily/status')).json();
-        } catch (e) {
-            continue;
-        }
-        if (st.running) {
-            setDailyMsg('⏳ 正在抓取最新信号…', 'info');
-            continue;
-        }
-        btn.disabled = false;
-        if (st.last_error) {
-            setDailyMsg('❌ 运行失败：' + st.last_error, 'err');
-        } else {
-            setDailyMsg('✅ 情报已更新', 'ok');
-            // Reload daily intel view
-            await loadDailyIntel(dailyDays);
-        }
-        return;
+function showProgressPanel() {
+    let panel = document.getElementById('progressPanel');
+    if (panel) { panel.style.display = 'block'; panel.innerHTML = '<div class="loading">⏳ 正在启动...</div>'; return; }
+
+    panel = document.createElement('div');
+    panel.id = 'progressPanel';
+    panel.style.cssText = 'position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:#fff;border-radius:12px;box-shadow:0 4px 24px rgba(0,0,0,0.15);padding:24px;z-index:1000;min-width:340px;max-width:90vw;';
+    panel.innerHTML = '<div class="loading">⏳ 正在启动...</div>';
+    document.body.appendChild(panel);
+}
+
+function updateProgressPanel(sourceStates, isComplete, summary) {
+    const panel = document.getElementById('progressPanel');
+    if (!panel) return;
+
+    const sourceLabels = {'8-K':'SEC 8-K 重大事件','13D/13G':'13D/13G 大动作','research_view':'高盛研究观点','news':'RSS 新闻','macro_view':'FRED 宏观'};
+    const statusIcons = {'waiting':'⏳','ok':'✅','error':'❌'};
+    const statusColors = {'waiting':'#999','ok':'#2e7d32','error':'#d32f2f'};
+
+    let html = '<h3 style="margin-bottom:16px;font-size:1.1em;">🔄 每日情报抓取进度</h3>';
+    for (const [name, state] of Object.entries(sourceStates)) {
+        const icon = statusIcons[state.status] || '⏳';
+        const color = statusColors[state.status] || '#999';
+        const label = sourceLabels[name] || name;
+        html += `<div style="display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid #eee;">
+            <span style="font-weight:600;">${icon} ${esc(label)}</span>
+            <span style="color:${color};font-size:0.9em;">
+                ${state.status === 'ok' ? state.count + ' 条信号' : state.status === 'error' ? esc(state.error).substring(0,50) : '等待中'}
+            </span>
+        </div>`;
     }
+
+    if (isComplete && summary) {
+        html += `<div style="margin-top:16px;padding-top:12px;border-top:2px solid var(--accent);">
+            <strong>📊 运行报告</strong><br>
+            <span style="font-size:0.9em;">新增信号：${summary.new_signals || 0} 条</span><br>
+            <span style="font-size:0.9em;">参与评分：${summary.total_scored || 0} 条</span><br>
+            <span style="font-size:0.9em;color:${(summary.errors||[]).length ? 'var(--danger)' : 'var(--success)'};">${(summary.errors||[]).length ? '⚠️ ' + summary.errors.length + ' 个源出错' : '✅ 全部成功'}</span>
+        </div>
+        <button class="run-btn" style="margin-top:12px;" onclick="document.getElementById('progressPanel').style.display='none'">关闭</button>`;
+    }
+
+    panel.innerHTML = html;
 }
 
 async function refreshReports() {
@@ -520,7 +574,6 @@ async function syncPipelineButton() {
         if (ds.running) {
             document.getElementById('runDailyBtn').disabled = true;
             setDailyMsg('⏳ 正在抓取最新信号…', 'info');
-            pollDailyStatus();
         }
     } catch (e) { /* status endpoint unreachable — leave button as-is */ }
 }

@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any, Dict, List
 
 from fastapi import Body, FastAPI, HTTPException, Path as PathParam
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, StreamingResponse
 
 from src.config import PROJECT_ROOT, REPORT_OUTPUT_DIR
 from src.main import run_pipeline
@@ -241,6 +241,26 @@ async def api_daily_intel_run() -> dict:
     )
     asyncio.create_task(_run_daily_intel_tracked())
     return {"status": "已启动"}
+
+
+@app.get("/api/pipeline/run-daily/stream")
+async def api_daily_intel_stream():
+    """Run daily intel with SSE progress streaming."""
+    from src.main import run_daily_intel_stream
+
+    async def event_stream():
+        async for event_json in run_daily_intel_stream():
+            yield f"data: {event_json}\n\n"
+
+    return StreamingResponse(
+        event_stream(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
 
 
 @app.get("/api/pipeline/run-daily/status")

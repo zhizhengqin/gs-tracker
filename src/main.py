@@ -146,6 +146,121 @@ async def run_daily_intel() -> dict:
     }
 
 
+async def run_daily_intel_stream():
+    """Async generator: run daily intel with per-source progress events (SSE)."""
+    import json as _json
+    ensure_directories()
+    init_db()
+
+    sec8k_source = Sec8kSource()
+    thirteendg_source = ThirteenDGSource()
+    research_source = ResearchViewSource()
+    news_source = NewsSource(rss_urls=RSS_FEEDS) if RSS_FEEDS else None
+    sources: list[tuple[str, object]] = [
+        ("8-K", sec8k_source),
+        ("13D/13G", thirteendg_source),
+        ("research_view", research_source),
+    ]
+    if news_source:
+        sources.append(("news", news_source))
+
+    yield _json.dumps({"event": "start", "sources": [n for n, _ in sources]})
+
+    new_signals: list[Signal] = []
+    source_status: dict[str, str] = {}
+    errors: list[str] = []
+
+    async def _fetch_one(name: str, src: object) -> list[Signal]:
+        try:
+            if hasattr(src, "fetch_since"):
+                wm = get_source_state(name, "default") if name != "8-K" else None
+                result, new_wm = await src.fetch_since(watermark=wm)
+                if new_wm and new_wm != wm:
+                    save_source_state(name, "default", new_wm)
+                source_status[name] = "ok"
+                return result
+            else:
+                result = await src.fetch("")
+                source_status[name] = "ok"
+                return result
+        except Exception as exc:
+            logger.exception("%s source failed in daily intel", name)
+            errors.append(f"{name}: {exc}")
+            source_status[name] = "error"
+            return []
+
+    # Run sources in parallel, yield progress as each completes
+    tasks = {asyncio.create_task(_fetch_one(n, s)): n for n, s in sources}
+    for done in asyncio.as_completed(tasks):
+        name = tasks[done]
+        try:
+            sigs = await done
+            new_signals.extend(sigs)
+            status = source_status.get(name, "ok")
+            yield _json.dumps({
+                "event": "source_done",
+                "source": name,
+                "status": status,
+                "count": len(sigs),
+                "error": errors[-1] if status == "error" and errors else "",
+            })
+        except Exception as exc:
+            yield _json.dumps({
+                "event": "source_done",
+                "source": name,
+                "status": "error",
+                "count": 0,
+                "error": str(exc),
+            })
+
+    # Merge + score
+    recent = get_recent_signals(days=30)
+    combined = new_signals + recent
+    if combined:
+        scorer = SignalScorer()
+        scored = scorer.score(combined)
+        id_to_signal = {s.id: s for s in combined}
+        for sc in scored:
+            sig = sc.signal
+            sig.cross_refs = [
+                f"{id_to_signal[rid].source}:{id_to_signal[rid].title}"
+                for rid in sc.cross_refs
+                if rid in id_to_signal
+            ]
+            sig.strength = sc.final_strength
+
+    from datetime import datetime, timezone as tz
+    now = datetime.now(tz.utc)
+    quarter = f"{now.year}-Q{(now.month - 1) // 3 + 1}"
+    try:
+        save_signals_incremental(quarter, combined if combined else new_signals)
+        save_signal_run(quarter, job="daily", source_status=source_status, errors=errors)
+    except Exception:
+        logger.exception("Failed to persist daily intel signals")
+
+    try:
+        cleanup_expired_signals(90)
+    except Exception:
+        logger.exception("Daily cleanup failed")
+
+    try:
+        await sec8k_source.close()
+        await thirteendg_source.close()
+        await research_source.close()
+        if news_source:
+            await news_source.close()
+    except Exception:
+        logger.exception("Source close failed")
+
+    yield _json.dumps({
+        "event": "complete",
+        "new_signals": len(new_signals),
+        "total_scored": len(combined),
+        "source_status": source_status,
+        "errors": errors,
+    })
+
+
 async def run_pipeline() -> None:
     """Run the full fetch-analyze-report pipeline once."""
     ensure_directories()
