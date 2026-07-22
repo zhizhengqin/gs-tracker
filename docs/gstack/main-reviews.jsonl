@@ -1,0 +1,7 @@
+{"skill":"plan-eng-review","timestamp":"2026-07-18T10:21:22","status":"clean","unresolved":0,"critical_gaps":0,"issues_found":0,"mode":"FULL_REVIEW","commit":"029e08f"}
+{"skill":"plan-eng-review","timestamp":"2026-07-19T03:12:12Z","status":"clean","unresolved":0,"critical_gaps":0,"issues_found":0,"mode":"FULL_REVIEW","commit":"c823325"}
+{"skill":"review","timestamp":"2026-07-20T00:00:00Z","status":"issues_found","issues_found":8,"critical":0,"informational":8,"quality_score":6.0,"commit":"31f29f1"}
+{"skill":"ship","timestamp":"2026-07-20T07:13:42Z","coverage_pct":-1,"plan_items_total":7,"plan_items_done":7,"verification_result":"pass","version":"","branch":"main"}
+{"skill":"plan-eng-review","timestamp":"2026-07-21T12:47:52Z","status":"clean","unresolved":0,"critical_gaps":0,"issues_found":7,"mode":"FULL_REVIEW","commit":"115c4e7"}
+{"skill":"review","timestamp":"2026-07-21T14:54:58Z","status":"clean","issues_found":1,"critical":0,"informational":1,"quality_score":9.5,"specialists":{},"findings":[{"fingerprint":"src/storage.py:_migrate_signal_runs_pk:dead-code","severity":"INFORMATIONAL","action":"auto-fixed"}],"commit":"115c4e7"}
+{"skill":"ship","timestamp":"2026-07-21T23:54:03Z","coverage_pct":-1,"plan_items_total":7,"plan_items_done":7,"verification_result":"pass","version":"","branch":"main"}

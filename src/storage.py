@@ -200,6 +200,34 @@ def init_db() -> None:
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 PRIMARY KEY (source, path)
             );
+
+            CREATE TABLE IF NOT EXISTS app_settings (
+                key TEXT PRIMARY KEY,
+                value TEXT NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS llm_models (
+                id TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
+                base_url TEXT NOT NULL,
+                auth_token TEXT NOT NULL,
+                model_name TEXT NOT NULL,
+                is_default INTEGER DEFAULT 0,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+
+            CREATE TABLE IF NOT EXISTS signal_analysis (
+                signal_id TEXT PRIMARY KEY,
+                analysis_text TEXT NOT NULL,
+                generated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+
+            CREATE TABLE IF NOT EXISTS daily_reports (
+                date TEXT PRIMARY KEY,
+                report_text TEXT NOT NULL,
+                signal_count INTEGER DEFAULT 0,
+                generated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
             """
         )
 
@@ -691,3 +719,183 @@ def get_source_state(source: str, path: str) -> Optional[str]:
         )
         row = cursor.fetchone()
         return row["watermark"] if row else None
+
+
+# ====== App settings (key-value) ======
+
+def get_setting(key: str, default: str = "") -> str:
+    """Read a single setting value, or *default* if not found."""
+    with get_connection() as conn:
+        row = conn.execute(
+            "SELECT value FROM app_settings WHERE key = ?", (key,)
+        ).fetchone()
+        return row["value"] if row else default
+
+
+def set_setting(key: str, value: str) -> None:
+    """Persist a key-value setting."""
+    with get_connection() as conn:
+        conn.execute(
+            "INSERT INTO app_settings (key, value) VALUES (?, ?) "
+            "ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+            (key, value),
+        )
+        conn.commit()
+
+
+def get_all_settings() -> dict:
+    """Return all settings as a dict."""
+    with get_connection() as conn:
+        rows = conn.execute("SELECT key, value FROM app_settings").fetchall()
+        return {r["key"]: r["value"] for r in rows}
+
+
+# ====== LLM model management ======
+
+def get_llm_models() -> List[dict]:
+    """Return all configured LLM models, default first."""
+    with get_connection() as conn:
+        rows = conn.execute(
+            "SELECT id, name, base_url, auth_token, model_name, is_default, created_at "
+            "FROM llm_models ORDER BY is_default DESC, created_at ASC"
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+
+def get_default_llm_model() -> Optional[dict]:
+    """Return the default LLM model config, or None."""
+    with get_connection() as conn:
+        row = conn.execute(
+            "SELECT id, name, base_url, auth_token, model_name "
+            "FROM llm_models WHERE is_default = 1 LIMIT 1"
+        ).fetchone()
+        return dict(row) if row else None
+
+
+def add_llm_model(
+    model_id: str, name: str, base_url: str, auth_token: str, model_name: str
+) -> None:
+    """Insert a new LLM model. If no default exists, make it the default."""
+    with get_connection() as conn:
+        has_default = conn.execute(
+            "SELECT 1 FROM llm_models WHERE is_default = 1 LIMIT 1"
+        ).fetchone()
+        conn.execute(
+            "INSERT INTO llm_models (id, name, base_url, auth_token, model_name, is_default) "
+            "VALUES (?, ?, ?, ?, ?, ?)",
+            (model_id, name, base_url, auth_token, model_name, 0 if has_default else 1),
+        )
+        conn.commit()
+
+
+def set_default_llm_model(model_id: str) -> None:
+    """Set one LLM model as the default, clearing the previous default."""
+    with get_connection() as conn:
+        conn.execute("UPDATE llm_models SET is_default = 0")
+        conn.execute("UPDATE llm_models SET is_default = 1 WHERE id = ?", (model_id,))
+        conn.commit()
+
+
+def delete_llm_model(model_id: str) -> bool:
+    """Delete an LLM model. Refuses to delete the default model. Returns True if deleted."""
+    with get_connection() as conn:
+        row = conn.execute(
+            "SELECT is_default FROM llm_models WHERE id = ?", (model_id,)
+        ).fetchone()
+        if row is None:
+            return False
+        if row["is_default"]:
+            return False  # refuse to delete the active default
+        conn.execute("DELETE FROM llm_models WHERE id = ?", (model_id,))
+        conn.commit()
+        return True
+
+
+# ====== Signal AI analysis cache ======
+
+def get_signal_analysis(signal_id: str) -> Optional[str]:
+    """Return cached AI analysis for a signal, or None."""
+    with get_connection() as conn:
+        row = conn.execute(
+            "SELECT analysis_text FROM signal_analysis WHERE signal_id = ?",
+            (signal_id,),
+        ).fetchone()
+        return row["analysis_text"] if row else None
+
+
+def save_signal_analysis(signal_id: str, analysis_text: str) -> None:
+    """Cache AI analysis for a signal (idempotent upsert)."""
+    with get_connection() as conn:
+        conn.execute(
+            "INSERT INTO signal_analysis (signal_id, analysis_text, generated_at) "
+            "VALUES (?, ?, CURRENT_TIMESTAMP) "
+            "ON CONFLICT(signal_id) DO UPDATE SET "
+            "analysis_text=excluded.analysis_text, generated_at=CURRENT_TIMESTAMP",
+            (signal_id, analysis_text),
+        )
+        conn.commit()
+
+
+# ====== Daily report cache ======
+
+def get_daily_report(date_str: str) -> Optional[dict]:
+    """Return cached daily report for a date, or None."""
+    with get_connection() as conn:
+        row = conn.execute(
+            "SELECT date, report_text, signal_count, generated_at "
+            "FROM daily_reports WHERE date = ?",
+            (date_str,),
+        ).fetchone()
+        return dict(row) if row else None
+
+
+def save_daily_report(date_str: str, report_text: str, signal_count: int = 0) -> None:
+    """Cache a daily summary report (idempotent upsert)."""
+    with get_connection() as conn:
+        conn.execute(
+            "INSERT INTO daily_reports (date, report_text, signal_count, generated_at) "
+            "VALUES (?, ?, ?, CURRENT_TIMESTAMP) "
+            "ON CONFLICT(date) DO UPDATE SET "
+            "report_text=excluded.report_text, signal_count=excluded.signal_count, "
+            "generated_at=CURRENT_TIMESTAMP",
+            (date_str, report_text, signal_count),
+        )
+        conn.commit()
+
+
+# ====== Signals by date ======
+
+def get_signals_by_date(date_str: str) -> List[Signal]:
+    """Return all signals published on a specific date (YYYY-MM-DD)."""
+    with get_connection() as conn:
+        cursor = conn.execute(
+            """
+            SELECT id, source, title, published_at, summary,
+                   companies, strength, url, cross_refs
+            FROM signals
+            WHERE DATE(published_at) = ?
+            ORDER BY published_at DESC
+            """,
+            (date_str,),
+        )
+        signals: List[Signal] = []
+        for row in cursor.fetchall():
+            try:
+                signals.append(
+                    Signal(
+                        id=row["id"],
+                        source=row["source"],
+                        title=row["title"],
+                        published_at=datetime.fromisoformat(row["published_at"]),
+                        summary=row["summary"] or "",
+                        companies=json.loads(row["companies"]) if row["companies"] else [],
+                        strength=SignalStrength(row["strength"]),
+                        url=row["url"],
+                        cross_refs=json.loads(row["cross_refs"]) if row["cross_refs"] else [],
+                    )
+                )
+            except (ValueError, TypeError, KeyError) as exc:
+                logger.warning(
+                    "Skipping malformed signal row (id=%s): %s", row["id"], exc
+                )
+        return signals
