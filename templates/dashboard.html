@@ -121,6 +121,9 @@
         .sig-source.src-13F { background: #e3f2fd; color: #1565c0; }
         .sig-source.src-news { background: #fce4ec; color: #c62828; }
         .sig-source.src-8-K { background: #e8f5e9; color: #2e7d32; }
+        .sig-source.src-13D\/13G { background: #ede7f6; color: #6a1b9a; }
+        .sig-source.src-research_view { background: #fff3e0; color: #e65100; }
+        .sig-source.src-macro_view { background: #f5f5f5; color: #616161; }
         .signal-card .sig-date { font-size: 0.8em; color: #999; }
         .signal-card h4 { font-size: 0.95em; margin-bottom: 6px; }
         .signal-card .sig-summary { font-size: 0.85em; color: #666; line-height: 1.5; }
@@ -150,6 +153,25 @@
         .empty-state .icon { font-size: 3em; margin-bottom: 12px; }
         .loading { text-align: center; padding: 40px; color: #999; }
 
+        /* Daily intel view */
+        .daily-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; flex-wrap: wrap; gap: 12px; }
+        .day-selector { display: flex; gap: 6px; }
+        .day-btn { padding: 6px 16px; border: 1px solid #ddd; border-radius: 20px; background: #fff; cursor: pointer; font-size: 0.85em; transition: all 0.15s; }
+        .day-btn:hover { border-color: var(--accent); color: var(--accent); }
+        .day-btn.active { background: var(--accent); color: #fff; border-color: var(--accent); font-weight: 600; }
+        .daily-stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 24px; }
+        .daily-stats .stat-card { cursor: default; }
+        .daily-stats .stat-card .num { font-size: 1.8em; font-weight: 700; color: var(--primary); }
+        .daily-stats .stat-card .label { font-size: 0.8em; color: #888; margin-top: 4px; }
+        .daily-feed { margin-top: 8px; }
+        .daily-feed .day-divider { font-size: 0.85em; color: #999; margin: 20px 0 10px; padding-bottom: 6px; border-bottom: 1px solid #eee; font-weight: 600; }
+        .main-nav { list-style: none; }
+        .main-nav li { padding: 9px 14px; border-radius: 8px; cursor: pointer; font-size: 0.9em; margin-bottom: 2px; transition: all 0.15s; }
+        .main-nav li:hover { background: rgba(255,255,255,0.08); color: #fff; }
+        .main-nav li.active { background: var(--accent); color: #fff; font-weight: 600; }
+
+        @media (max-width: 768px) { .daily-stats { grid-template-columns: repeat(2, 1fr); } }
+
         /* Responsive */
         @media (max-width: 768px) {
             .sidebar { width: 100%; position: relative; height: auto; }
@@ -168,16 +190,21 @@
     </div>
 
     <div class="sidebar-section">
-        <h3>📅 季度报告</h3>
-        <ul class="quarter-list" id="quarterList">
-            <li class="active" data-quarter="2026-Q2">
-                2026-Q2 <span class="badge">最新</span>
-            </li>
-            <li data-quarter="2026-Q1">2026-Q1</li>
+        <h3>📍 导航</h3>
+        <ul class="main-nav" id="mainNav">
+            <li class="active" data-view="daily">📡 每日情报</li>
         </ul>
     </div>
 
     <div class="sidebar-section">
+        <h3>📅 季度报告</h3>
+        <ul class="quarter-list" id="quarterList">
+            <li data-quarter="2026-Q2">2026-Q2 <span class="badge">最新</span></li>
+            <li data-quarter="2026-Q1">2026-Q1</li>
+        </ul>
+    </div>
+
+    <div class="sidebar-section" id="moduleSection" style="display:none;">
         <h3>📋 模块</h3>
         <ul class="nav-tabs" id="navTabs">
             <li class="active" data-tab="overview">📊 概览</li>
@@ -190,14 +217,17 @@
     <div class="sidebar-section" id="signalFilterSection" style="display:none;">
         <h3>🔍 信号筛选</h3>
         <div class="signal-filter">
-            <label><input type="checkbox" checked onchange="renderSignals()" class="filter-source" value="13F"> 13F 持仓</label>
-            <label><input type="checkbox" checked onchange="renderSignals()" class="filter-source" value="news"> 新闻</label>
-            <label><input type="checkbox" checked onchange="renderSignals()" class="filter-source" value="8-K"> SEC 8-K</label>
+            <label><input type="checkbox" checked onchange="onFilterChange()" class="filter-source" value="13F"> 13F 持仓</label>
+            <label><input type="checkbox" checked onchange="onFilterChange()" class="filter-source" value="8-K"> SEC 8-K</label>
+            <label><input type="checkbox" checked onchange="onFilterChange()" class="filter-source" value="13D/13G"> 13D/13G</label>
+            <label><input type="checkbox" checked onchange="onFilterChange()" class="filter-source" value="research_view"> 高盛研究</label>
+            <label><input type="checkbox" checked onchange="onFilterChange()" class="filter-source" value="news"> 新闻</label>
+            <label><input type="checkbox" checked onchange="onFilterChange()" class="filter-source" value="macro_view"> 宏观指标</label>
         </div>
         <div class="signal-filter" style="margin-top: 8px;">
-            <label><input type="checkbox" checked onchange="renderSignals()" class="filter-strength" value="high"> 🔴 高优先级</label>
-            <label><input type="checkbox" checked onchange="renderSignals()" class="filter-strength" value="medium"> 🟡 中优先级</label>
-            <label><input type="checkbox" checked onchange="renderSignals()" class="filter-strength" value="low"> 🟢 低优先级</label>
+            <label><input type="checkbox" checked onchange="onFilterChange()" class="filter-strength" value="high"> 🔴 高优先级</label>
+            <label><input type="checkbox" checked onchange="onFilterChange()" class="filter-strength" value="medium"> 🟡 中优先级</label>
+            <label><input type="checkbox" checked onchange="onFilterChange()" class="filter-strength" value="low"> 🟢 低优先级</label>
         </div>
     </div>
 
@@ -225,10 +255,23 @@
 let currentQuarter = null;
 let reportData = null;
 let reports = [];
+let dailyData = [];       // signals from /api/signals/recent
+let dailyDays = 30;       // current day range
+let currentView = 'daily'; // 'daily' | 'quarter'
 
 // ====== Init ======
 async function init() {
-    // Load report list from API (newest first); default to the latest quarter
+    // Bind main nav (每日情报)
+    document.querySelectorAll('#mainNav li').forEach(li => {
+        li.addEventListener('click', () => switchMainView(li.dataset.view));
+    });
+
+    // Bind module tabs
+    document.querySelectorAll('#navTabs li').forEach(li => {
+        li.addEventListener('click', () => switchTab(li.dataset.tab));
+    });
+
+    // Preload report list in background
     try {
         const resp = await fetch('/api/reports');
         reports = await resp.json();
@@ -236,19 +279,8 @@ async function init() {
         if (reports.length > 0) currentQuarter = reports[0].quarter;
     } catch(e) { console.error('Failed to load reports', e); }
 
-    if (!currentQuarter) {
-        document.getElementById('mainContent').innerHTML = '<div class="loading">暂无报告数据</div>';
-        return;
-    }
-
-    // Load current quarter
-    await loadQuarter(currentQuarter);
-
-    // Bind events
-    document.querySelectorAll('#navTabs li').forEach(li => {
-        li.addEventListener('click', () => switchTab(li.dataset.tab));
-    });
-
+    // Default: daily intel view
+    await switchMainView('daily');
     syncPipelineButton();
 }
 
@@ -417,10 +449,8 @@ async function pollDailyStatus() {
             setDailyMsg('❌ 运行失败：' + st.last_error, 'err');
         } else {
             setDailyMsg('✅ 情报已更新', 'ok');
-            // Reload current quarter to show new signals
-            if (currentQuarter) {
-                await loadQuarter(currentQuarter);
-            }
+            // Reload daily intel view
+            await loadDailyIntel(dailyDays);
         }
         return;
     }
@@ -433,7 +463,7 @@ async function refreshReports() {
         renderQuarterList();
         if (reports.length > 0) {
             currentQuarter = reports[0].quarter;  // newest first — a new run may add a quarter
-            await loadQuarter(currentQuarter);
+            await switchMainView('quarter');
         }
     } catch (e) { console.error('Failed to refresh reports', e); }
 }
@@ -709,12 +739,7 @@ function safeHttpUrl(u) {
 }
 
 function renderSignalCard(s) {
-    const srcClass = s.source === '13F' ? 'src-13F' : s.source === 'news' ? 'src-news' : 'src-8-K';
-    let date = '';
-    if (s.published_at) {
-        const dt = new Date(s.published_at);
-        date = isNaN(dt) ? String(s.published_at).slice(0, 10) : dt.toLocaleDateString('zh-CN');
-    }
+    const date = formatSignalDate(s.published_at);
     const hasCrossRefs = s.cross_refs && s.cross_refs.length > 0;
     const strength = ['high', 'medium', 'low'].includes(s.strength) ? s.strength : 'low';
     const link = safeHttpUrl(s.url);
@@ -722,7 +747,7 @@ function renderSignalCard(s) {
     return `
         <div class="signal-card ${strength}">
             <div class="sig-header">
-                <span class="sig-source ${srcClass}">${esc(s.source)}</span>
+                <span class="sig-source ${srcClass(s.source)}">${esc(s.source)}</span>
                 <span class="sig-date">${esc(date)}</span>
             </div>
             <h4>${esc(s.title)}</h4>
@@ -734,6 +759,12 @@ function renderSignalCard(s) {
             </div>
         </div>
     `;
+}
+
+function formatSignalDate(publishedAt) {
+    if (!publishedAt) return '';
+    const dt = new Date(publishedAt);
+    return isNaN(dt) ? String(publishedAt).slice(0, 10) : dt.toLocaleDateString('zh-CN');
 }
 
 function renderHoldingsPanel(d) {
@@ -770,14 +801,135 @@ function renderQuarterList() {
     `).join('');
 
     ul.querySelectorAll('li').forEach(li => {
-        li.addEventListener('click', () => loadQuarter(li.dataset.quarter));
+        li.addEventListener('click', async () => {
+            currentQuarter = li.dataset.quarter;
+            await switchMainView('quarter');
+        });
     });
 }
 
 function updateQuarterListActive() {
     document.querySelectorAll('#quarterList li').forEach(li => {
-        li.classList.toggle('active', li.dataset.quarter === currentQuarter);
+        li.classList.toggle('active', li.dataset.quarter === currentQuarter && currentView === 'quarter');
     });
+}
+
+// ====== Main view switcher ======
+async function switchMainView(view) {
+    currentView = view;
+    // Highlight sidebar
+    document.querySelectorAll('#mainNav li').forEach(li => li.classList.remove('active'));
+    const navItem = document.querySelector(`#mainNav li[data-view="${view}"]`);
+    if (navItem) navItem.classList.add('active');
+
+    // Show/hide module tabs
+    const moduleSection = document.getElementById('moduleSection');
+    const filterSection = document.getElementById('signalFilterSection');
+
+    if (view === 'daily') {
+        if (moduleSection) moduleSection.style.display = 'none';
+        if (filterSection) filterSection.style.display = 'block';
+        document.querySelectorAll('#quarterList li').forEach(li => li.classList.remove('active'));
+        await loadDailyIntel(dailyDays);
+    } else if (view === 'quarter') {
+        if (moduleSection) moduleSection.style.display = 'block';
+        if (filterSection) filterSection.style.display = 'block';
+        if (currentQuarter) {
+            await loadQuarter(currentQuarter);
+        } else {
+            document.getElementById('mainContent').innerHTML = '<div class="loading">暂无报告数据</div>';
+        }
+    }
+}
+
+// ====== Daily intel view ======
+async function loadDailyIntel(days) {
+    dailyDays = days;
+    document.getElementById('mainContent').innerHTML = '<div class="loading">加载中...</div>';
+
+    // Highlight active day button
+    document.querySelectorAll('.day-btn').forEach(b => {
+        b.classList.toggle('active', parseInt(b.dataset.days) === days);
+    });
+
+    try {
+        const resp = await fetch(`/api/signals/recent?days=${days}`);
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+        const json = await resp.json();
+        dailyData = json.signals || [];
+    } catch (e) {
+        console.error('Failed to load daily intel', e);
+        dailyData = [];
+    }
+    renderDailyIntel();
+}
+
+function renderDailyIntel() {
+    const filtered = filterDailySignals();
+    const highCount = filtered.filter(s => s.strength === 'high').length;
+    const sources = new Set(filtered.map(s => s.source));
+    const dayLabel = {7:'最近 7 天',14:'最近 14 天',30:'最近 30 天',90:'最近 90 天'}[dailyDays] || `最近 ${dailyDays} 天`;
+
+    if (dailyData.length === 0 && filtered.length === 0) {
+        document.getElementById('mainContent').innerHTML = `
+            <div class="daily-header">
+                <h2>📡 每日情报</h2>
+                <div class="day-selector">
+                    ${[7,14,30,90].map(d => `<button class="day-btn${d===dailyDays?' active':''}" data-days="${d}" onclick="loadDailyIntel(${d})">${d} 天</button>`).join('')}
+                </div>
+            </div>
+            <div class="empty-state">
+                <div class="icon">📭</div>
+                <p>暂无最近情报</p>
+                <p style="font-size:0.85em;margin-top:8px;">点击左侧「📡 手动运行每日情报」开始抓取</p>
+            </div>`;
+        return;
+    }
+
+    let html = `
+        <div class="daily-header">
+            <h2>📡 每日情报</h2>
+            <div class="day-selector">
+                ${[7,14,30,90].map(d => `<button class="day-btn${d===dailyDays?' active':''}" data-days="${d}" onclick="loadDailyIntel(${d})">${d} 天</button>`).join('')}
+            </div>
+        </div>
+        <div class="daily-stats">
+            <div class="stat-card"><div class="num">${filtered.length}</div><div class="label">情报总数</div></div>
+            <div class="stat-card"><div class="num" style="color:var(--danger);">${highCount}</div><div class="label">高优先级</div></div>
+            <div class="stat-card"><div class="num">${sources.size}</div><div class="label">活跃信号源</div></div>
+            <div class="stat-card"><div class="num" style="font-size:1.2em;">${dayLabel}</div><div class="label">时间范围</div></div>
+        </div>
+        <div class="daily-feed">
+            ${filtered.map(s => renderSignalCard(s)).join('')}
+        </div>`;
+
+    document.getElementById('mainContent').innerHTML = html;
+}
+
+function filterDailySignals() {
+    const activeSources = [...document.querySelectorAll('.filter-source:checked')].map(cb => cb.value);
+    const activeStrengths = [...document.querySelectorAll('.filter-strength:checked')].map(cb => cb.value);
+    return dailyData.filter(s => activeSources.includes(s.source) && activeStrengths.includes(s.strength));
+}
+
+function srcClass(source) {
+    const m = {
+        '13F': 'src-13F',
+        'news': 'src-news',
+        '8-K': 'src-8-K',
+        '13D/13G': 'src-13D\\/13G',
+        'research_view': 'src-research_view',
+        'macro_view': 'src-macro_view',
+    };
+    return m[source] || 'src-13F';
+}
+
+function onFilterChange() {
+    if (currentView === 'daily') {
+        renderDailyIntel();
+    } else {
+        renderSignals();
+    }
 }
 
 // ====== Boot ======
