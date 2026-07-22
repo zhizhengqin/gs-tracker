@@ -172,6 +172,41 @@
 
         @media (max-width: 768px) { .daily-stats { grid-template-columns: repeat(2, 1fr); } }
 
+        /* Settings page */
+        .settings-section { margin-bottom: 28px; }
+        .settings-section h3 { font-size: 1.05em; color: var(--primary); margin-bottom: 14px; }
+        .source-row, .model-row { display:flex; align-items:center; justify-content:space-between; padding:12px 16px; border:1px solid #e8eaed; border-radius:8px; margin-bottom:8px; background:#fafbfc; }
+        .source-row .info, .model-row .info { flex:1; }
+        .source-row .name { font-weight:600; }
+        .source-row .desc { font-size:0.82em; color:#888; margin-top:2px; }
+        .model-row .model-name { font-weight:600; }
+        .model-row .model-detail { font-size:0.8em; color:#888; margin-top:2px; }
+        .toggle-btn { padding:6px 18px; border-radius:20px; border:none; cursor:pointer; font-size:0.85em; font-weight:600; transition:all 0.15s; }
+        .toggle-btn.on { background:#e8f5e9; color:#2e7d32; }
+        .toggle-btn.off { background:#f5f5f5; color:#999; }
+        .btn-sm { padding:6px 14px; border-radius:6px; border:1px solid #ddd; cursor:pointer; font-size:0.82em; background:#fff; margin-left:6px; }
+        .btn-sm.danger { border-color:#ffcdd2; color:#d32f2f; }
+        .btn-sm.primary { border-color:var(--accent); color:var(--accent); }
+        .btn-sm:hover { opacity:0.75; }
+        .add-form { display:flex; gap:8px; flex-wrap:wrap; margin-top:12px; padding:14px; background:#f5f6f8; border-radius:8px; }
+        .add-form input { padding:8px 12px; border:1px solid #ddd; border-radius:6px; font-size:0.85em; flex:1; min-width:120px; }
+        .badge-default { background:var(--accent); color:#fff; padding:2px 8px; border-radius:4px; font-size:0.7em; margin-left:6px; }
+        .test-result { margin-top:6px; font-size:0.82em; padding:6px 10px; border-radius:4px; }
+        .test-result.ok { background:#e8f5e9; color:#2e7d32; }
+        .test-result.err { background:#fce4ec; color:#c62828; }
+
+        /* AI analysis */
+        .ai-toggle { font-size:0.82em; color:var(--accent); cursor:pointer; font-weight:600; margin-top:6px; display:inline-block; }
+        .ai-toggle:hover { text-decoration:underline; }
+        .ai-panel { margin-top:8px; padding:10px 14px; background:#fff8e1; border-radius:6px; font-size:0.85em; line-height:1.6; color:#555; display:none; border-left:3px solid var(--accent); }
+        .ai-panel.open { display:block; }
+        .daily-report-card { background:linear-gradient(135deg,#1a237e,#283593); color:#fff; border-radius:12px; padding:20px 24px; margin-top:20px; }
+        .daily-report-card h3 { color:#fff; border:none; margin-bottom:12px; }
+        .daily-report-card h4 { color:#ffcc80; font-size:0.95em; margin:12px 0 4px; }
+        .daily-report-card p { font-size:0.9em; line-height:1.7; opacity:0.92; }
+        .date-picker-row { display:flex; align-items:center; gap:10px; }
+        .date-picker-row input[type=date] { padding:8px 12px; border:1px solid #ddd; border-radius:8px; font-size:0.9em; }
+
         /* Responsive */
         @media (max-width: 768px) {
             .sidebar { width: 100%; position: relative; height: auto; }
@@ -193,6 +228,8 @@
         <h3>📍 导航</h3>
         <ul class="main-nav" id="mainNav">
             <li class="active" data-view="daily">📡 每日情报</li>
+            <li data-view="quarter">📅 季度报告</li>
+            <li data-view="settings">⚙️ 设置</li>
         </ul>
     </div>
 
@@ -745,7 +782,7 @@ function renderSignalCard(s) {
     const link = safeHttpUrl(s.url);
     const companies = Array.isArray(s.companies) ? s.companies : [];
     return `
-        <div class="signal-card ${strength}">
+        <div class="signal-card ${strength}" data-signal-id="${esc(s.id || '')}">
             <div class="sig-header">
                 <span class="sig-source ${srcClass(s.source)}">${esc(s.source)}</span>
                 <span class="sig-date">${esc(date)}</span>
@@ -817,7 +854,7 @@ function updateQuarterListActive() {
 // ====== Main view switcher ======
 async function switchMainView(view) {
     currentView = view;
-    // Highlight sidebar
+    // Highlight sidebar nav
     document.querySelectorAll('#mainNav li').forEach(li => li.classList.remove('active'));
     const navItem = document.querySelector(`#mainNav li[data-view="${view}"]`);
     if (navItem) navItem.classList.add('active');
@@ -837,8 +874,13 @@ async function switchMainView(view) {
         if (currentQuarter) {
             await loadQuarter(currentQuarter);
         } else {
-            document.getElementById('mainContent').innerHTML = '<div class="loading">暂无报告数据</div>';
+            document.getElementById('mainContent').innerHTML = '<div class="loading">暂无报告数据，请先运行季度对账</div>';
         }
+    } else if (view === 'settings') {
+        if (moduleSection) moduleSection.style.display = 'none';
+        if (filterSection) filterSection.style.display = 'none';
+        document.querySelectorAll('#quarterList li').forEach(li => li.classList.remove('active'));
+        await renderSettings();
     }
 }
 
@@ -930,6 +972,279 @@ function onFilterChange() {
     } else {
         renderSignals();
     }
+}
+
+// ====== Settings page ======
+async function renderSettings() {
+    let html = '<div class="page-header"><h2>⚙️ 系统设置</h2></div>';
+
+    // --- Signal sources ---
+    html += '<div class="settings-section"><h3>📡 信号源管理</h3>';
+    try {
+        const resp = await fetch('/api/settings/sources');
+        const sources = await resp.json();
+        sources.forEach(s => {
+            html += `<div class="source-row">
+                <div class="info"><div class="name">${esc(s.label)} <span style="font-size:0.75em;color:#888;">(${esc(s.name)})</span></div>
+                <div class="desc">${esc(s.description)} ${s.builtin ? '<span style="color:#888;">· 内置</span>' : '<span style="color:var(--accent);">· 自定义</span>'}</div></div>
+                <button class="toggle-btn ${s.enabled?'on':'off'}" onclick="toggleSource('${esc(s.name)}',${!s.enabled})">${s.enabled?'✅ 已启用':'⏸ 已禁用'}</button>
+            </div>`;
+        });
+    } catch(e) { html += '<p style="color:#999;">加载失败</p>'; }
+    html += '</div>';
+
+    // --- LLM models ---
+    html += '<div class="settings-section"><h3>🤖 大模型设置</h3><div id="llmModelList">加载中...</div>';
+    html += `<div class="add-form">
+        <input id="newModelName" placeholder="模型名称（如 DeepSeek）">
+        <input id="newModelBaseUrl" placeholder="Base URL（如 https://api.deepseek.com/anthropic/v1）">
+        <input id="newModelToken" placeholder="Auth Token" type="password">
+        <input id="newModelId" placeholder="模型ID（如 deepseek-v4-pro[1m]）">
+        <button class="btn-sm primary" onclick="addLLMModel()">➕ 添加</button>
+        <button class="btn-sm" onclick="testLLMModel()">🔍 测试当前填写</button>
+        <div id="testResult"></div>
+    </div>`;
+    html += '</div>';
+
+    document.getElementById('mainContent').innerHTML = html;
+    loadLLMModelList();
+}
+
+async function loadLLMModelList() {
+    const container = document.getElementById('llmModelList');
+    if (!container) return;
+    try {
+        const resp = await fetch('/api/settings/llm-models');
+        const models = await resp.json();
+        if (models.length === 0) {
+            container.innerHTML = '<p style="color:#999;">暂无配置的大模型。请添加至少一个模型。</p>';
+            return;
+        }
+        container.innerHTML = models.map(m => `
+            <div class="model-row">
+                <div class="info">
+                    <div class="model-name">${esc(m.name)} ${m.is_default ? '<span class="badge-default">默认</span>' : ''}</div>
+                    <div class="model-detail">${esc(m.model_name)} · ${esc(m.base_url)} · Token: ${esc(m.auth_token_masked)}</div>
+                </div>
+                <div>
+                    ${!m.is_default ? `<button class="btn-sm primary" onclick="setDefaultModel('${esc(m.id)}')">⭐ 设为默认</button>` : ''}
+                    ${!m.is_default ? `<button class="btn-sm danger" onclick="deleteModel('${esc(m.id)}')">🗑 删除</button>` : ''}
+                </div>
+            </div>
+        `).join('');
+    } catch(e) { container.innerHTML = '<p style="color:#999;">加载失败</p>'; }
+}
+
+async function toggleSource(name, enable) {
+    try {
+        const resp = await fetch('/api/settings/sources');
+        const sources = await resp.json();
+        const updated = sources.map(s => s.name === name ? {...s, enabled: enable} : s);
+        await fetch('/api/settings/sources', {method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify(updated)});
+        renderSettings();
+    } catch(e) { alert('保存失败: ' + e); }
+}
+
+async function addLLMModel() {
+    const name = document.getElementById('newModelName').value.trim();
+    const baseUrl = document.getElementById('newModelBaseUrl').value.trim();
+    const authToken = document.getElementById('newModelToken').value.trim();
+    const modelName = document.getElementById('newModelId').value.trim();
+    if (!name || !baseUrl || !authToken || !modelName) { alert('请填写所有字段'); return; }
+    try {
+        const resp = await fetch('/api/settings/llm-models', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({name,base_url:baseUrl,auth_token:authToken,model_name:modelName})});
+        if (!resp.ok) { const e=await resp.json(); alert('添加失败: '+e.detail); return; }
+        document.getElementById('newModelName').value = '';
+        document.getElementById('newModelBaseUrl').value = '';
+        document.getElementById('newModelToken').value = '';
+        document.getElementById('newModelId').value = '';
+        loadLLMModelList();
+    } catch(e) { alert('添加失败: ' + e); }
+}
+
+async function testLLMModel() {
+    const baseUrl = document.getElementById('newModelBaseUrl').value.trim();
+    const authToken = document.getElementById('newModelToken').value.trim();
+    const modelName = document.getElementById('newModelId').value.trim();
+    const el = document.getElementById('testResult');
+    if (!baseUrl || !authToken || !modelName) { el.innerHTML='<div class="test-result err">请填写 Base URL、Auth Token 和模型ID</div>'; return; }
+    el.innerHTML = '<div class="test-result" style="color:#888;">⏳ 测试中...</div>';
+    try {
+        const resp = await fetch('/api/settings/llm-models/test', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({base_url:baseUrl,auth_token:authToken,model_name:modelName})});
+        const r = await resp.json();
+        if (r.status === 'ok') el.innerHTML = `<div class="test-result ok">✅ 连通成功！响应: ${esc(r.response)}</div>`;
+        else el.innerHTML = `<div class="test-result err">❌ 失败: ${esc(r.error)}</div>`;
+    } catch(e) { el.innerHTML = `<div class="test-result err">❌ 网络错误: ${e}</div>`; }
+}
+
+async function setDefaultModel(id) {
+    try {
+        await fetch(`/api/settings/llm-models/${id}/default`, {method:'PUT'});
+        loadLLMModelList();
+    } catch(e) { alert('设置失败: ' + e); }
+}
+
+async function deleteModel(id) {
+    if (!confirm('确定删除此模型配置？')) return;
+    try {
+        const resp = await fetch(`/api/settings/llm-models/${id}`, {method:'DELETE'});
+        if (!resp.ok) { const e=await resp.json(); alert('删除失败: ' + e.detail); return; }
+        loadLLMModelList();
+    } catch(e) { alert('删除失败: ' + e); }
+}
+
+// ====== Daily intel AI analysis + date picker ======
+async function analyzeSignal(signalId, title, summary, source) {
+    const panel = document.getElementById('ai-' + signalId);
+    if (!panel) return;
+    if (panel.classList.contains('open')) { panel.classList.remove('open'); return; }
+    panel.classList.add('open');
+    if (panel.dataset.loaded === 'true') return;
+    panel.innerHTML = '<span style="color:#888;">🤖 AI 分析中...</span>';
+    try {
+        const resp = await fetch(`/api/signals/${signalId}/analyze`, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({title,summary,source})});
+        if (!resp.ok) { panel.innerHTML = '<span style="color:#d32f2f;">AI 分析失败</span>'; return; }
+        const r = await resp.json();
+        panel.innerHTML = esc(r.analysis).replace(/\n/g, '<br>');
+        panel.dataset.loaded = 'true';
+    } catch(e) { panel.innerHTML = '<span style="color:#d32f2f;">网络错误</span>'; }
+}
+
+async function loadDailyReport(dateStr) {
+    const container = document.getElementById('dailyReportContainer');
+    if (!container) return;
+    container.innerHTML = '<div class="loading">📋 生成每日报告中...</div>';
+    try {
+        const resp = await fetch(`/api/daily-report/${dateStr}`);
+        const r = await resp.json();
+        if (r.report) {
+            const formatted = esc(r.report).replace(/\n/g, '<br>').replace(/## ([^<]+)/g, '<h4>$1</h4>');
+            container.innerHTML = `<div class="daily-report-card"><h3>📋 ${dateStr} 每日情报摘要</h3><div>${formatted}</div></div>`;
+        } else {
+            container.innerHTML = '';
+        }
+    } catch(e) { container.innerHTML = '<p style="color:#999;">日报加载失败</p>'; }
+}
+
+// Override renderDailyIntel to add date picker + AI analysis + daily report
+const _origRenderDailyIntel = renderDailyIntel;
+renderDailyIntel = function() {
+    _origRenderDailyIntel();
+
+    // Add date picker to daily header
+    const today = new Date().toISOString().slice(0,10);
+    const header = document.querySelector('.daily-header');
+    if (header) {
+        const existingPicker = header.querySelector('.date-picker-row');
+        if (!existingPicker) {
+            const picker = document.createElement('div');
+            picker.className = 'date-picker-row';
+            picker.innerHTML = `<span style="font-size:0.85em;color:#888;">📅 查看日期：</span>
+                <input type="date" id="dailyDatePicker" value="${today}" onchange="loadDateSignals(this.value)">
+                <button class="btn-sm primary" onclick="loadDateSignals(document.getElementById('dailyDatePicker').value)">查看</button>
+                <button class="btn-sm" onclick="loadDailyReport(document.getElementById('dailyDatePicker').value)">📋 生成日报</button>`;
+            header.appendChild(picker);
+        }
+    }
+
+    // Add AI toggle to each signal card
+    document.querySelectorAll('.signal-card').forEach(card => {
+        const titleEl = card.querySelector('h4');
+        if (!titleEl) return;
+        const sigId = card.dataset.signalId;
+        if (!sigId) return;
+
+        // Check if AI toggle already exists
+        if (card.querySelector('.ai-toggle')) return;
+
+        const toggle = document.createElement('span');
+        toggle.className = 'ai-toggle';
+        toggle.textContent = '🤖 AI 解读';
+        toggle.onclick = function() {
+            const title = titleEl.textContent || '';
+            const summaryEl = card.querySelector('.sig-summary');
+            const summary = summaryEl ? summaryEl.textContent : '';
+            const sourceEl = card.querySelector('.sig-source');
+            const source = sourceEl ? sourceEl.textContent : '';
+            analyzeSignal(sigId, title, summary, source);
+        };
+        card.appendChild(toggle);
+
+        const panel = document.createElement('div');
+        panel.className = 'ai-panel';
+        panel.id = 'ai-' + sigId;
+        card.appendChild(panel);
+    });
+
+    // Daily report container
+    let reportContainer = document.getElementById('dailyReportContainer');
+    if (!reportContainer) {
+        reportContainer = document.createElement('div');
+        reportContainer.id = 'dailyReportContainer';
+        const feed = document.querySelector('.daily-feed');
+        if (feed) feed.appendChild(reportContainer);
+    }
+};
+
+async function loadDateSignals(dateStr) {
+    dailyDays = null;  // custom date mode
+    document.getElementById('mainContent').innerHTML = '<div class="loading">加载中...</div>';
+    try {
+        const resp = await fetch(`/api/signals/date/${dateStr}`);
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+        const json = await resp.json();
+        dailyData = json.signals || [];
+
+        // Build custom view for this date
+        const filtered = filterDailySignals();
+        const highCount = filtered.filter(s => s.strength === 'high').length;
+        const sources = new Set(filtered.map(s => s.source));
+
+        let html = `<div class="daily-header">
+            <h2>📡 ${dateStr} 情报</h2>
+            <div class="date-picker-row">
+                <span style="font-size:0.85em;color:#888;">📅 查看日期：</span>
+                <input type="date" id="dailyDatePicker" value="${dateStr}" onchange="loadDateSignals(this.value)">
+                <button class="btn-sm primary" onclick="loadDateSignals(document.getElementById('dailyDatePicker').value)">查看</button>
+                <button class="btn-sm" onclick="loadDailyReport(document.getElementById('dailyDatePicker').value)">📋 生成日报</button>
+            </div>
+        </div>
+        <div class="daily-stats">
+            <div class="stat-card"><div class="num">${filtered.length}</div><div class="label">当日情报</div></div>
+            <div class="stat-card"><div class="num" style="color:var(--danger);">${highCount}</div><div class="label">高优先级</div></div>
+            <div class="stat-card"><div class="num">${sources.size}</div><div class="label">活跃信号源</div></div>
+            <div class="stat-card"><div class="num" style="font-size:1.2em;">${dateStr}</div><div class="label">查看日期</div></div>
+        </div>
+        <div class="daily-feed">${filtered.map(s => renderSignalCard(s)).join('')}</div>
+        <div id="dailyReportContainer"></div>`;
+
+        document.getElementById('mainContent').innerHTML = html;
+
+        // Add AI toggles
+        document.querySelectorAll('.signal-card').forEach(card => {
+            const sigId = card.dataset.signalId;
+            if (!sigId) return;
+            const titleEl = card.querySelector('h4');
+            if (!titleEl) return;
+            if (card.querySelector('.ai-toggle')) return;
+            const toggle = document.createElement('span');
+            toggle.className = 'ai-toggle';
+            toggle.textContent = '🤖 AI 解读';
+            toggle.onclick = function() {
+                const title = titleEl.textContent || '';
+                const summaryEl = card.querySelector('.sig-summary');
+                const summary = summaryEl ? summaryEl.textContent : '';
+                const sourceEl = card.querySelector('.sig-source');
+                const source = sourceEl ? sourceEl.textContent : '';
+                analyzeSignal(sigId, title, summary, source);
+            };
+            card.appendChild(toggle);
+            const panel = document.createElement('div');
+            panel.className = 'ai-panel';
+            panel.id = 'ai-' + sigId;
+            card.appendChild(panel);
+        });
+    } catch(e) { document.getElementById('mainContent').innerHTML = '<div class="empty-state"><div class="icon">📭</div><p>加载失败: ' + e.message + '</p></div>'; }
 }
 
 // ====== Boot ======
