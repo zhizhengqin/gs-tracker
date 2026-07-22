@@ -8,12 +8,12 @@ from src.signals.research_view_source import (
     _title_from_url,
 )
 
-SITEMAP_ONE = '<?xml version="1.0"?><urlset><url><loc>https://www.goldmansachs.com/insights/articles/test-art</loc></url></urlset>'
+SITEMAP_ONE = '<?xml version="1.0"?><urlset><url><loc>https://www.goldmansachs.com/insights/articles/test-art</loc><lastmod>2026-07-15T00:00:00.000Z</lastmod></url></urlset>'
 
 SITEMAP_MULTI = '<?xml version="1.0"?><urlset>\
-<url><loc>https://www.goldmansachs.com/insights/articles/good</loc></url>\
-<url><loc>https://www.goldmansachs.com/insights/articles/bad</loc></url>\
-<url><loc>https://www.goldmansachs.com/insights/videos/skip</loc></url>\
+<url><loc>https://www.goldmansachs.com/insights/articles/good</loc><lastmod>2026-07-15T00:00:00.000Z</lastmod></url>\
+<url><loc>https://www.goldmansachs.com/insights/articles/bad</loc><lastmod>2026-07-15T00:00:00.000Z</lastmod></url>\
+<url><loc>https://www.goldmansachs.com/insights/videos/skip</loc><lastmod>2026-07-15T00:00:00.000Z</lastmod></url>\
 </urlset>'
 
 ARTICLE_GOOD = """<!DOCTYPE html><html><head>
@@ -79,10 +79,11 @@ class TestResearchViewSource:
 
     @pytest.mark.asyncio
     async def test_respects_watermark(self):
+        """Only articles with lastmod > watermark date are fetched."""
         sitemap = '<?xml version="1.0"?><urlset>\
-<url><loc>https://www.goldmansachs.com/insights/articles/newest</loc></url>\
-<url><loc>https://www.goldmansachs.com/insights/articles/middle</loc></url>\
-<url><loc>https://www.goldmansachs.com/insights/articles/oldest</loc></url>\
+<url><loc>https://www.goldmansachs.com/insights/articles/newest</loc><lastmod>2026-07-20T00:00:00.000Z</lastmod></url>\
+<url><loc>https://www.goldmansachs.com/insights/articles/middle</loc><lastmod>2026-07-15T00:00:00.000Z</lastmod></url>\
+<url><loc>https://www.goldmansachs.com/insights/articles/oldest</loc><lastmod>2026-07-10T00:00:00.000Z</lastmod></url>\
 </urlset>'
 
         source = ResearchViewSource(max_items=10)
@@ -90,16 +91,16 @@ class TestResearchViewSource:
         mock_get.side_effect = [
             _mock_httpx_response(200, sitemap),
             _mock_httpx_response(200, ARTICLE_GOOD),
+            _mock_httpx_response(200, ARTICLE_GOOD),
         ]
         source.client.get = mock_get
 
-        signals, wm = await source.fetch_since(
-            watermark="https://www.goldmansachs.com/insights/articles/middle"
-        )
+        # Watermark "2026-07-12" → only articles with lastmod > 2026-07-12: newest (07-20) + middle (07-15)
+        signals, wm = await source.fetch_since(watermark="2026-07-12")
         await source.close()
 
-        assert len(signals) == 1
-        assert wm == "https://www.goldmansachs.com/insights/articles/newest"
+        assert len(signals) == 2
+        assert wm == "2026-07-20"  # max lastmod seen
 
     @pytest.mark.asyncio
     async def test_title_fallback_from_url(self):
