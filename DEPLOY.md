@@ -122,13 +122,20 @@ cp .env.example .env
 nano .env
 ```
 
-进入 nano 编辑器后，用方向键移动光标，**只需要改两处**：
+进入 nano 编辑器后，用方向键移动光标，**只需要改三处**：
 
 1. 找到 `ANTHROPIC_AUTH_TOKEN=sk-kimi-...` 这一行，把 `sk-kimi-...` 整段删掉，粘贴你刚才复制的那串密钥
 2. 找到 `SEC_USER_AGENT="GS-Tracker your-email@example.com"`，把 `your-email@example.com` 改成你的真实邮箱（SEC 官方要求留联系方式，否则可能拒绝数据请求）
+3. 找到 `FRED_API_KEY=`（为空），填入你的 FRED API 密钥（**可选但建议配**——不配的话宏观信号源（美债/VIX/美元指数）只能用东方财富的 DGS10 备用接口，VIX 和美元指数不可用）
 
 > nano 里粘贴：Mac 终端直接用 `Cmd+V`。
 > 保存退出：按 `Ctrl+O` → 回车 → `Ctrl+X`。
+
+> **FRED API key 怎么获取**（免费，1 分钟搞定）：
+> 1. 浏览器打开 https://fred.stlouisfed.org/docs/api/api_key.html
+> 2. 点 "Request API key" → 填邮箱 → 提交申请
+> 3. 马上就能在页面看到一串 32 位的字母数字 key → 复制到 `.env` 的 `FRED_API_KEY=` 后面
+> 4. 如果不打算用宏观信号源，这一步可以跳过
 
 改完检查一下（token 只显示前几位确认没贴错就行）：
 
@@ -290,6 +297,7 @@ gh secret list --repo zhizhengqin/gs-tracker
 | 看运行日志 | 服务器上 `docker compose -f deploy/docker-compose.yml logs -f app`（把 `app` 换成 `scheduler` / `nginx` 看对应日志，`Ctrl+C` 退出） |
 | 重启服务 | 服务器上 `docker compose -f deploy/docker-compose.yml restart` |
 | 改密钥/配置 | 服务器上 `nano .env`，改完 `docker compose -f deploy/docker-compose.yml up -d` |
+| 加 FRED API 密钥（宏观信号源） | ① 申请 key：https://fred.stlouisfed.org/docs/api/api_key.html → ② `nano .env` 找到 `FRED_API_KEY=` 填进去 → ③ `docker compose -f deploy/docker-compose.yml up -d` 重启 |
 | 把 SEC 联系邮箱改成自己的 | `nano .env` 找到 `SEC_USER_AGENT="GS-Tracker your-email@example.com"`，把占位邮箱换成真实邮箱（SEC 官方要求留联系方式），保存后 `docker compose -f deploy/docker-compose.yml up -d` 生效 |
 | 手动触发一次部署（不 push） | GitHub 仓库页 → Actions → Deploy to JD Cloud → **Run workflow** |
 
@@ -411,3 +419,35 @@ docker compose -f deploy/docker-compose.yml logs -f app
 # 全部重启
 docker compose -f deploy/docker-compose.yml restart
 ```
+
+---
+
+## 本次部署后需要手动执行的操作（2026-07-22 信号升级）
+
+> 下面命令全部复制到服务器终端执行即可，不需要理解原理。
+
+**配 FRED API 密钥（让宏观信号源可用——美债收益率/VIX/美元指数）：**
+
+不配的话，宏观信号只能抓到 10 年期美债收益率（走东方财富免费备用接口），VIX 和美元指数不可用。
+
+```bash
+# 1. 申请 key：浏览器打开 https://fred.stlouisfed.org/docs/api/api_key.html
+#    填邮箱提交，马上就能拿到一串 32 位的 key
+
+# 2. 把 key 写进配置
+cd ~/gs-tracker
+nano .env
+# 找到 FRED_API_KEY= 这行，把 key 填在等号后面
+# Ctrl+O 保存，Ctrl+X 退出
+
+# 3. 重启让配置生效
+bash deploy/update.sh
+```
+
+**验证：** 等 2 分钟让调度器启动，然后看日志确认宏观信号源正常：
+
+```bash
+docker compose -f deploy/docker-compose.yml logs --tail=30 scheduler | grep -i "daily intel"
+```
+
+看到 `Daily intel: N new signals` 且没有 `FRED_API_KEY not set` 警告就说明配好了。如果看到 `FRED fetch failed` 且日志里同时有 `East Money fallback`，说明 FRED 在京东云连不上、系统已自动降级到东方财富备用接口——DGS10 美债收益率仍可用，但 VIX 和美元指数需等后续修复。
