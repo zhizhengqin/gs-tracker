@@ -27,4 +27,5 @@ RUN groupadd -r appuser && useradd -r -g appuser appuser \
 USER appuser
 
 EXPOSE 8000
-CMD ["gunicorn", "src.web:app", "-w", "2", "-k", "uvicorn.workers.UvicornWorker", "-b", "0.0.0.0:8000"]
+# Single worker: pipeline job state and SSE progress live in process memory.
+CMD ["gunicorn", "src.web:app", "-w", "1", "-k", "uvicorn.workers.UvicornWorker", "-b", "0.0.0.0:8000", "--timeout", "600"]

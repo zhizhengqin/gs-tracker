@@ -218,3 +218,99 @@ def test_pipeline_run_records_error(reset_pipeline_state, monkeypatch):
     assert state["running"] is False
     assert "API key missing" in state["last_error"]
     assert state["last_finished_at"] is not None
+
+
+# ====== Shared daily intel SSE job ======
+
+from datetime import datetime, timedelta, timezone  # noqa: E402
+
+
+@pytest.fixture
+def reset_daily_job():
+    old_job = src.web._daily_job
+    src.web._daily_job = None
+    yield
+    src.web._daily_job = old_job
+
+
+def test_daily_job_attach_or_start(reset_daily_job, monkeypatch):
+    """While a job runs, new connections attach to it instead of re-running;
+    within the grace window after finish, reconnects replay the same job;
+    only after the grace window does a new run start."""
+    async def fake_runner(job):
+        await asyncio.sleep(3600)  # never finishes within the test
+
+    monkeypatch.setattr(src.web, "_daily_job_runner", fake_runner)
+
+    async def scenario():
+        job1 = src.web._get_or_start_daily_job()
+        job2 = src.web._get_or_start_daily_job()
+        assert job1 is job2  # attach, no duplicate run
+
+        # Finished just now → still replayable
+        job1.done = True
+        job1.finished_at = datetime.now(timezone.utc)
+        assert src.web._get_or_start_daily_job() is job1
+
+        # Past the grace window → a brand-new run starts
+        job1.finished_at = datetime.now(timezone.utc) - timedelta(
+            seconds=src.web._DAILY_JOB_GRACE_SECONDS + 10
+        )
+        job4 = src.web._get_or_start_daily_job()
+        assert job4 is not job1
+
+    asyncio.run(scenario())
+
+
+# ====== LLM config resolution and env seeding ======
+
+def test_llm_client_kwargs_db_model_wins():
+    db_model = {
+        "auth_token": "db-token",
+        "base_url": "https://db.test",
+        "model_name": "db-model",
+    }
+    kwargs = src.web._llm_client_kwargs(db_model)
+    assert kwargs["auth_token"] == "db-token"
+    assert kwargs["base_url"] == "https://db.test"
+    assert kwargs["model"] == "db-model"
+
+
+def test_llm_client_kwargs_env_fallback_includes_api_key(monkeypatch):
+    """Regression: env fallback must pass ANTHROPIC_API_KEY, not just auth_token."""
+    monkeypatch.setattr("src.config.ANTHROPIC_API_KEY", "ak-123")
+    monkeypatch.setattr("src.config.ANTHROPIC_AUTH_TOKEN", "")
+    monkeypatch.setattr("src.config.ANTHROPIC_BASE_URL", "")
+    monkeypatch.setattr("src.config.GS_LLM_MODEL", "env-model")
+
+    kwargs = src.web._llm_client_kwargs(None)
+    assert kwargs["api_key"] == "ak-123"
+    assert kwargs["auth_token"] is None
+    assert kwargs["base_url"] is None
+    assert kwargs["model"] == "env-model"
+
+
+def test_seed_default_llm_from_env(signals_db, monkeypatch):
+    """Empty model table + env credentials → seed one default model; idempotent."""
+    monkeypatch.setattr("src.config.ANTHROPIC_AUTH_TOKEN", "sk-test-token")
+    monkeypatch.setattr("src.config.ANTHROPIC_API_KEY", "")
+    monkeypatch.setattr("src.config.ANTHROPIC_BASE_URL", "https://example.test")
+    monkeypatch.setattr("src.config.GS_LLM_MODEL", "test-model")
+
+    src.web._seed_default_llm_from_env()
+    models = storage.get_llm_models()
+    assert len(models) == 1
+    assert models[0]["is_default"] == 1
+    assert models[0]["auth_token"] == "sk-test-token"
+    assert models[0]["base_url"] == "https://example.test"
+    assert models[0]["model_name"] == "test-model"
+
+    src.web._seed_default_llm_from_env()  # second call must be a no-op
+    assert len(storage.get_llm_models()) == 1
+
+
+def test_seed_default_llm_skips_without_env(signals_db, monkeypatch):
+    monkeypatch.setattr("src.config.ANTHROPIC_AUTH_TOKEN", "")
+    monkeypatch.setattr("src.config.ANTHROPIC_API_KEY", "")
+    src.web._seed_default_llm_from_env()
+    assert storage.get_llm_models() == []

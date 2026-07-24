@@ -38,9 +38,14 @@ PUBLIC_BASE_URL = os.getenv("PUBLIC_BASE_URL", "")
 NOTIFIER_MAX_ATTEMPTS = int(os.getenv("NOTIFIER_MAX_ATTEMPTS", "3"))
 NOTIFIER_BACKOFF_BASE = float(os.getenv("NOTIFIER_BACKOFF_BASE", "1.0"))
 
+# Default feeds must be reachable from the CN server: WSJ (404) and the old
+# Reuters outboundfeed (dead) were replaced 2026-07 with wallstreetcn (Chinese
+# finance, frequent 高盛 coverage) + CNBC world + MarketWatch top stories.
 RSS_FEEDS_RAW = os.getenv(
     "RSS_FEEDS",
-    "https://feeds.content.dowjones.io/public/rss/RSSWSJ,https://www.reuters.com/arc/outboundfeeds/v3/all/?outputType=xml",
+    "https://dedicated.wallstreetcn.com/rss.xml,"
+    "https://www.cnbc.com/id/100727362/device/rss/rss.html,"
+    "https://feeds.content.dowjones.io/public/rss/mw_topstories",
 )
 RSS_FEEDS: list[str] = [u.strip() for u in RSS_FEEDS_RAW.split(",") if u.strip()]
 SIGNAL_LOOKBACK_DAYS = int(os.getenv("SIGNAL_LOOKBACK_DAYS", "90"))

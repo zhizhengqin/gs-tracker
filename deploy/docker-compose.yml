@@ -15,7 +15,9 @@ services:
       - ../templates:/app/templates
     networks:
       - gs-tracker
-    command: gunicorn src.web:app -w 2 -k uvicorn.workers.UvicornWorker -b 0.0.0.0:8000
+    # Single worker on purpose: pipeline job state and SSE progress live in
+    # process memory, and this is a single-user app — one async worker is plenty.
+    command: gunicorn src.web:app -w 1 -k uvicorn.workers.UvicornWorker -b 0.0.0.0:8000 --timeout 600
     healthcheck:
       test:
         [

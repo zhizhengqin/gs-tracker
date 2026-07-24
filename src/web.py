@@ -4,7 +4,7 @@ import logging
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 from fastapi import Body, FastAPI, HTTPException, Path as PathParam
 from fastapi.responses import HTMLResponse, StreamingResponse
@@ -39,7 +39,56 @@ logger = logging.getLogger(__name__)
 async def lifespan(app: FastAPI):
     """Ensure the database schema exists before serving requests."""
     init_db()
+    _seed_default_llm_from_env()
     yield
+
+
+def _seed_default_llm_from_env() -> None:
+    """If no LLM model is configured yet but env vars carry credentials,
+    insert them as the default model so AI features work out of the box
+    and the settings page shows the active configuration."""
+    from src.config import (
+        ANTHROPIC_API_KEY,
+        ANTHROPIC_AUTH_TOKEN,
+        ANTHROPIC_BASE_URL,
+        GS_LLM_MODEL,
+    )
+
+    try:
+        if get_llm_models():
+            return
+        token = ANTHROPIC_AUTH_TOKEN or ANTHROPIC_API_KEY
+        if not token:
+            return
+        base_url = ANTHROPIC_BASE_URL or "https://api.anthropic.com"
+        add_llm_model("env-default", "环境变量默认模型", base_url, token, GS_LLM_MODEL)
+        logger.info("Seeded default LLM model from environment variables")
+    except Exception:
+        logger.exception("Failed to seed default LLM model from env")
+
+
+def _llm_client_kwargs(db_model: Optional[dict]) -> dict:
+    """Resolve LLM client settings: DB default model first, env vars as fallback."""
+    from src.config import (
+        ANTHROPIC_API_KEY,
+        ANTHROPIC_AUTH_TOKEN,
+        ANTHROPIC_BASE_URL,
+        GS_LLM_MODEL,
+    )
+
+    if db_model:
+        return {
+            "api_key": None,
+            "auth_token": db_model["auth_token"] or None,
+            "base_url": db_model["base_url"] or None,
+            "model": db_model["model_name"],
+        }
+    return {
+        "api_key": ANTHROPIC_API_KEY or None,
+        "auth_token": ANTHROPIC_AUTH_TOKEN or None,
+        "base_url": ANTHROPIC_BASE_URL or None,
+        "model": GS_LLM_MODEL,
+    }
 
 
 app = FastAPI(title="GS-Tracker", version="0.2.0", lifespan=lifespan)
@@ -243,14 +292,102 @@ async def api_daily_intel_run() -> dict:
     return {"status": "已启动"}
 
 
-@app.get("/api/pipeline/run-daily/stream")
-async def api_daily_intel_stream():
-    """Run daily intel with SSE progress streaming."""
+# ====== Shared daily intel job (SSE attach-or-start) ======
+
+_DAILY_JOB_GRACE_SECONDS = 120  # finished job stays replayable this long
+
+
+class _DailyJob:
+    """A single daily intel run with an event log subscribers can replay."""
+
+    def __init__(self) -> None:
+        self.events: List[str] = []
+        self.done = False
+        self.finished_at: Optional[datetime] = None
+        self.cond = asyncio.Condition()
+
+
+_daily_job: Optional[_DailyJob] = None
+
+
+async def _daily_job_runner(job: _DailyJob) -> None:
+    """Run the daily intel stream once, appending events to the shared log."""
+    import json as _json
+
     from src.main import run_daily_intel_stream
 
-    async def event_stream():
+    _daily_intel_state.update(
+        running=True,
+        last_error=None,
+        last_started_at=datetime.now(timezone.utc).isoformat(),
+    )
+    try:
         async for event_json in run_daily_intel_stream():
-            yield f"data: {event_json}\n\n"
+            async with job.cond:
+                job.events.append(event_json)
+                job.cond.notify_all()
+    except Exception as exc:
+        logger.exception("Daily intel stream job failed")
+        _daily_intel_state["last_error"] = str(exc)
+        error_event = _json.dumps({"event": "job_error", "error": str(exc)})
+        async with job.cond:
+            job.events.append(error_event)
+            job.cond.notify_all()
+    finally:
+        _daily_intel_state.update(
+            running=False,
+            last_finished_at=datetime.now(timezone.utc).isoformat(),
+        )
+        async with job.cond:
+            job.done = True
+            job.finished_at = datetime.now(timezone.utc)
+            job.cond.notify_all()
+
+
+def _get_or_start_daily_job() -> _DailyJob:
+    """Return the active (or recently finished) job, starting a new one if needed."""
+    global _daily_job
+    now = datetime.now(timezone.utc)
+    job = _daily_job
+    if job is not None:
+        if not job.done:
+            return job  # still running — attach
+        assert job.finished_at is not None
+        age = (now - job.finished_at).total_seconds()
+        if age < _DAILY_JOB_GRACE_SECONDS:
+            return job  # recently finished — let reconnects replay the summary
+    job = _DailyJob()
+    _daily_job = job
+    asyncio.create_task(_daily_job_runner(job))
+    return job
+
+
+@app.get("/api/pipeline/run-daily/stream")
+async def api_daily_intel_stream():
+    """Stream daily intel progress over SSE.
+
+    The job itself is shared process-wide: the first connection starts it,
+    later connections (including EventSource auto-reconnects after a proxy
+    timeout) attach to the SAME job and replay its event log, instead of
+    spawning duplicate runs. A finished job stays attachable for a grace
+    period so a late reconnect still sees the final summary.
+    """
+    job = _get_or_start_daily_job()
+
+    async def event_stream():
+        cursor = 0
+        while True:
+            async with job.cond:
+                # Deliver any new events, else wait for more / completion
+                while cursor >= len(job.events) and not job.done:
+                    await job.cond.wait()
+                pending = job.events[cursor:]
+                cursor = len(job.events)
+                done = job.done
+            for event_json in pending:
+                yield f"data: {event_json}\n\n"
+            if done and cursor >= len(job.events):
+                return
 
     return StreamingResponse(
         event_stream(),
@@ -443,27 +580,21 @@ async def api_analyze_signal(signal_id: str, body: dict = Body(default={})) -> d
     if not title:
         raise HTTPException(status_code=422, detail="请提供信号标题(title)")
 
+    db_model = await asyncio.to_thread(get_default_llm_model)
+    llm = _llm_client_kwargs(db_model)
+    if not llm["api_key"] and not llm["auth_token"]:
+        raise HTTPException(
+            status_code=400,
+            detail="尚未配置大模型，请先在「设置」页添加大模型（如 DeepSeek/Kimi）",
+        )
+
     try:
         import anthropic
-        from src.config import ANTHROPIC_AUTH_TOKEN, ANTHROPIC_BASE_URL, GS_LLM_MODEL
-
-        # Try DB-configured model first, fall back to env vars
-        db_model = await asyncio.to_thread(get_default_llm_model)
-        if db_model:
-            api_key = None
-            auth_token = db_model["auth_token"]
-            base_url = db_model["base_url"]
-            model = db_model["model_name"]
-        else:
-            api_key = None
-            auth_token = ANTHROPIC_AUTH_TOKEN
-            base_url = ANTHROPIC_BASE_URL
-            model = GS_LLM_MODEL
 
         client = anthropic.AsyncAnthropic(
-            api_key=api_key or None,
-            auth_token=auth_token or None,
-            base_url=base_url or None,
+            api_key=llm["api_key"],
+            auth_token=llm["auth_token"],
+            base_url=llm["base_url"],
             timeout=30.0,
         )
         prompt = (
@@ -479,7 +610,7 @@ async def api_analyze_signal(signal_id: str, body: dict = Body(default={})) -> d
             "4. 总字数控制在200字以内"
         )
         resp = await client.messages.create(
-            model=model,
+            model=llm["model"],
             max_tokens=512,
             messages=[{"role": "user", "content": prompt}],
         )
@@ -522,22 +653,23 @@ async def api_get_daily_report(date: str) -> dict:
 
     try:
         import anthropic
-        from src.config import ANTHROPIC_AUTH_TOKEN, ANTHROPIC_BASE_URL, GS_LLM_MODEL
         from src.compliance import check_content
 
         db_model = await asyncio.to_thread(get_default_llm_model)
-        if db_model:
-            auth_token = db_model["auth_token"]
-            base_url = db_model["base_url"]
-            model = db_model["model_name"]
-        else:
-            auth_token = ANTHROPIC_AUTH_TOKEN
-            base_url = ANTHROPIC_BASE_URL
-            model = GS_LLM_MODEL
+        llm = _llm_client_kwargs(db_model)
+        if not llm["api_key"] and not llm["auth_token"]:
+            return {
+                "date": date,
+                "report": "尚未配置大模型，请先在「设置」页添加大模型（如 DeepSeek/Kimi）后再生成日报。",
+                "signal_count": len(signals),
+                "cached": False,
+                "error": "no_llm_configured",
+            }
 
         client = anthropic.AsyncAnthropic(
-            auth_token=auth_token or None,
-            base_url=base_url or None,
+            api_key=llm["api_key"],
+            auth_token=llm["auth_token"],
+            base_url=llm["base_url"],
             timeout=60.0,
         )
         prompt = (
@@ -557,7 +689,7 @@ async def api_get_daily_report(date: str) -> dict:
             "合规要求：所有评级/目标价必须署名来源（如'高盛'），禁止以本系统名义给出买卖建议。全部使用中文输出，控制在500字以内。"
         )
         resp = await client.messages.create(
-            model=model,
+            model=llm["model"],
             max_tokens=1024,
             messages=[{"role": "user", "content": prompt}],
         )
