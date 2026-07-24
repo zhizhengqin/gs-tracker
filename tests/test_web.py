@@ -314,3 +314,81 @@ def test_seed_default_llm_skips_without_env(signals_db, monkeypatch):
     monkeypatch.setattr("src.config.ANTHROPIC_API_KEY", "")
     src.web._seed_default_llm_from_env()
     assert storage.get_llm_models() == []
+
+
+def test_purge_non_gs_news_signals(signals_db, make_signal):
+    """One-time purge drops news without a GS angle, keeps GS news & other sources."""
+    from src.storage import get_signals, save_signals_incremental
+
+    gs_news = make_signal(id="gs1", source="news", title="高盛研报：看好A股", summary="高盛认为…")
+    off_topic = make_signal(id="oth1", source="news", title="A股三大股指跌超1%", summary="市场概述…")
+    other_source = make_signal(id="k1", source="8-K", title="Goldman 8-K filing", summary="…")
+    save_signals_incremental("2026-Q3", [gs_news, off_topic, other_source])
+
+    src.web._purge_non_gs_news_signals()
+
+    remaining = {s.id for s in get_signals("2026-Q3")}
+    assert "gs1" in remaining
+    assert "oth1" not in remaining
+    assert "k1" in remaining
+    assert storage.get_setting("news_gs_purge_v1") == "1"
+
+
+# ====== Signal AI analysis caching behavior ======
+
+class _EmptyFakeClient:
+    """LLM client whose completions are always empty (transient gateway hiccup)."""
+
+    class _Messages:
+        async def create(self, **kwargs):
+            class _Resp:
+                content = []
+            return _Resp()
+
+    def __init__(self, **kwargs):
+        self.messages = self._Messages()
+
+
+class _TextFakeClient:
+    """LLM client returning a fixed analysis text."""
+
+    class _Messages:
+        async def create(self, **kwargs):
+            class _Block:
+                text = "新的解读"
+
+            class _Resp:
+                content = [_Block()]
+            return _Resp()
+
+    def __init__(self, **kwargs):
+        self.messages = self._Messages()
+
+
+def test_analyze_signal_empty_completion_not_cached(signals_db, monkeypatch):
+    """Empty LLM completions → 502, and must NOT be cached (retry stays possible)."""
+    monkeypatch.setattr("anthropic.AsyncAnthropic", _EmptyFakeClient)
+    storage.add_llm_model("m1", "t", "https://x.test", "tok", "model-x")
+
+    resp = client.post(
+        "/api/signals/sig-empty/analyze",
+        json={"title": "高盛测试", "summary": "内容", "source": "news"},
+    )
+    assert resp.status_code == 502
+    assert storage.get_signal_analysis("sig-empty") is None
+
+
+def test_analyze_signal_regenerates_after_sentinel(signals_db, monkeypatch):
+    """A cached 'AI 未生成有效解读' is treated as a miss and regenerated."""
+    monkeypatch.setattr("anthropic.AsyncAnthropic", _TextFakeClient)
+    storage.add_llm_model("m1", "t", "https://x.test", "tok", "model-x")
+    storage.save_signal_analysis("sig-x", src.web._ANALYSIS_FAILURE_SENTINEL)
+
+    resp = client.post(
+        "/api/signals/sig-x/analyze",
+        json={"title": "t", "summary": "s", "source": "news"},
+    )
+    assert resp.status_code == 200
+    assert resp.json()["analysis"] == "新的解读"
+    assert resp.json()["cached"] is False
+    assert storage.get_signal_analysis("sig-x") == "新的解读"

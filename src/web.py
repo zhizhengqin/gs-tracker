@@ -16,6 +16,7 @@ from src.storage import (
     add_llm_model,
     delete_llm_model,
     get_all_settings,
+    get_connection,
     get_daily_report,
     get_default_llm_model,
     get_llm_models,
@@ -40,7 +41,36 @@ async def lifespan(app: FastAPI):
     """Ensure the database schema exists before serving requests."""
     init_db()
     _seed_default_llm_from_env()
+    _purge_non_gs_news_signals()
     yield
+
+
+def _purge_non_gs_news_signals() -> None:
+    """One-time cleanup (flag-guarded): delete news signals with no GS angle.
+
+    The news source used to keep items matching only holding-company keywords
+    (e.g. a Visa headline with zero Goldman content). Policy changed to
+    GS-focused on 2026-07; this purges the backlog so the dashboard stops
+    showing off-topic market news. Runs once per database.
+    """
+    if get_setting("news_gs_purge_v1", ""):
+        return
+    try:
+        with get_connection() as conn:
+            cur = conn.execute(
+                "DELETE FROM signals WHERE source = 'news' "
+                "AND LOWER(title || ' ' || COALESCE(summary, '')) NOT LIKE '%goldman%' "
+                "AND (title || ' ' || COALESCE(summary, '')) NOT LIKE '%高盛%' "
+                "AND LOWER(title || ' ' || COALESCE(summary, '')) NOT LIKE '%hatzius%' "
+                "AND LOWER(title || ' ' || COALESCE(summary, '')) NOT LIKE '%kostin%'"
+            )
+            deleted = cur.rowcount
+            conn.commit()
+        set_setting("news_gs_purge_v1", "1")
+        if deleted:
+            logger.info("Purged %d non-GS news signals", deleted)
+    except Exception:
+        logger.exception("Non-GS news purge failed")
 
 
 def _seed_default_llm_from_env() -> None:
@@ -147,16 +177,20 @@ def _signal_to_dict(signal: Signal) -> dict:
 
     Naive datetimes are normalized to UTC so the wire format always
     carries an explicit offset (all production sources emit UTC).
+    Titles/summaries are HTML-stripped so legacy rows ingested before
+    the cleaning fix still render cleanly.
     """
+    from src.signals.news_source import clean_html_text
+
     published = signal.published_at
     if published.tzinfo is None:
         published = published.replace(tzinfo=timezone.utc)
     return {
         "id": signal.id,
-        "title": signal.title,
+        "title": clean_html_text(signal.title),
         "source": signal.source,
         "published_at": published.isoformat(),
-        "summary": signal.summary,
+        "summary": clean_html_text(signal.summary),
         "companies": signal.companies,
         "strength": signal.strength.value,
         "url": signal.url,
@@ -552,11 +586,14 @@ async def api_signals_by_date(date: str) -> dict:
 
 # ====== Signal AI analysis ======
 
+_ANALYSIS_FAILURE_SENTINEL = "AI 未生成有效解读"
+
+
 @app.get("/api/signals/{signal_id}/analysis")
 async def api_get_signal_analysis(signal_id: str) -> dict:
     """Return cached AI analysis for a signal."""
     text = await asyncio.to_thread(get_signal_analysis, signal_id)
-    if text is None:
+    if text is None or text == _ANALYSIS_FAILURE_SENTINEL:
         raise HTTPException(status_code=404, detail="该信号暂无 AI 解读")
     return {"signal_id": signal_id, "analysis": text}
 
@@ -568,13 +605,16 @@ async def api_analyze_signal(signal_id: str, body: dict = Body(default={})) -> d
     Accepts optional signal metadata in the request body so the LLM
     has context even if the signal is not in the DB.
     """
-    # Check cache first
+    # Check cache first — a cached failure sentinel is treated as a miss so
+    # earlier transient failures self-heal on the next request.
     cached = await asyncio.to_thread(get_signal_analysis, signal_id)
-    if cached:
+    if cached and cached != _ANALYSIS_FAILURE_SENTINEL:
         return {"signal_id": signal_id, "analysis": cached, "cached": True}
 
-    title = (body.get("title") or "").strip()
-    summary = (body.get("summary") or "").strip()
+    from src.signals.news_source import clean_html_text
+
+    title = clean_html_text((body.get("title") or "").strip())
+    summary = clean_html_text((body.get("summary") or "").strip())
     source = (body.get("source") or "").strip()
 
     if not title:
@@ -611,7 +651,7 @@ async def api_analyze_signal(signal_id: str, body: dict = Body(default={})) -> d
         )
         resp = await client.messages.create(
             model=llm["model"],
-            max_tokens=512,
+            max_tokens=800,
             messages=[{"role": "user", "content": prompt}],
         )
         text = ""
@@ -619,9 +659,26 @@ async def api_analyze_signal(signal_id: str, body: dict = Body(default={})) -> d
             if hasattr(block, "text"):
                 text += block.text
 
-        analysis = text.strip() or "AI 未生成有效解读"
+        if not text.strip():
+            # Transient empty completions happen with some gateways — retry once
+            resp = await client.messages.create(
+                model=llm["model"],
+                max_tokens=800,
+                messages=[{"role": "user", "content": prompt}],
+            )
+            for block in resp.content:
+                if hasattr(block, "text"):
+                    text += block.text
+
+        if not text.strip():
+            # Do NOT cache failures — a later click should try again.
+            raise HTTPException(status_code=502, detail="AI 暂时未能生成解读，请稍后重试")
+
+        analysis = text.strip()
         await asyncio.to_thread(save_signal_analysis, signal_id, analysis)
         return {"signal_id": signal_id, "analysis": analysis, "cached": False}
+    except HTTPException:
+        raise
     except Exception as exc:
         logger.exception("AI analysis failed for signal %s", signal_id)
         raise HTTPException(status_code=500, detail=f"AI 分析失败：{exc}")
@@ -645,10 +702,12 @@ async def api_get_daily_report(date: str) -> dict:
     if not signals:
         return {"date": date, "report": "该日期暂无情报数据。", "signal_count": 0, "cached": False}
 
-    # Build LLM prompt from signals
+    # Build LLM prompt from signals (HTML-stripped — legacy rows may carry tags)
+    from src.signals.news_source import clean_html_text
+
     signal_texts = []
     for s in signals[:20]:
-        signal_texts.append(f"- [{s.source}] {s.title}: {s.summary[:150]}")
+        signal_texts.append(f"- [{s.source}] {clean_html_text(s.title)}: {clean_html_text(s.summary)[:150]}")
     combined = "\n".join(signal_texts)
 
     try:

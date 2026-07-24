@@ -81,8 +81,42 @@ class TestNewsSource:
         httpx_mock.add_response(text=mixed_rss, status_code=200)
         source = NewsSource(rss_urls=["https://example.com/rss"])
         signals = await source.fetch("2026-Q2")
-        assert len(signals) == 2
-        titles = [s.title for s in signals]
-        assert any("Goldman" in t for t in titles)
-        assert any("Apple" in t for t in titles)
+        # GS-focused policy: holding-keyword-only items (Apple) are dropped —
+        # only news with an actual Goldman angle is kept
+        assert len(signals) == 1
+        assert "Goldman" in signals[0].title
+        await source.close()
+
+    @pytest.mark.asyncio
+    async def test_fetch_strips_html_from_summary(self, httpx_mock: HTTPXMock):
+        """wallstreetcn-style RSS embeds HTML markup; it must not reach the dashboard."""
+        html_rss = """<?xml version="1.0"?>
+        <rss version="2.0"><channel>
+          <item><title>高盛上调A股评级</title><link>https://a.com/1</link>
+          <description>&lt;p style="text-align: left;"&gt;7月24日，&lt;strong&gt;高盛&lt;/strong&gt;发布研报。&lt;/p&gt;</description>
+          <pubDate>Mon, 15 May 2026 10:00:00 GMT</pubDate></item>
+        </channel></rss>"""
+        httpx_mock.add_response(text=html_rss, status_code=200)
+        source = NewsSource(rss_urls=["https://example.com/rss"])
+        signals = await source.fetch("2026-Q2")
+        assert len(signals) == 1
+        assert "<" not in signals[0].summary
+        assert "p style" not in signals[0].summary
+        assert "高盛" in signals[0].summary
+        await source.close()
+
+    @pytest.mark.asyncio
+    async def test_cjk_viewpoint_matches_without_space(self, httpx_mock: HTTPXMock):
+        """'高盛研报' (no space) must match the '高盛 研报' viewpoint keyword."""
+        rss = """<?xml version="1.0"?>
+        <rss version="2.0"><channel>
+          <item><title>高盛研报：看好中国股市</title><link>https://a.com/1</link>
+          <description>详细内容</description>
+          <pubDate>Mon, 15 May 2026 10:00:00 GMT</pubDate></item>
+        </channel></rss>"""
+        httpx_mock.add_response(text=rss, status_code=200)
+        source = NewsSource(rss_urls=["https://example.com/rss"])
+        signals = await source.fetch("2026-Q2")
+        assert len(signals) == 1
+        assert signals[0].strength.value == "high"
         await source.close()

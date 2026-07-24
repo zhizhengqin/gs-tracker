@@ -1,5 +1,7 @@
 """RSS news signal source."""
+import html as _html
 import logging
+import re
 from datetime import datetime, timedelta, timezone
 from typing import List, Optional, Tuple
 
@@ -10,6 +12,23 @@ from src.config import SIGNAL_LOOKBACK_DAYS, SEC_USER_AGENT
 from src.signals.base import Signal, SignalStrength
 
 logger = logging.getLogger(__name__)
+
+_TAG_RE = re.compile(r"<[^>]+>")
+_WS_RE = re.compile(r"\s+")
+
+
+def clean_html_text(raw: str) -> str:
+    """Strip HTML tags/entities and collapse whitespace.
+
+    RSS summaries (e.g. wallstreetcn) embed full HTML markup; storing it raw
+    produced the '乱码' (garbled tag soup) seen in the dashboard.
+    """
+    if not raw:
+        return ""
+    text = _TAG_RE.sub(" ", raw)
+    text = _html.unescape(text)
+    return _WS_RE.sub(" ", text).strip()
+
 
 GS_KEYWORDS = [
     "goldman sachs", "goldman", "高盛",
@@ -45,9 +64,24 @@ GS_VIEWPOINT_KEYWORDS = [
 HOLDING_KEYWORDS = [
     "apple", "aapl", "microsoft", "msft", "nvidia", "nvda",
     "amazon", "amzn", "meta", "googl", "google", "tesla", "tsla",
-    "berkshire", "brk", "jpmorgan", "jpm", "visa", "v",
-    "unitedhealth", "unh", "mastercard", "ma",
+    "berkshire", "jpmorgan", "jpm", "visa",
+    "unitedhealth", "unh", "mastercard",
 ]
+
+
+def _kw_regex(kw: str) -> "re.Pattern":
+    """ASCII keywords match on word boundaries (so 'visa' hits Visa but 'v'
+    can't hit every 'vs'); CJK keywords match as plain substrings with
+    optional whitespace between characters (高盛研报 ≈ 高盛 研报)."""
+    if kw.isascii():
+        return re.compile(r"\b" + re.escape(kw) + r"\b")
+    chars = [re.escape(c) for c in kw.replace(" ", "")]
+    return re.compile(r"\s*".join(chars))
+
+
+_GS_RE = [_kw_regex(k) for k in GS_KEYWORDS]
+_VIEWPOINT_RE = [_kw_regex(k) for k in GS_VIEWPOINT_KEYWORDS]
+_HOLDING_RE = [(k, _kw_regex(k)) for k in HOLDING_KEYWORDS]
 
 
 QUARTER_START_MONTHS = {"Q1": 1, "Q2": 4, "Q3": 7, "Q4": 10}
@@ -108,14 +142,15 @@ class NewsSource:
 
         signals: List[Signal] = []
         for item in all_items:
-            title = item["title"]
-            summary_text = item.get("summary", "")
+            title = clean_html_text(item["title"])
+            summary_text = clean_html_text(item.get("summary", ""))
             text_lower = (title + " " + summary_text).lower()
 
-            has_gs = any(kw in text_lower for kw in GS_KEYWORDS)
-            has_viewpoint = any(kw in text_lower for kw in GS_VIEWPOINT_KEYWORDS)
-            has_holding = any(kw in text_lower for kw in HOLDING_KEYWORDS)
-            if not (has_gs or has_viewpoint or has_holding):
+            has_gs = any(rx.search(text_lower) for rx in _GS_RE)
+            has_viewpoint = any(rx.search(text_lower) for rx in _VIEWPOINT_RE)
+            # GS-focused tracker (user feedback 2026-07): drop general market
+            # news that only mentions a holding company without any GS angle.
+            if not (has_gs or has_viewpoint):
                 continue
 
             published_at = datetime.now(timezone.utc)
@@ -130,19 +165,13 @@ class NewsSource:
                 continue
 
             companies: List[str] = []
-            for kw in HOLDING_KEYWORDS:
-                if kw in text_lower:
+            for kw, rx in _HOLDING_RE:
+                if rx.search(text_lower):
                     companies.append(kw.upper())
 
             # Viewpoint keywords → HIGH (GS-authored analysis, the core value)
             # Basic GS mention → MEDIUM (news about GS)
-            # Holding-only match → LOW (e.g. Apple news without GS context)
-            if has_viewpoint:
-                strength = SignalStrength.HIGH
-            elif has_gs:
-                strength = SignalStrength.MEDIUM
-            else:
-                strength = SignalStrength.LOW
+            strength = SignalStrength.HIGH if has_viewpoint else SignalStrength.MEDIUM
 
             signals.append(Signal(
                 title=title,
