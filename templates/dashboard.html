@@ -1066,7 +1066,7 @@ async function renderSettings() {
         const resp = await fetch('/api/settings/sources');
         const sources = await resp.json();
         sources.forEach(s => {
-            const typeTag = s.type ? ` <span style="font-size:0.7em;background:#ede7f6;color:#5e35b1;padding:1px 6px;border-radius:8px;">${esc(s.type.toUpperCase())}</span>` : '';
+            const typeTag = s.type ? ` <span style="font-size:0.7em;background:#ede7f6;color:#5e35b1;padding:1px 6px;border-radius:8px;">${({rss:'RSS',webpage:'网页'})[s.type] || esc(s.type)}</span>` : '';
             const policyTag = s.filter_policy ? ` <span style="font-size:0.7em;background:#e0f2f1;color:#00695c;padding:1px 6px;border-radius:8px;">${s.filter_policy === 'gs_only' ? '仅高盛' : '全保留'}</span>` : '';
             const actions = s.builtin ? '' :
                 ` <button class="btn-sm" onclick="editCustomSource('${esc(s.name)}')">✏️ 编辑</button>` +
@@ -1084,10 +1084,11 @@ async function renderSettings() {
     // --- Custom source add/edit form ---
     html += `<div class="add-form" id="customSourceForm" style="margin-top:12px;">
         <div style="font-weight:600;margin-bottom:6px;" id="csFormTitle">➕ 添加自定义信息源</div>
-        <input id="csLabel" placeholder="名称（如 财新网）">
-        <input id="csName" placeholder="标识（小写英文/数字/下划线，如 caixin）">
-        <select id="csType"><option value="rss">RSS 订阅</option><option disabled>网页地址（即将上线）</option><option disabled>主题搜索（即将上线）</option></select>
-        <input id="csUrl" placeholder="RSS 地址（https://…）" style="flex:1;min-width:260px;">
+        <input id="csLabel" placeholder="名称（如 高盛研报页）">
+        <input id="csName" placeholder="标识（小写英文/数字/下划线，如 gs_insights）">
+        <select id="csType" onchange="onCsTypeChange()"><option value="rss">RSS 订阅</option><option value="webpage">网页地址</option><option disabled>主题搜索（即将上线）</option></select>
+        <input id="csUrl" placeholder="地址（https://…）" style="flex:1;min-width:260px;">
+        <input id="csInstruction" placeholder="提取说明（如：提取页面中高盛的市场观点与目标价）" style="flex:1;min-width:260px;display:none;">
         <label style="white-space:nowrap;"><input type="radio" name="csPolicy" value="gs_only" checked> 仅高盛相关</label>
         <label style="white-space:nowrap;"><input type="radio" name="csPolicy" value="all"> 全部保留</label>
         <button class="btn-sm" onclick="testCustomSource()">🔍 测试源</button>
@@ -1156,21 +1157,34 @@ function _csPolicy() {
     return document.querySelector('input[name="csPolicy"]:checked').value;
 }
 
+function onCsTypeChange() {
+    const isWeb = document.getElementById('csType').value === 'webpage';
+    document.getElementById('csInstruction').style.display = isWeb ? '' : 'none';
+}
+
 function resetCustomSourceForm() {
     _editingSourceName = null;
     document.getElementById('csFormTitle').textContent = '➕ 添加自定义信息源';
     document.getElementById('csLabel').value = '';
     document.getElementById('csName').value = '';
     document.getElementById('csName').disabled = false;
+    document.getElementById('csType').value = 'rss';
     document.getElementById('csUrl').value = '';
+    document.getElementById('csInstruction').value = '';
     document.getElementById('csCancelBtn').style.display = 'none';
     document.getElementById('csTestResult').textContent = '';
+    onCsTypeChange();
 }
 
 async function saveCustomSource() {
     const label = document.getElementById('csLabel').value.trim();
     const url = document.getElementById('csUrl').value.trim();
-    const body = {label, url, filter_policy: _csPolicy()};
+    const body = {
+        label, url,
+        type: document.getElementById('csType').value,
+        instruction: document.getElementById('csInstruction').value.trim(),
+        filter_policy: _csPolicy(),
+    };
     let resp;
     if (_editingSourceName) {
         resp = await fetch('/api/settings/sources/custom/' + encodeURIComponent(_editingSourceName), {method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)});
@@ -1195,7 +1209,10 @@ async function editCustomSource(name) {
     document.getElementById('csLabel').value = s.label;
     document.getElementById('csName').value = s.name;
     document.getElementById('csName').disabled = true;
+    document.getElementById('csType').value = s.type || 'rss';
     document.getElementById('csUrl').value = s.url || '';
+    document.getElementById('csInstruction').value = s.instruction || '';
+    onCsTypeChange();
     document.querySelector(`input[name="csPolicy"][value="${s.filter_policy || 'gs_only'}"]`).checked = true;
     document.getElementById('csCancelBtn').style.display = 'inline-block';
     document.getElementById('customSourceForm').scrollIntoView({behavior: 'smooth'});
@@ -1213,15 +1230,29 @@ async function testCustomSource() {
     const url = document.getElementById('csUrl').value.trim();
     const box = document.getElementById('csTestResult');
     if (!url) { box.textContent = '请先填写地址'; return; }
-    box.textContent = '⏳ 正在抓取测试…';
+    const body = {
+        url,
+        type: document.getElementById('csType').value,
+        instruction: document.getElementById('csInstruction').value.trim(),
+        filter_policy: _csPolicy(),
+        label: document.getElementById('csLabel').value.trim(),
+    };
+    box.textContent = '⏳ 正在抓取并预览 AI 预筛…';
     try {
-        const resp = await fetch('/api/settings/sources/test', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({url})});
+        const resp = await fetch('/api/settings/sources/test', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)});
         const data = await resp.json();
         if (!resp.ok) { box.textContent = '❌ ' + (data.detail || '请求失败'); return; }
         if (!data.ok) { box.textContent = '❌ ' + (data.error || '抓取失败'); return; }
-        box.textContent = data.count > 0
-            ? `✅ 抓取成功：${data.count} 条。最新示例：${data.sample_titles.join('；')}`
-            : '⚠️ 地址可访问但近期 0 条内容，请确认地址是否正确';
+        if (data.count === 0) {
+            box.textContent = '⚠️ 地址可访问但没有符合条件的内容' + (data.note ? `（${data.note}）` : '，请确认地址和策略是否正确');
+            return;
+        }
+        const kept = (data.items || []).filter(i => i.kept).length;
+        let head = `✅ 抓取 ${data.count} 条`;
+        if (data.ai_used) head += `，AI 预筛保留 ${kept} 条`;
+        if (data.note) head += `（${data.note}）`;
+        const lines = (data.items || []).map(i => `${i.kept ? '✅' : '❌'} ${esc(i.title)}`).join('<br>');
+        box.innerHTML = esc(head) + '<br>' + lines;
     } catch(e) { box.textContent = '❌ 网络错误: ' + e; }
 }
 
