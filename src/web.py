@@ -98,27 +98,10 @@ def _seed_default_llm_from_env() -> None:
 
 
 def _llm_client_kwargs(db_model: Optional[dict]) -> dict:
-    """Resolve LLM client settings: DB default model first, env vars as fallback."""
-    from src.config import (
-        ANTHROPIC_API_KEY,
-        ANTHROPIC_AUTH_TOKEN,
-        ANTHROPIC_BASE_URL,
-        GS_LLM_MODEL,
-    )
+    """Thin wrapper kept for existing call sites; logic lives in llm_config."""
+    from src.llm_config import resolve_llm_config
 
-    if db_model:
-        return {
-            "api_key": None,
-            "auth_token": db_model["auth_token"] or None,
-            "base_url": db_model["base_url"] or None,
-            "model": db_model["model_name"],
-        }
-    return {
-        "api_key": ANTHROPIC_API_KEY or None,
-        "auth_token": ANTHROPIC_AUTH_TOKEN or None,
-        "base_url": ANTHROPIC_BASE_URL or None,
-        "model": GS_LLM_MODEL,
-    }
+    return resolve_llm_config(db_model)
 
 
 app = FastAPI(title="GS-Tracker", version="0.2.0", lifespan=lifespan)
