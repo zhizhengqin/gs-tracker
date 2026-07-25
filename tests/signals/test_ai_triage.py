@@ -157,4 +157,24 @@ async def test_budget_key_contains_date():
     triage = AiTriage(NO_CFG, gs, ss)
     from datetime import datetime, timezone
     today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-    assert today in triage._budget_key()
+    assert today in triage.budget._key()
+
+
+def test_daily_budget_counts_until_exhausted():
+    from src.signals.ai_triage import DailyBudget
+    store, gs, ss = _store()
+    budget = DailyBudget("test_count", 2, gs, ss)
+    assert budget.used() == 0
+    assert not budget.exhausted()
+    budget.increment()
+    budget.increment()
+    assert budget.used() == 2
+    assert budget.exhausted()
+
+
+def test_daily_budget_key_contains_date():
+    from src.signals.ai_triage import DailyBudget
+    store, gs, ss = _store()
+    budget = DailyBudget("test_count", 2, gs, ss)
+    from datetime import datetime, timezone
+    assert datetime.now(timezone.utc).strftime("%Y-%m-%d") in budget._key()
