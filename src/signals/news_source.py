@@ -106,8 +106,18 @@ class NewsSource:
 
     source_name = "news"
 
-    def __init__(self, rss_urls: Optional[List[str]] = None) -> None:
+    def __init__(
+        self,
+        rss_urls: Optional[List[str]] = None,
+        source_name: str = "news",
+        filter_policy: str = "gs_only",
+    ) -> None:
+        """rss_urls: feeds to poll. source_name: Signal.source tag (custom
+        sources pass their own name). filter_policy: 'gs_only' keeps only
+        GS-related items (default), 'all' keeps everything as LOW."""
         self.rss_urls = rss_urls or []
+        self.source_name = source_name
+        self.filter_policy = filter_policy
         self.client = httpx.AsyncClient(
             timeout=20.0,
             headers={"User-Agent": SEC_USER_AGENT},
@@ -148,9 +158,9 @@ class NewsSource:
 
             has_gs = any(rx.search(text_lower) for rx in _GS_RE)
             has_viewpoint = any(rx.search(text_lower) for rx in _VIEWPOINT_RE)
-            # GS-focused tracker (user feedback 2026-07): drop general market
-            # news that only mentions a holding company without any GS angle.
-            if not (has_gs or has_viewpoint):
+            # gs_only: GS angle required (user feedback 2026-07).
+            # all: custom-source policy — keep everything as LOW.
+            if self.filter_policy == "gs_only" and not (has_gs or has_viewpoint):
                 continue
 
             published_at = datetime.now(timezone.utc)
@@ -164,18 +174,21 @@ class NewsSource:
             if published_at < cutoff:
                 continue
 
-            companies: List[str] = []
-            for kw, rx in _HOLDING_RE:
-                if rx.search(text_lower):
-                    companies.append(kw.upper())
-
-            # Viewpoint keywords → HIGH (GS-authored analysis, the core value)
-            # Basic GS mention → MEDIUM (news about GS)
-            strength = SignalStrength.HIGH if has_viewpoint else SignalStrength.MEDIUM
+            if self.filter_policy == "gs_only":
+                companies: List[str] = []
+                for kw, rx in _HOLDING_RE:
+                    if rx.search(text_lower):
+                        companies.append(kw.upper())
+                # Viewpoint keywords → HIGH (GS-authored analysis, the core value)
+                # Basic GS mention → MEDIUM (news about GS)
+                strength = SignalStrength.HIGH if has_viewpoint else SignalStrength.MEDIUM
+            else:
+                companies = []
+                strength = SignalStrength.LOW
 
             signals.append(Signal(
                 title=title,
-                source="news",
+                source=self.source_name,
                 published_at=published_at,
                 summary=summary_text[:200] if summary_text else title,
                 companies=companies if companies else ["GS"],

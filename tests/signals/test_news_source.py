@@ -4,6 +4,7 @@ from datetime import datetime
 import pytest
 from pytest_httpx import HTTPXMock
 
+from src.signals.base import SignalStrength
 from src.signals.news_source import NewsSource
 
 
@@ -119,4 +120,40 @@ class TestNewsSource:
         signals = await source.fetch("2026-Q2")
         assert len(signals) == 1
         assert signals[0].strength.value == "high"
+        await source.close()
+
+    @pytest.mark.asyncio
+    async def test_custom_source_name_and_all_policy(self, httpx_mock: HTTPXMock):
+        """filter_policy='all' keeps non-GS items as LOW, tagged with source_name."""
+        rss = """<?xml version="1.0"?>
+        <rss version="2.0"><channel>
+          <item><title>A股三大股指跌超1%</title><link>https://a.com/1</link>
+          <description>市场概述，无机构提及</description>
+          <pubDate>Mon, 15 May 2026 10:00:00 GMT</pubDate></item>
+        </channel></rss>"""
+        httpx_mock.add_response(text=rss, status_code=200)
+        source = NewsSource(
+            rss_urls=["https://example.com/rss"],
+            source_name="caixin",
+            filter_policy="all",
+        )
+        signals = await source.fetch("2026-Q2")
+        assert len(signals) == 1
+        assert signals[0].source == "caixin"
+        assert signals[0].strength == SignalStrength.LOW
+        await source.close()
+
+    @pytest.mark.asyncio
+    async def test_default_policy_still_gs_only(self, httpx_mock: HTTPXMock):
+        """Omitting filter_policy keeps the GS-focused default behavior."""
+        rss = """<?xml version="1.0"?>
+        <rss version="2.0"><channel>
+          <item><title>A股三大股指跌超1%</title><link>https://a.com/1</link>
+          <description>市场概述，无机构提及</description>
+          <pubDate>Mon, 15 May 2026 10:00:00 GMT</pubDate></item>
+        </channel></rss>"""
+        httpx_mock.add_response(text=rss, status_code=200)
+        source = NewsSource(rss_urls=["https://example.com/rss"])
+        signals = await source.fetch("2026-Q2")
+        assert signals == []
         await source.close()
