@@ -26,6 +26,7 @@ from src.signals.aggregator import SignalAggregator
 from src.signals.ai_triage import AiTriage
 from src.signals.base import Signal
 from src.signals.news_source import NewsSource
+from src.signals.webpage_source import WebpageSource
 from src.signals.scorer import SignalScorer
 from src.signals.sec_8k_source import Sec8kSource
 from src.signals.research_view_source import ResearchViewSource
@@ -95,15 +96,33 @@ def _build_daily_sources() -> list:
         feeds = list(RSS_FEEDS)
         if feeds:
             sources.append(("news", NewsSource(rss_urls=feeds)))
-    # Custom RSS sources from the settings page (one instance per source)
+    # Custom sources from the settings page (one instance per source)
     for entry in _custom_source_configs():
-        if entry.get("name") in enabled and entry.get("type") == "rss" and entry.get("url"):
+        if entry.get("name") not in enabled or not entry.get("url"):
+            continue
+        if entry.get("type") == "rss":
             sources.append((
                 entry["name"],
                 NewsSource(
                     rss_urls=[entry["url"]],
                     source_name=entry["name"],
                     filter_policy=entry.get("filter_policy", "gs_only"),
+                ),
+            ))
+        elif entry.get("type") == "webpage":
+            sources.append((
+                entry["name"],
+                WebpageSource(
+                    url=entry["url"],
+                    instruction=entry.get("instruction", ""),
+                    source_name=entry["name"],
+                    filter_policy=entry.get("filter_policy", "gs_only"),
+                    llm_config=resolve_llm_config(get_default_llm_model()),
+                    get_setting=get_setting,
+                    set_setting=set_setting,
+                    recent_titles=lambda name: {
+                        s.title for s in get_recent_signals(days=30) if s.source == name
+                    },
                 ),
             ))
     return sources
@@ -114,6 +133,12 @@ async def run_daily_intel_stream():
     ensure_directories()
     init_db()
 
+    def _note_of(src: object) -> str:
+        # fetch_note is an optional string protocol (webpage sources); mocks
+        # and non-conforming sources may return anything — only strings count.
+        note = getattr(src, "fetch_note", "")
+        return note if isinstance(note, str) else ""
+
     sources = _build_daily_sources()
     source_names = [n for n, _ in sources]
     yield json.dumps({"event": "start", "sources": source_names})
@@ -122,7 +147,7 @@ async def run_daily_intel_stream():
     source_status: dict[str, str] = {}
     errors: list[str] = []
 
-    async def _fetch_one(name: str, src: object) -> tuple[str, list[Signal]]:
+    async def _fetch_one(name: str, src: object) -> tuple[str, list[Signal], str]:
         try:
             if hasattr(src, "fetch_since"):
                 wm = get_source_state(name, "default") if name != "8-K" else None
@@ -130,23 +155,23 @@ async def run_daily_intel_stream():
                 if new_wm and new_wm != wm:
                     save_source_state(name, "default", new_wm)
                 source_status[name] = "ok"
-                return name, result
+                return name, result, _note_of(src)
             else:
                 result = await src.fetch("")
                 source_status[name] = "ok"
-                return name, result
+                return name, result, _note_of(src)
         except Exception as exc:
             logger.exception("%s source failed in daily intel", name)
             errors.append(f"{name}: {exc}")
             source_status[name] = "error"
-            return name, []
+            return name, [], ""
 
     # Run sources in parallel, yield progress as each completes.
     # NOTE: as_completed yields wrapper coroutines, not the original tasks,
     # so results must carry the source name (a task->name dict lookup fails).
     tasks = [asyncio.create_task(_fetch_one(n, s)) for n, s in sources]
     for fut in asyncio.as_completed(tasks):
-        name, sigs = await fut
+        name, sigs, note = await fut
         new_signals.extend(sigs)
         status = source_status.get(name, "ok")
         yield json.dumps({
@@ -156,6 +181,8 @@ async def run_daily_intel_stream():
             "count": len(sigs),
             "error": errors[-1] if status == "error" and errors else "",
         })
+        if note:
+            yield json.dumps({"event": "triage_note", "source": name, "note": note})
 
     # AI pre-ingest triage: news-type sources only (builtin "news" + custom
     # sources). Authoritative SEC/research sources bypass triage entirely.
