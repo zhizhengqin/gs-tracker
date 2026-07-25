@@ -76,7 +76,8 @@ async def test_keep_indices_parsed(monkeypatch):
 @pytest.mark.asyncio
 async def test_batches_split(monkeypatch):
     store, gs, ss = _store()
-    client = _patch_client(monkeypatch, ['{"keep": [1]}', '{"keep": [21]}'])
+    # 批内 1 基索引：第二批（仅 5 条）的 "1" 对应全局第 20 条
+    client = _patch_client(monkeypatch, ['{"keep": [1]}', '{"keep": [1]}'])
     triage = AiTriage(LLM_CFG, gs, ss)
     result = await triage.triage(_items(25), "测试源", "all")
     assert client.calls == 2
