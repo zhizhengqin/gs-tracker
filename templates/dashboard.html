@@ -120,6 +120,7 @@
         }
         .sig-source.src-13F { background: #e3f2fd; color: #1565c0; }
         .sig-source.src-news { background: #fce4ec; color: #c62828; }
+        .sig-source.src-custom { background: #ede7f6; color: #5e35b1; }
         .sig-source.src-8-K { background: #e8f5e9; color: #2e7d32; }
         .sig-source.src-13D\/13G { background: #ede7f6; color: #6a1b9a; }
         .sig-source.src-research_view { background: #fff3e0; color: #e65100; }
@@ -254,12 +255,14 @@
     <div class="sidebar-section" id="signalFilterSection" style="display:none;">
         <h3>🔍 信号筛选</h3>
         <div class="signal-filter">
+            <span id="sourceFilterBox">
             <label><input type="checkbox" checked onchange="onFilterChange()" class="filter-source" value="13F"> 13F 持仓</label>
             <label><input type="checkbox" checked onchange="onFilterChange()" class="filter-source" value="8-K"> SEC 8-K</label>
             <label><input type="checkbox" checked onchange="onFilterChange()" class="filter-source" value="13D/13G"> 13D/13G</label>
             <label><input type="checkbox" checked onchange="onFilterChange()" class="filter-source" value="research_view"> 高盛研究</label>
             <label><input type="checkbox" checked onchange="onFilterChange()" class="filter-source" value="news"> 新闻</label>
             <label><input type="checkbox" checked onchange="onFilterChange()" class="filter-source" value="macro_view"> 宏观指标</label>
+            </span>
         </div>
         <div class="signal-filter" style="margin-top: 8px;">
             <label><input type="checkbox" checked onchange="onFilterChange()" class="filter-strength" value="high"> 🔴 高优先级</label>
@@ -317,8 +320,26 @@ async function init() {
     } catch(e) { console.error('Failed to load reports', e); }
 
     // Default: daily intel view
+    await buildSourceFilters();
     await switchMainView('daily');
     syncPipelineButton();
+}
+
+let _sourceLabels = {};
+
+async function buildSourceFilters() {
+    try {
+        const resp = await fetch('/api/settings/sources');
+        const sources = await resp.json();
+        const box = document.getElementById('sourceFilterBox');
+        if (!box) return;
+        const prev = new Set([...document.querySelectorAll('.filter-source:checked')].map(cb => cb.value));
+        box.innerHTML = sources.map(s => {
+            _sourceLabels[s.name] = s.label;
+            const checked = prev.size === 0 || prev.has(s.name) ? 'checked' : '';
+            return `<label><input type="checkbox" ${checked} onchange="onFilterChange()" class="filter-source" value="${esc(s.name)}"> ${esc(s.label)}</label>`;
+        }).join('');
+    } catch(e) { console.error('Failed to build source filters', e); }
 }
 
 let loadSeq = 0;
@@ -473,6 +494,9 @@ async function runDailyIntel() {
             } else if (data.event === 'source_done') {
                 sourceStates[data.source] = {status: data.status, count: data.count, error: data.error || ''};
                 updateProgressPanel(sourceStates);
+            } else if (data.event === 'triage_note') {
+                (sourceStates.__notes = sourceStates.__notes || []).push(data);
+                updateProgressPanel(sourceStates);
             } else if (data.event === 'complete') {
                 _dailyEventSource.close();
                 _dailyEventSource = null;
@@ -517,12 +541,13 @@ function updateProgressPanel(sourceStates, isComplete, summary) {
     const panel = document.getElementById('progressPanel');
     if (!panel) return;
 
-    const sourceLabels = {'8-K':'SEC 8-K 重大事件','13D/13G':'13D/13G 大动作','research_view':'高盛研究观点','news':'RSS 新闻','macro_view':'FRED 宏观'};
+    const sourceLabels = {'8-K':'SEC 8-K 重大事件','13D/13G':'13D/13G 大动作','research_view':'高盛研究观点','news':'RSS 新闻','macro_view':'FRED 宏观', ..._sourceLabels};
     const statusIcons = {'waiting':'⏳','ok':'✅','error':'❌'};
     const statusColors = {'waiting':'#999','ok':'#2e7d32','error':'#d32f2f'};
 
     let html = '<h3 style="margin-bottom:16px;font-size:1.1em;">🔄 每日情报抓取进度</h3>';
     for (const [name, state] of Object.entries(sourceStates)) {
+        if (name === '__notes') continue;
         const icon = statusIcons[state.status] || '⏳';
         const color = statusColors[state.status] || '#999';
         const label = sourceLabels[name] || name;
@@ -533,6 +558,10 @@ function updateProgressPanel(sourceStates, isComplete, summary) {
             </span>
         </div>`;
     }
+
+    (sourceStates.__notes || []).forEach(n => {
+        html += `<div style="color:#b26a00;font-size:0.85em;padding:4px 0;">🟡 ${esc(sourceLabels[n.source] || n.source)}：${esc(n.note)}</div>`;
+    });
 
     if (isComplete && summary) {
         html += `<div style="margin-top:16px;padding-top:12px;border-top:2px solid var(--accent);">
@@ -1016,7 +1045,7 @@ function srcClass(source) {
         'research_view': 'src-research_view',
         'macro_view': 'src-macro_view',
     };
-    return m[source] || 'src-13F';
+    return m[source] || 'src-custom';
 }
 
 function onFilterChange() {
@@ -1037,13 +1066,35 @@ async function renderSettings() {
         const resp = await fetch('/api/settings/sources');
         const sources = await resp.json();
         sources.forEach(s => {
+            const typeTag = s.type ? ` <span style="font-size:0.7em;background:#ede7f6;color:#5e35b1;padding:1px 6px;border-radius:8px;">${esc(s.type.toUpperCase())}</span>` : '';
+            const policyTag = s.filter_policy ? ` <span style="font-size:0.7em;background:#e0f2f1;color:#00695c;padding:1px 6px;border-radius:8px;">${s.filter_policy === 'gs_only' ? '仅高盛' : '全保留'}</span>` : '';
+            const actions = s.builtin ? '' :
+                ` <button class="btn-sm" onclick="editCustomSource('${esc(s.name)}')">✏️ 编辑</button>` +
+                ` <button class="btn-sm danger" onclick="deleteCustomSource('${esc(s.name)}')">🗑 删除</button>`;
             html += `<div class="source-row">
-                <div class="info"><div class="name">${esc(s.label)} <span style="font-size:0.75em;color:#888;">(${esc(s.name)})</span></div>
-                <div class="desc">${esc(s.description)} ${s.builtin ? '<span style="color:#888;">· 内置</span>' : '<span style="color:var(--accent);">· 自定义</span>'}</div></div>
-                <button class="toggle-btn ${s.enabled?'on':'off'}" onclick="toggleSource('${esc(s.name)}',${!s.enabled})">${s.enabled?'✅ 已启用':'⏸ 已禁用'}</button>
+                <div class="info"><div class="name">${esc(s.label)}${typeTag}${policyTag} <span style="font-size:0.75em;color:#888;">(${esc(s.name)})</span></div>
+                <div class="desc">${esc(s.description || s.url || '')} ${s.builtin ? '<span style="color:#888;">· 内置</span>' : '<span style="color:var(--accent);">· 自定义</span>'}</div></div>
+                <div>
+                <button class="toggle-btn ${s.enabled?'on':'off'}" onclick="toggleSource('${esc(s.name)}',${!s.enabled})">${s.enabled?'✅ 已启用':'⏸ 已禁用'}</button>${actions}
+                </div>
             </div>`;
         });
     } catch(e) { html += '<p style="color:#999;">加载失败</p>'; }
+
+    // --- Custom source add/edit form ---
+    html += `<div class="add-form" id="customSourceForm" style="margin-top:12px;">
+        <div style="font-weight:600;margin-bottom:6px;" id="csFormTitle">➕ 添加自定义信息源</div>
+        <input id="csLabel" placeholder="名称（如 财新网）">
+        <input id="csName" placeholder="标识（小写英文/数字/下划线，如 caixin）">
+        <select id="csType"><option value="rss">RSS 订阅</option><option disabled>网页地址（即将上线）</option><option disabled>主题搜索（即将上线）</option></select>
+        <input id="csUrl" placeholder="RSS 地址（https://…）" style="flex:1;min-width:260px;">
+        <label style="white-space:nowrap;"><input type="radio" name="csPolicy" value="gs_only" checked> 仅高盛相关</label>
+        <label style="white-space:nowrap;"><input type="radio" name="csPolicy" value="all"> 全部保留</label>
+        <button class="btn-sm" onclick="testCustomSource()">🔍 测试源</button>
+        <button class="btn-sm primary" onclick="saveCustomSource()">💾 保存</button>
+        <button class="btn-sm" onclick="resetCustomSourceForm()" id="csCancelBtn" style="display:none;">取消</button>
+        <div id="csTestResult" style="width:100%;font-size:0.85em;color:#555;"></div>
+    </div>`;
     html += '</div>';
 
     // --- LLM models ---
@@ -1096,6 +1147,82 @@ async function toggleSource(name, enable) {
         await fetch('/api/settings/sources', {method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify(updated)});
         renderSettings();
     } catch(e) { alert('保存失败: ' + e); }
+}
+
+// ====== Custom source form ======
+let _editingSourceName = null;
+
+function _csPolicy() {
+    return document.querySelector('input[name="csPolicy"]:checked').value;
+}
+
+function resetCustomSourceForm() {
+    _editingSourceName = null;
+    document.getElementById('csFormTitle').textContent = '➕ 添加自定义信息源';
+    document.getElementById('csLabel').value = '';
+    document.getElementById('csName').value = '';
+    document.getElementById('csName').disabled = false;
+    document.getElementById('csUrl').value = '';
+    document.getElementById('csCancelBtn').style.display = 'none';
+    document.getElementById('csTestResult').textContent = '';
+}
+
+async function saveCustomSource() {
+    const label = document.getElementById('csLabel').value.trim();
+    const url = document.getElementById('csUrl').value.trim();
+    const body = {label, url, filter_policy: _csPolicy()};
+    let resp;
+    if (_editingSourceName) {
+        resp = await fetch('/api/settings/sources/custom/' + encodeURIComponent(_editingSourceName), {method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)});
+    } else {
+        const name = document.getElementById('csName').value.trim();
+        if (!name) { alert('请填写标识（小写英文）'); return; }
+        resp = await fetch('/api/settings/sources/custom', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({...body, name})});
+    }
+    const data = await resp.json();
+    if (!resp.ok) { alert('保存失败: ' + (data.detail || resp.status)); return; }
+    resetCustomSourceForm();
+    renderSettings();
+    buildSourceFilters();
+}
+
+async function editCustomSource(name) {
+    const sources = await (await fetch('/api/settings/sources')).json();
+    const s = sources.find(x => x.name === name);
+    if (!s) return;
+    _editingSourceName = name;
+    document.getElementById('csFormTitle').textContent = '✏️ 编辑自定义源：' + s.label;
+    document.getElementById('csLabel').value = s.label;
+    document.getElementById('csName').value = s.name;
+    document.getElementById('csName').disabled = true;
+    document.getElementById('csUrl').value = s.url || '';
+    document.querySelector(`input[name="csPolicy"][value="${s.filter_policy || 'gs_only'}"]`).checked = true;
+    document.getElementById('csCancelBtn').style.display = 'inline-block';
+    document.getElementById('customSourceForm').scrollIntoView({behavior: 'smooth'});
+}
+
+async function deleteCustomSource(name) {
+    if (!confirm('确定删除该自定义源？其历史情报保留，但不再抓取新内容。')) return;
+    const resp = await fetch('/api/settings/sources/custom/' + encodeURIComponent(name), {method:'DELETE'});
+    if (!resp.ok) { const e = await resp.json(); alert('删除失败: ' + e.detail); return; }
+    renderSettings();
+    buildSourceFilters();
+}
+
+async function testCustomSource() {
+    const url = document.getElementById('csUrl').value.trim();
+    const box = document.getElementById('csTestResult');
+    if (!url) { box.textContent = '请先填写地址'; return; }
+    box.textContent = '⏳ 正在抓取测试…';
+    try {
+        const resp = await fetch('/api/settings/sources/test', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({url})});
+        const data = await resp.json();
+        if (!resp.ok) { box.textContent = '❌ ' + (data.detail || '请求失败'); return; }
+        if (!data.ok) { box.textContent = '❌ ' + (data.error || '抓取失败'); return; }
+        box.textContent = data.count > 0
+            ? `✅ 抓取成功：${data.count} 条。最新示例：${data.sample_titles.join('；')}`
+            : '⚠️ 地址可访问但近期 0 条内容，请确认地址是否正确';
+    } catch(e) { box.textContent = '❌ 网络错误: ' + e; }
 }
 
 async function addLLMModel() {
