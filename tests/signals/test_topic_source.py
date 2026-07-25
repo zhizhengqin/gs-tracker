@@ -13,7 +13,8 @@ def _store():
 
 
 class _FakeClient:
-    """Scripted LLM client. responses: list of texts, one per create() call."""
+    """Scripted LLM client. responses: one entry per create() call;
+    a str yields one text block, a list of str yields multiple blocks."""
 
     def __init__(self, responses):
         self.responses = list(responses)
@@ -28,7 +29,9 @@ class _FakeClient:
         async def create(self, **kwargs):
             self._outer.calls += 1
             self._outer.kwargs_seen.append(kwargs)
-            text = self._outer.responses.pop(0)
+            texts = self._outer.responses.pop(0)
+            if isinstance(texts, str):
+                texts = [texts]
 
             class _Block:
                 pass
@@ -36,10 +39,12 @@ class _FakeClient:
             class _Resp:
                 pass
 
-            block = _Block()
-            block.text = text
             resp = _Resp()
-            resp.content = [block]
+            resp.content = []
+            for t in texts:
+                block = _Block()
+                block.text = t
+                resp.content.append(block)
             return resp
 
 
@@ -165,6 +170,21 @@ async def test_recent_titles_filtered(monkeypatch):
                           recent_titles=lambda name: {"高盛超配A股"})
     signals, _ = await src.fetch_since(None)
     assert [s.title for s in signals] == ["高盛资金流入预测"]
+    await src.close()
+
+
+@pytest.mark.asyncio
+async def test_json_extracted_amid_search_noise_blocks(monkeypatch):
+    """web_search gateways emit intermediate search-log text blocks; the JSON
+    answer lives in a later block — earlier noise must not break parsing,
+    even when the noise itself contains an "items" fragment."""
+    noise1 = 'Search results for query: 高盛 中国股市 最新观点<function_calls>'
+    noise2 = '{"items": [{"title": "搜索结果碎片", "summary": "不完整'  # truncated, no closing
+    src, _ = _make_source(monkeypatch, [[noise1, noise2, ITEMS_JSON]],
+                          topic="x", source_name="t")
+    signals, _ = await src.fetch_since(None)
+    assert len(signals) == 2
+    assert src.fetch_note == ""
     await src.close()
 
 

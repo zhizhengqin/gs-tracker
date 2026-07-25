@@ -1066,7 +1066,7 @@ async function renderSettings() {
         const resp = await fetch('/api/settings/sources');
         const sources = await resp.json();
         sources.forEach(s => {
-            const typeTag = s.type ? ` <span style="font-size:0.7em;background:#ede7f6;color:#5e35b1;padding:1px 6px;border-radius:8px;">${({rss:'RSS',webpage:'网页'})[s.type] || esc(s.type)}</span>` : '';
+            const typeTag = s.type ? ` <span style="font-size:0.7em;background:#ede7f6;color:#5e35b1;padding:1px 6px;border-radius:8px;">${({rss:'RSS',webpage:'网页',topic:'主题'})[s.type] || esc(s.type)}</span>` : '';
             const policyTag = s.filter_policy ? ` <span style="font-size:0.7em;background:#e0f2f1;color:#00695c;padding:1px 6px;border-radius:8px;">${s.filter_policy === 'gs_only' ? '仅高盛' : '全保留'}</span>` : '';
             const actions = s.builtin ? '' :
                 ` <button class="btn-sm" onclick="editCustomSource('${esc(s.name)}')">✏️ 编辑</button>` +
@@ -1086,7 +1086,7 @@ async function renderSettings() {
         <div style="font-weight:600;margin-bottom:6px;" id="csFormTitle">➕ 添加自定义信息源</div>
         <input id="csLabel" placeholder="名称（如 高盛研报页）">
         <input id="csName" placeholder="标识（小写英文/数字/下划线，如 gs_insights）">
-        <select id="csType" onchange="onCsTypeChange()"><option value="rss">RSS 订阅</option><option value="webpage">网页地址</option><option disabled>主题搜索（即将上线）</option></select>
+        <select id="csType" onchange="onCsTypeChange()"><option value="rss">RSS 订阅</option><option value="webpage">网页地址</option><option value="topic">主题搜索</option></select>
         <input id="csUrl" placeholder="地址（https://…）" style="flex:1;min-width:260px;">
         <input id="csInstruction" placeholder="提取说明（如：提取页面中高盛的市场观点与目标价）" style="flex:1;min-width:260px;display:none;">
         <label style="white-space:nowrap;"><input type="radio" name="csPolicy" value="gs_only" checked> 仅高盛相关</label>
@@ -1158,8 +1158,12 @@ function _csPolicy() {
 }
 
 function onCsTypeChange() {
-    const isWeb = document.getElementById('csType').value === 'webpage';
-    document.getElementById('csInstruction').style.display = isWeb ? '' : 'none';
+    const t = document.getElementById('csType').value;
+    document.getElementById('csInstruction').style.display = (t === 'rss') ? 'none' : '';
+    document.getElementById('csUrl').style.display = (t === 'topic') ? 'none' : '';
+    document.getElementById('csInstruction').placeholder =
+        t === 'topic' ? '搜索主题（如：高盛对中国股市的最新观点）'
+                      : '提取说明（如：提取页面中高盛的市场观点与目标价）';
 }
 
 function resetCustomSourceForm() {
@@ -1229,7 +1233,9 @@ async function deleteCustomSource(name) {
 async function testCustomSource() {
     const url = document.getElementById('csUrl').value.trim();
     const box = document.getElementById('csTestResult');
-    if (!url) { box.textContent = '请先填写地址'; return; }
+    const t = document.getElementById('csType').value;
+    if (t !== 'topic' && !url) { box.textContent = '请先填写地址'; return; }
+    if (t === 'topic' && !document.getElementById('csInstruction').value.trim()) { box.textContent = '请先填写搜索主题'; return; }
     const body = {
         url,
         type: document.getElementById('csType').value,

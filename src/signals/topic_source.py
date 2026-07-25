@@ -132,9 +132,19 @@ class TopicSource:
             logger.warning("Topic search failed for %s: %s", self.source_name, exc)
             self.fetch_note = "AI 搜索失败，本次跳过该主题"
             return None
-        out = "".join(b.text for b in resp.content if hasattr(b, "text"))
-        items = parse_items_json(out, MAX_ITEMS)
+        # Gateways interleave search-process text blocks (query logs, partial
+        # fragments) with the final answer. Parse each text block separately,
+        # last-to-first, and take the first one that yields valid items.
+        blocks = [b.text for b in resp.content if hasattr(b, "text")]
+        items = None
+        for block_text in reversed(blocks):
+            items = parse_items_json(block_text, MAX_ITEMS)
+            if items is not None:
+                break
         if items is None:
-            logger.warning("Topic search unparseable for %s: %.200s", self.source_name, out)
+            logger.warning(
+                "Topic search unparseable for %s: %.200s",
+                self.source_name, blocks[-1] if blocks else "",
+            )
             self.fetch_note = "AI 返回格式异常，本次跳过该主题"
         return items
