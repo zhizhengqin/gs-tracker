@@ -12,7 +12,6 @@ before any LLM call. A changed page with no matching items still advances the
 watermark (nothing to retry). AI degradation does NOT advance it.
 """
 import hashlib
-import json
 import logging
 import re
 from datetime import datetime, timezone
@@ -20,7 +19,7 @@ from typing import Callable, List, Optional, Tuple
 
 import httpx
 
-from src.signals.ai_triage import CRITERIA, DailyBudget
+from src.signals.ai_triage import CRITERIA, DailyBudget, parse_items_json
 from src.signals.base import Signal, SignalStrength
 from src.signals.news_source import clean_html_text
 
@@ -38,27 +37,6 @@ def extract_text(html: str) -> str:
     """Strip script/style/noscript blocks, then tags; cap the length."""
     no_scripts = _SCRIPT_RE.sub(" ", html)
     return clean_html_text(no_scripts)[:MAX_TEXT_CHARS]
-
-
-def _parse_items(text: str) -> Optional[list]:
-    """Extract the items array from model output; None if unparseable."""
-    match = re.search(r'"items"\s*:\s*(\[.*\])', text, re.S)
-    if not match:
-        return None
-    try:
-        items = json.loads(match.group(1))
-    except json.JSONDecodeError:
-        return None
-    if not isinstance(items, list):
-        return None
-    result = []
-    for it in items[:MAX_ITEMS]:
-        if isinstance(it, dict) and it.get("title"):
-            result.append({
-                "title": str(it["title"]).strip()[:120],
-                "summary": str(it.get("summary") or "").strip()[:300],
-            })
-    return result
 
 
 class WebpageSource:
@@ -178,7 +156,7 @@ class WebpageSource:
             self.fetch_note = "AI 提取失败，本次跳过该网页"
             return None
         out = "".join(b.text for b in resp.content if hasattr(b, "text"))
-        items = _parse_items(out)
+        items = parse_items_json(out, MAX_ITEMS)
         if items is None:
             logger.warning("Webpage extraction unparseable for %s: %.200s", self.source_name, out)
             self.fetch_note = "AI 返回格式异常，本次跳过该网页"

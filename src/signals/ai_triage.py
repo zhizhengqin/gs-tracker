@@ -177,3 +177,30 @@ class AiTriage:
             fallback_used=bool(fallback_note),
             note=fallback_note,
         )
+
+
+def parse_items_json(text: str, max_items: int) -> Optional[list]:
+    """Extract an {"items": [...]} array from model output; None if unparseable.
+
+    Shared by webpage/topic sources. Each item becomes {title, summary, url} —
+    url is kept only when it is an http(s) link, else None.
+    """
+    match = re.search(r'"items"\s*:\s*(\[.*\])', text, re.S)
+    if not match:
+        return None
+    try:
+        items = json.loads(match.group(1))
+    except json.JSONDecodeError:
+        return None
+    if not isinstance(items, list):
+        return None
+    result = []
+    for it in items[:max_items]:
+        if isinstance(it, dict) and it.get("title"):
+            url = str(it.get("url") or "").strip()
+            result.append({
+                "title": str(it["title"]).strip()[:120],
+                "summary": str(it.get("summary") or "").strip()[:300],
+                "url": url if url.startswith(("http://", "https://")) else None,
+            })
+    return result
