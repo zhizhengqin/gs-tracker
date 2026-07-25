@@ -18,10 +18,12 @@ from src.config import (  # noqa: F401  (REPORT_OUTPUT_DIR kept as a patchable n
     ensure_directories,
 )
 from src.data_fetcher import SEC13FFetcher
+from src.llm_config import resolve_llm_config
 from src.notifier import Notification, Notifier, _format_summary
 from src.quarter_compare import QuarterComparator
 from src.reporter import ReportGenerator
 from src.signals.aggregator import SignalAggregator
+from src.signals.ai_triage import AiTriage
 from src.signals.base import Signal
 from src.signals.news_source import NewsSource
 from src.signals.scorer import SignalScorer
@@ -30,6 +32,7 @@ from src.signals.research_view_source import ResearchViewSource
 from src.signals.thirteen_dg_source import ThirteenDGSource
 from src.storage import (
     cleanup_expired_signals,
+    get_default_llm_model,
     get_holdings,
     get_recent_signals,
     get_setting,
@@ -42,6 +45,7 @@ from src.storage import (
     save_signal_run,
     save_signals_incremental,
     save_source_state,
+    set_setting,
 )
 
 logging.basicConfig(
@@ -66,20 +70,15 @@ def _enabled_source_names() -> set:
     return set(ALL_SOURCE_NAMES)
 
 
-def _all_rss_feeds() -> list:
-    """Env-configured RSS feeds plus custom RSS sources added in the settings page."""
-    feeds = list(RSS_FEEDS)
+def _custom_source_configs() -> list:
+    """Custom (non-builtin) source entries from sources_config."""
     try:
         raw = get_setting("sources_config", "")
         if raw:
-            for entry in json.loads(raw):
-                if entry.get("type") == "rss" and entry.get("enabled", True):
-                    url = (entry.get("url") or "").strip()
-                    if url and url not in feeds:
-                        feeds.append(url)
+            return [s for s in json.loads(raw) if not s.get("builtin", False)]
     except Exception:
-        logger.warning("Failed to parse custom RSS feeds from sources_config")
-    return feeds
+        logger.warning("Failed to parse custom sources from sources_config")
+    return []
 
 
 def _build_daily_sources() -> list:
@@ -93,9 +92,20 @@ def _build_daily_sources() -> list:
     if "research_view" in enabled:
         sources.append(("research_view", ResearchViewSource()))
     if "news" in enabled:
-        feeds = _all_rss_feeds()
+        feeds = list(RSS_FEEDS)
         if feeds:
             sources.append(("news", NewsSource(rss_urls=feeds)))
+    # Custom RSS sources from the settings page (one instance per source)
+    for entry in _custom_source_configs():
+        if entry.get("name") in enabled and entry.get("type") == "rss" and entry.get("url"):
+            sources.append((
+                entry["name"],
+                NewsSource(
+                    rss_urls=[entry["url"]],
+                    source_name=entry["name"],
+                    filter_policy=entry.get("filter_policy", "gs_only"),
+                ),
+            ))
     return sources
 
 
@@ -146,6 +156,42 @@ async def run_daily_intel_stream():
             "count": len(sigs),
             "error": errors[-1] if status == "error" and errors else "",
         })
+
+    # AI pre-ingest triage: news-type sources only (builtin "news" + custom
+    # sources). Authoritative SEC/research sources bypass triage entirely.
+    custom_entries = _custom_source_configs()
+    triageable_names = {"news"} | {e.get("name", "") for e in custom_entries}
+    triage_groups: dict[str, list[int]] = {}
+    for idx, sig in enumerate(new_signals):
+        if sig.source in triageable_names:
+            triage_groups.setdefault(sig.source, []).append(idx)
+
+    if triage_groups:
+        policy_by_source = {"news": "gs_only"}
+        policy_by_source.update(
+            {e["name"]: e.get("filter_policy", "gs_only") for e in custom_entries}
+        )
+        llm_cfg = resolve_llm_config(get_default_llm_model())
+        triage = AiTriage(llm_cfg, get_setting, set_setting)
+        keep_indices: set[int] = set()
+        for source_name, idxs in triage_groups.items():
+            items = [
+                {"title": new_signals[i].title, "summary": new_signals[i].summary}
+                for i in idxs
+            ]
+            result = await triage.triage(items, source_name, policy_by_source[source_name])
+            for kept in result.kept_indices:
+                keep_indices.add(idxs[kept])
+            if result.fallback_used:
+                yield json.dumps({
+                    "event": "triage_note",
+                    "source": source_name,
+                    "note": result.note,
+                })
+        new_signals = [
+            sig for idx, sig in enumerate(new_signals)
+            if sig.source not in triageable_names or idx in keep_indices
+        ]
 
     # Merge + score
     recent = get_recent_signals(days=30)

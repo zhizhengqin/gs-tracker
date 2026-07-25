@@ -310,6 +310,86 @@ class TestDailyIntel:
         assert len(done_events) == 3
         assert {e["source"] for e in done_events} == {"8-K", "13D/13G", "research_view"}
         assert events[-1]["event"] == "complete"
+        assert not any(e["event"] == "triage_note" for e in events)
+
+    @pytest.mark.asyncio
+    async def test_build_daily_sources_includes_custom(self, monkeypatch):
+        """Enabled custom RSS entries become per-source NewsSource instances."""
+        monkeypatch.setattr("src.main.RSS_FEEDS", [])
+        config = json.dumps([
+            {"name": "news", "enabled": True, "builtin": True},
+            {"name": "caixin", "label": "财新网", "type": "rss",
+             "url": "https://custom.test/feed", "filter_policy": "all",
+             "enabled": True, "builtin": False},
+        ])
+        with patch("src.main.get_setting", return_value=config), \
+             patch("src.main.NewsSource") as MockNews, \
+             patch("src.main.ThirteenDGSource"), \
+             patch("src.main.Sec8kSource"), \
+             patch("src.main.ResearchViewSource"):
+            from src.main import _build_daily_sources
+
+            _build_daily_sources()
+
+        custom_call = MockNews.call_args_list[0]
+        assert custom_call.kwargs["rss_urls"] == ["https://custom.test/feed"]
+        assert custom_call.kwargs["source_name"] == "caixin"
+        assert custom_call.kwargs["filter_policy"] == "all"
+
+    @pytest.mark.asyncio
+    async def test_build_daily_sources_skips_disabled_custom(self, monkeypatch):
+        monkeypatch.setattr("src.main.RSS_FEEDS", [])
+        config = json.dumps([
+            {"name": "news", "enabled": True, "builtin": True},
+            {"name": "caixin", "label": "财新网", "type": "rss",
+             "url": "https://custom.test/feed", "enabled": False, "builtin": False},
+        ])
+        with patch("src.main.get_setting", return_value=config), \
+             patch("src.main.NewsSource"), \
+             patch("src.main.ThirteenDGSource"), \
+             patch("src.main.Sec8kSource"), \
+             patch("src.main.ResearchViewSource"):
+            from src.main import _build_daily_sources
+
+            names = [n for n, _ in _build_daily_sources()]
+
+        assert "caixin" not in names
+
+    @pytest.mark.asyncio
+    async def test_stream_runs_triage_and_emits_note(self, tmp_path, monkeypatch, _mock_sources, _mock_storage, make_signal):
+        """News items go through AiTriage; fallback emits a triage_note event."""
+        from src.signals.ai_triage import TriageResult
+
+        monkeypatch.setattr("src.main.REPORT_OUTPUT_DIR", tmp_path)
+        monkeypatch.setattr("src.config.REPORT_OUTPUT_DIR", tmp_path)
+        monkeypatch.setattr("src.main.RSS_FEEDS", ["https://x.test/rss"])
+        sig1 = make_signal(id="n1", source="news", title="高盛研报A")
+        sig2 = make_signal(id="n2", source="news", title="无关新闻B")
+        _mock_sources["news"].return_value.fetch_since = AsyncMock(
+            return_value=([sig1, sig2], None)
+        )
+
+        with patch("src.main.AiTriage") as MockTriage, \
+             patch("src.main.get_default_llm_model", return_value=None), \
+             patch("src.main.get_recent_signals", return_value=[]):
+            MockTriage.return_value.triage = AsyncMock(
+                return_value=TriageResult(
+                    kept_indices=[0], fallback_used=True, note="AI 预算已用完"
+                )
+            )
+            from src.main import run_daily_intel_stream
+
+            events = []
+            async for ev in run_daily_intel_stream():
+                events.append(json.loads(ev))
+
+        note_events = [e for e in events if e["event"] == "triage_note"]
+        assert len(note_events) == 1
+        assert note_events[0]["source"] == "news"
+        assert "预算" in note_events[0]["note"]
+        complete = events[-1]
+        assert complete["event"] == "complete"
+        assert complete["new_signals"] == 1  # 仅保留 triage 选中的第 1 条
 
     @pytest.mark.asyncio
     async def test_build_daily_sources_respects_enabled_flags(self, monkeypatch):
@@ -331,19 +411,3 @@ class TestDailyIntel:
             sources = _build_daily_sources()
 
         assert [n for n, _ in sources] == ["13D/13G", "news"]
-
-    @pytest.mark.asyncio
-    async def test_all_rss_feeds_merges_custom_sources(self, monkeypatch):
-        """Custom RSS entries from settings merge with env feeds (dupes excluded)."""
-        monkeypatch.setattr("src.main.RSS_FEEDS", ["https://base.test/rss"])
-        config = json.dumps([
-            {"name": "custom1", "type": "rss", "url": "https://custom.test/feed", "enabled": True},
-            {"name": "custom2", "type": "rss", "url": "https://off.test/feed", "enabled": False},
-            {"name": "dup", "type": "rss", "url": "https://base.test/rss", "enabled": True},
-        ])
-        with patch("src.main.get_setting", return_value=config):
-            from src.main import _all_rss_feeds
-
-            feeds = _all_rss_feeds()
-
-        assert feeds == ["https://base.test/rss", "https://custom.test/feed"]
