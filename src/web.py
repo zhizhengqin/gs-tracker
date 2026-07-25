@@ -503,14 +503,19 @@ def _validate_custom_payload(config: dict) -> tuple:
         raise HTTPException(status_code=422, detail="标识 name 必填，仅限小写字母/数字/下划线")
     if not label or len(label) > 30:
         raise HTTPException(status_code=422, detail="名称 label 必填且不超过 30 字")
-    if not url.startswith(("http://", "https://")):
+    if source_type not in ("rss", "webpage", "topic"):
+        raise HTTPException(status_code=422, detail="type 必须是 rss、webpage 或 topic")
+    if url and not url.startswith(("http://", "https://")):
         raise HTTPException(status_code=422, detail="地址必须是 http(s) 链接")
+    if source_type in ("rss", "webpage") and not url:
+        raise HTTPException(status_code=422, detail="地址必填")
+    if source_type == "topic":
+        url = ""  # topics don't use a url
+    if source_type in ("webpage", "topic") and not instruction:
+        detail = "网页型源必须填写提取说明" if source_type == "webpage" else "主题搜索源必须填写搜索主题"
+        raise HTTPException(status_code=422, detail=detail)
     if filter_policy not in ("gs_only", "all"):
         raise HTTPException(status_code=422, detail="filter_policy 必须是 gs_only 或 all")
-    if source_type not in ("rss", "webpage"):
-        raise HTTPException(status_code=422, detail="type 必须是 rss 或 webpage")
-    if source_type == "webpage" and not instruction:
-        raise HTTPException(status_code=422, detail="网页型源必须填写提取说明")
     if len(instruction) > 100:
         raise HTTPException(status_code=422, detail="提取说明不超过 100 字")
     return name, label, url, filter_policy, source_type, instruction
@@ -552,7 +557,7 @@ async def api_edit_custom_source(name: str, config: dict = Body(...)) -> dict:
         entry["label"] = label
     if "url" in config:
         url = (config.get("url") or "").strip()
-        if not url.startswith(("http://", "https://")):
+        if url and not url.startswith(("http://", "https://")):
             raise HTTPException(status_code=422, detail="地址必须是 http(s) 链接")
         entry["url"] = url
     if "filter_policy" in config:
@@ -562,16 +567,18 @@ async def api_edit_custom_source(name: str, config: dict = Body(...)) -> dict:
     if "enabled" in config:
         entry["enabled"] = bool(config["enabled"])
     if "type" in config:
-        if config["type"] not in ("rss", "webpage"):
-            raise HTTPException(status_code=422, detail="type 必须是 rss 或 webpage")
+        if config["type"] not in ("rss", "webpage", "topic"):
+            raise HTTPException(status_code=422, detail="type 必须是 rss、webpage 或 topic")
         entry["type"] = config["type"]
     if "instruction" in config:
         instruction = (config.get("instruction") or "").strip()
         if len(instruction) > 100:
             raise HTTPException(status_code=422, detail="提取说明不超过 100 字")
         entry["instruction"] = instruction
-    if entry.get("type") == "webpage" and not (entry.get("instruction") or "").strip():
-        raise HTTPException(status_code=422, detail="网页型源必须填写提取说明")
+    if entry.get("type") in ("webpage", "topic") and not (entry.get("instruction") or "").strip():
+        raise HTTPException(status_code=422, detail="该类型源必须填写说明/主题")
+    if entry.get("type") == "topic":
+        entry["url"] = ""  # topics don't use a url
     set_setting("sources_config", json.dumps(sources, ensure_ascii=False))
     return {"status": "ok"}
 
@@ -597,13 +604,24 @@ async def api_test_source(config: dict = Body(...)) -> dict:
     source_type = config.get("type") or "rss"
     filter_policy = config.get("filter_policy") or "gs_only"
     instruction = (config.get("instruction") or "").strip()
-    label = (config.get("label") or "").strip() or url
-    if not url.startswith(("http://", "https://")):
+    label = (config.get("label") or "").strip() or url or instruction
+    if source_type not in ("rss", "webpage", "topic"):
+        raise HTTPException(status_code=422, detail="type 必须是 rss、webpage 或 topic")
+    if source_type in ("rss", "webpage") and not url.startswith(("http://", "https://")):
         raise HTTPException(status_code=422, detail="地址必须是 http(s) 链接")
-    if source_type not in ("rss", "webpage"):
-        raise HTTPException(status_code=422, detail="type 必须是 rss 或 webpage")
 
-    if source_type == "webpage":
+    if source_type == "topic":
+        if not instruction:
+            raise HTTPException(status_code=422, detail="主题搜索源必须填写搜索主题")
+        from src.signals.topic_source import TopicSource
+
+        source = TopicSource(
+            topic=instruction, source_name="_test",
+            filter_policy=filter_policy,
+            llm_config=resolve_llm_config(get_default_llm_model()),
+            get_setting=get_setting, set_setting=set_setting,
+        )
+    elif source_type == "webpage":
         if not instruction:
             raise HTTPException(status_code=422, detail="网页型源必须填写提取说明")
         from src.signals.webpage_source import WebpageSource

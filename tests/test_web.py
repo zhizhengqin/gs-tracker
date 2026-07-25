@@ -558,3 +558,78 @@ def test_test_source_webpage_requires_instruction(signals_db):
     resp = client.post("/api/settings/sources/test",
                        json={"url": "https://example.com/p", "type": "webpage"})
     assert resp.status_code == 422
+
+
+def test_topic_source_crud(signals_db):
+    payload = _custom_payload(name="gs_china_view", type="topic", url="",
+                              instruction="高盛对中国股市的最新观点")
+    assert client.post("/api/settings/sources/custom", json=payload).status_code == 201
+
+    sources = client.get("/api/settings/sources").json()
+    entry = [s for s in sources if s["name"] == "gs_china_view"][0]
+    assert entry["type"] == "topic"
+    assert entry["url"] == ""
+    assert entry["instruction"] == "高盛对中国股市的最新观点"
+
+
+def test_topic_source_requires_topic(signals_db):
+    resp = client.post(
+        "/api/settings/sources/custom",
+        json=_custom_payload(type="topic", url="", instruction=""),
+    )
+    assert resp.status_code == 422
+
+
+def test_topic_source_rejects_bad_url(signals_db):
+    resp = client.post(
+        "/api/settings/sources/custom",
+        json=_custom_payload(type="topic", url="ftp://x", instruction="主题"),
+    )
+    assert resp.status_code == 422
+
+
+def test_topic_edit_cannot_drop_instruction(signals_db):
+    payload = _custom_payload(name="tp", type="topic", url="", instruction="主题")
+    assert client.post("/api/settings/sources/custom", json=payload).status_code == 201
+    resp = client.put("/api/settings/sources/custom/tp", json={"instruction": " "})
+    assert resp.status_code == 422
+
+
+def test_test_source_topic_preview(signals_db, monkeypatch, make_signal):
+    """Topic test runs a real search + triage preview with per-item keep flags."""
+    class _FakeTopicSource:
+        def __init__(self, **kwargs):
+            self.fetch_note = ""
+
+        async def fetch(self, quarter):
+            return [make_signal(id="t1", title="要点一"), make_signal(id="t2", title="要点二")]
+
+        async def close(self):
+            pass
+
+    class _FakeTriage:
+        def __init__(self, *a, **kw):
+            pass
+
+        async def triage(self, items, label, policy):
+            from src.signals.ai_triage import TriageResult
+            return TriageResult(kept_indices=[1], fallback_used=False, note="")
+
+    monkeypatch.setattr("src.signals.topic_source.TopicSource", _FakeTopicSource)
+    monkeypatch.setattr("src.web.AiTriage", _FakeTriage)
+    monkeypatch.setattr("src.web.resolve_llm_config",
+                        lambda m: {"api_key": None, "auth_token": "t", "base_url": "u", "model": "m"})
+
+    resp = client.post("/api/settings/sources/test", json={
+        "type": "topic", "instruction": "高盛对中国股市的最新观点", "filter_policy": "gs_only",
+    })
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["ok"] is True
+    assert data["ai_used"] is True
+    assert data["items"] == [{"title": "要点一", "kept": False}, {"title": "要点二", "kept": True}]
+
+
+def test_test_source_topic_requires_instruction(signals_db):
+    resp = client.post("/api/settings/sources/test", json={"type": "topic"})
+    assert resp.status_code == 422
