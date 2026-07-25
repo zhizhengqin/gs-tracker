@@ -383,6 +383,32 @@ class TestDailyIntel:
         assert web_call.kwargs["filter_policy"] == "gs_only"
 
     @pytest.mark.asyncio
+    async def test_build_daily_sources_includes_topic(self, monkeypatch):
+        """topic-type custom entries become TopicSource instances (no url needed)."""
+        monkeypatch.setattr("src.main.RSS_FEEDS", [])
+        config = json.dumps([
+            {"name": "news", "enabled": True, "builtin": True},
+            {"name": "gs_china_view", "label": "高盛中国观点", "type": "topic",
+             "url": "", "instruction": "高盛对中国股市的最新观点",
+             "filter_policy": "gs_only", "enabled": True, "builtin": False},
+        ])
+        with patch("src.main.get_setting", return_value=config), \
+             patch("src.main.TopicSource") as MockTopic, \
+             patch("src.main.NewsSource"), \
+             patch("src.main.ThirteenDGSource"), \
+             patch("src.main.Sec8kSource"), \
+             patch("src.main.ResearchViewSource"), \
+             patch("src.main.get_default_llm_model", return_value=None):
+            from src.main import _build_daily_sources
+
+            _build_daily_sources()
+
+        topic_call = MockTopic.call_args_list[0]
+        assert topic_call.kwargs["topic"] == "高盛对中国股市的最新观点"
+        assert topic_call.kwargs["source_name"] == "gs_china_view"
+        assert topic_call.kwargs["filter_policy"] == "gs_only"
+
+    @pytest.mark.asyncio
     async def test_stream_emits_triage_note_from_fetch_note(self, tmp_path, monkeypatch, _mock_sources, _mock_storage):
         """A source's fetch_note surfaces as a yellow triage_note SSE event."""
         monkeypatch.setattr("src.main.REPORT_OUTPUT_DIR", tmp_path)

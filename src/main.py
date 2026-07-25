@@ -26,6 +26,7 @@ from src.signals.aggregator import SignalAggregator
 from src.signals.ai_triage import AiTriage
 from src.signals.base import Signal
 from src.signals.news_source import NewsSource
+from src.signals.topic_source import TopicSource
 from src.signals.webpage_source import WebpageSource
 from src.signals.scorer import SignalScorer
 from src.signals.sec_8k_source import Sec8kSource
@@ -98,9 +99,9 @@ def _build_daily_sources() -> list:
             sources.append(("news", NewsSource(rss_urls=feeds)))
     # Custom sources from the settings page (one instance per source)
     for entry in _custom_source_configs():
-        if entry.get("name") not in enabled or not entry.get("url"):
+        if entry.get("name") not in enabled:
             continue
-        if entry.get("type") == "rss":
+        if entry.get("type") == "rss" and entry.get("url"):
             sources.append((
                 entry["name"],
                 NewsSource(
@@ -109,12 +110,27 @@ def _build_daily_sources() -> list:
                     filter_policy=entry.get("filter_policy", "gs_only"),
                 ),
             ))
-        elif entry.get("type") == "webpage":
+        elif entry.get("type") == "webpage" and entry.get("url"):
             sources.append((
                 entry["name"],
                 WebpageSource(
                     url=entry["url"],
                     instruction=entry.get("instruction", ""),
+                    source_name=entry["name"],
+                    filter_policy=entry.get("filter_policy", "gs_only"),
+                    llm_config=resolve_llm_config(get_default_llm_model()),
+                    get_setting=get_setting,
+                    set_setting=set_setting,
+                    recent_titles=lambda name: {
+                        s.title for s in get_recent_signals(days=30) if s.source == name
+                    },
+                ),
+            ))
+        elif entry.get("type") == "topic" and entry.get("instruction"):
+            sources.append((
+                entry["name"],
+                TopicSource(
+                    topic=entry["instruction"],
                     source_name=entry["name"],
                     filter_policy=entry.get("filter_policy", "gs_only"),
                     llm_config=resolve_llm_config(get_default_llm_model()),
