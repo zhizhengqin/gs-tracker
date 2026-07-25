@@ -625,7 +625,9 @@ async def api_test_llm_model(config: dict = Body(...)) -> dict:
         )
         resp = await client.messages.create(
             model=model_name,
-            max_tokens=16,
+            # Thinking models spend output tokens on a reasoning block first;
+            # a tiny cap leaves no room for the actual text answer.
+            max_tokens=512,
             messages=[{"role": "user", "content": "ping"}],
         )
         text = ""
@@ -750,7 +752,9 @@ async def api_analyze_signal(signal_id: str, body: dict = Body(default={})) -> d
         )
         resp = await client.messages.create(
             model=llm["model"],
-            max_tokens=800,
+            # Headroom for gateways whose models emit a thinking block first —
+            # an 800 cap was exhausted by reasoning, yielding empty text.
+            max_tokens=2048,
             messages=[{"role": "user", "content": prompt}],
         )
         text = ""
@@ -762,7 +766,7 @@ async def api_analyze_signal(signal_id: str, body: dict = Body(default={})) -> d
             # Transient empty completions happen with some gateways — retry once
             resp = await client.messages.create(
                 model=llm["model"],
-                max_tokens=800,
+                max_tokens=2048,
                 messages=[{"role": "user", "content": prompt}],
             )
             for block in resp.content:
@@ -848,7 +852,7 @@ async def api_get_daily_report(date: str) -> dict:
         )
         resp = await client.messages.create(
             model=llm["model"],
-            max_tokens=1024,
+            max_tokens=2048,  # leave room for thinking-block models
             messages=[{"role": "user", "content": prompt}],
         )
         text = ""
