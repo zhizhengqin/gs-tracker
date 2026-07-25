@@ -1,6 +1,8 @@
 """FastAPI web service for dashboard, report browsing and API access."""
 import asyncio
+import json
 import logging
+import re
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from pathlib import Path
@@ -446,18 +448,12 @@ async def api_update_settings(settings: dict = Body(...)) -> dict:
     return {"status": "ok"}
 
 
-@app.get("/api/settings/sources")
-async def api_get_sources() -> list:
-    """Return the configured signal source list (enabled/disabled state)."""
-    import json
-    raw = get_setting("sources_config", "")
-    if raw:
-        try:
-            return json.loads(raw)
-        except json.JSONDecodeError:
-            pass
-    # Default: all 6 built-in sources enabled
-    defaults = [
+BUILTIN_SOURCE_NAMES = {"13F", "8-K", "13D/13G", "research_view", "news", "macro_view"}
+
+
+def _default_source_entries() -> list:
+    """The six built-in sources, all enabled."""
+    return [
         {"name": "13F", "label": "13F 持仓", "description": "高盛季度 13F 持仓报告", "enabled": True, "builtin": True},
         {"name": "8-K", "label": "SEC 8-K", "description": "高盛重大事件即时披露", "enabled": True, "builtin": True},
         {"name": "13D/13G", "label": "13D/13G", "description": "大股东权益变动披露", "enabled": True, "builtin": True},
@@ -465,15 +461,135 @@ async def api_get_sources() -> list:
         {"name": "news", "label": "新闻", "description": "RSS 新闻关键词匹配", "enabled": True, "builtin": True},
         {"name": "macro_view", "label": "宏观指标", "description": "FRED 宏观数据（利率/VIX/美元）", "enabled": True, "builtin": True},
     ]
-    return defaults
+
+
+def _stored_or_default_sources() -> list:
+    raw = get_setting("sources_config", "")
+    if raw:
+        try:
+            return json.loads(raw)
+        except json.JSONDecodeError:
+            pass
+    return _default_source_entries()
+
+
+@app.get("/api/settings/sources")
+async def api_get_sources() -> list:
+    """Return the configured signal source list (enabled/disabled state)."""
+    return _stored_or_default_sources()
 
 
 @app.put("/api/settings/sources")
 async def api_update_sources(sources: List[dict] = Body(...)) -> dict:
     """Save signal source configuration."""
-    import json
     set_setting("sources_config", json.dumps(sources, ensure_ascii=False))
     return {"status": "ok"}
+
+
+# ====== Custom signal sources ======
+
+_CUSTOM_NAME_RE = re.compile(r"^[a-z0-9_]+$")
+
+
+def _validate_custom_payload(config: dict) -> tuple:
+    """Return (name, label, url, filter_policy) or raise 422."""
+    name = (config.get("name") or "").strip()
+    label = (config.get("label") or "").strip()
+    url = (config.get("url") or "").strip()
+    filter_policy = config.get("filter_policy") or "gs_only"
+    if not name or not _CUSTOM_NAME_RE.match(name):
+        raise HTTPException(status_code=422, detail="标识 name 必填，仅限小写字母/数字/下划线")
+    if not label or len(label) > 30:
+        raise HTTPException(status_code=422, detail="名称 label 必填且不超过 30 字")
+    if not url.startswith(("http://", "https://")):
+        raise HTTPException(status_code=422, detail="地址必须是 http(s) 链接")
+    if filter_policy not in ("gs_only", "all"):
+        raise HTTPException(status_code=422, detail="filter_policy 必须是 gs_only 或 all")
+    return name, label, url, filter_policy
+
+
+@app.post("/api/settings/sources/custom", status_code=201)
+async def api_add_custom_source(config: dict = Body(...)) -> dict:
+    """Add a custom RSS signal source."""
+    name, label, url, filter_policy = _validate_custom_payload(config)
+    sources = _stored_or_default_sources()
+    if any(s.get("name") == name for s in sources) or name in BUILTIN_SOURCE_NAMES:
+        raise HTTPException(status_code=409, detail=f"标识 {name} 已存在")
+    sources.append({
+        "name": name,
+        "label": label,
+        "type": "rss",
+        "url": url,
+        "filter_policy": filter_policy,
+        "enabled": True,
+        "builtin": False,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    })
+    set_setting("sources_config", json.dumps(sources, ensure_ascii=False))
+    return {"status": "ok", "name": name}
+
+
+@app.put("/api/settings/sources/custom/{name}")
+async def api_edit_custom_source(name: str, config: dict = Body(...)) -> dict:
+    """Edit a custom source (label/url/filter_policy/enabled)."""
+    sources = _stored_or_default_sources()
+    entry = next((s for s in sources if s.get("name") == name and not s.get("builtin", True)), None)
+    if entry is None:
+        raise HTTPException(status_code=404, detail="自定义源不存在")
+    if "label" in config:
+        label = (config.get("label") or "").strip()
+        if not label or len(label) > 30:
+            raise HTTPException(status_code=422, detail="名称 label 必填且不超过 30 字")
+        entry["label"] = label
+    if "url" in config:
+        url = (config.get("url") or "").strip()
+        if not url.startswith(("http://", "https://")):
+            raise HTTPException(status_code=422, detail="地址必须是 http(s) 链接")
+        entry["url"] = url
+    if "filter_policy" in config:
+        if config["filter_policy"] not in ("gs_only", "all"):
+            raise HTTPException(status_code=422, detail="filter_policy 必须是 gs_only 或 all")
+        entry["filter_policy"] = config["filter_policy"]
+    if "enabled" in config:
+        entry["enabled"] = bool(config["enabled"])
+    set_setting("sources_config", json.dumps(sources, ensure_ascii=False))
+    return {"status": "ok"}
+
+
+@app.delete("/api/settings/sources/custom/{name}")
+async def api_delete_custom_source(name: str) -> dict:
+    """Delete a custom source. Built-in sources cannot be deleted."""
+    if name in BUILTIN_SOURCE_NAMES:
+        raise HTTPException(status_code=400, detail="内置源不可删除")
+    sources = _stored_or_default_sources()
+    remaining = [s for s in sources if s.get("name") != name]
+    if len(remaining) == len(sources):
+        raise HTTPException(status_code=404, detail="自定义源不存在")
+    set_setting("sources_config", json.dumps(remaining, ensure_ascii=False))
+    return {"status": "ok"}
+
+
+@app.post("/api/settings/sources/test")
+async def api_test_source(config: dict = Body(...)) -> dict:
+    """Fetch a candidate RSS URL once; return item count + sample titles.
+    No AI calls, nothing persisted."""
+    url = (config.get("url") or "").strip()
+    if not url.startswith(("http://", "https://")):
+        raise HTTPException(status_code=422, detail="地址必须是 http(s) 链接")
+    from src.signals.news_source import NewsSource
+
+    source = NewsSource(rss_urls=[url], source_name="_test", filter_policy="all")
+    try:
+        signals = await source.fetch("")
+        return {
+            "ok": True,
+            "count": len(signals),
+            "sample_titles": [s.title for s in signals[:3]],
+        }
+    except Exception as exc:
+        return {"ok": False, "error": f"抓取失败：{exc}"}
+    finally:
+        await source.close()
 
 
 # ====== LLM model management ======

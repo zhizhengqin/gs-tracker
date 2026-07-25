@@ -392,3 +392,86 @@ def test_analyze_signal_regenerates_after_sentinel(signals_db, monkeypatch):
     assert resp.json()["analysis"] == "新的解读"
     assert resp.json()["cached"] is False
     assert storage.get_signal_analysis("sig-x") == "新的解读"
+
+
+# ====== Custom source settings API ======
+
+def _custom_payload(**overrides):
+    payload = {
+        "name": "caixin",
+        "label": "财新网",
+        "url": "https://example.com/rss",
+        "filter_policy": "all",
+    }
+    payload.update(overrides)
+    return payload
+
+
+def test_custom_source_crud_cycle(signals_db):
+    resp = client.post("/api/settings/sources/custom", json=_custom_payload())
+    assert resp.status_code == 201
+
+    sources = client.get("/api/settings/sources").json()
+    custom = [s for s in sources if s["name"] == "caixin"]
+    assert len(custom) == 1
+    assert custom[0]["builtin"] is False
+    assert custom[0]["filter_policy"] == "all"
+    assert custom[0]["enabled"] is True
+
+    resp = client.put("/api/settings/sources/custom/caixin", json={"label": "财新", "enabled": False})
+    assert resp.status_code == 200
+    custom = [s for s in client.get("/api/settings/sources").json() if s["name"] == "caixin"]
+    assert custom[0]["label"] == "财新"
+    assert custom[0]["enabled"] is False
+
+    resp = client.delete("/api/settings/sources/custom/caixin")
+    assert resp.status_code == 200
+    assert not [s for s in client.get("/api/settings/sources").json() if s["name"] == "caixin"]
+
+
+def test_custom_source_validation(signals_db):
+    assert client.post("/api/settings/sources/custom", json=_custom_payload(name="Bad Name")).status_code == 422
+    assert client.post("/api/settings/sources/custom", json=_custom_payload(url="ftp://x")).status_code == 422
+    assert client.post("/api/settings/sources/custom", json=_custom_payload(filter_policy="weird")).status_code == 422
+    assert client.post("/api/settings/sources/custom", json=_custom_payload(label="")).status_code == 422
+
+
+def test_custom_source_duplicate_rejected(signals_db):
+    assert client.post("/api/settings/sources/custom", json=_custom_payload()).status_code == 201
+    assert client.post("/api/settings/sources/custom", json=_custom_payload()).status_code == 409
+    assert client.post("/api/settings/sources/custom", json=_custom_payload(name="news")).status_code == 409
+
+
+def test_custom_source_delete_builtin_rejected(signals_db):
+    assert client.delete("/api/settings/sources/custom/news").status_code == 400
+    assert client.delete("/api/settings/sources/custom/nosuch").status_code == 404
+
+
+def test_custom_source_edit_builtin_rejected(signals_db):
+    assert client.put("/api/settings/sources/custom/news", json={"label": "x"}).status_code == 404
+
+
+def test_test_source_endpoint(signals_db, monkeypatch, make_signal):
+    class _FakeSource:
+        def __init__(self, **kwargs):
+            pass
+
+        async def fetch(self, quarter):
+            return [
+                make_signal(id="t1", title="标题一"),
+                make_signal(id="t2", title="标题二"),
+            ]
+
+        async def close(self):
+            pass
+
+    monkeypatch.setattr("src.signals.news_source.NewsSource", _FakeSource)
+    resp = client.post("/api/settings/sources/test", json={"url": "https://example.com/rss"})
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["ok"] is True
+    assert data["count"] == 2
+    assert data["sample_titles"] == ["标题一", "标题二"]
+
+    resp = client.post("/api/settings/sources/test", json={"url": "not-a-url"})
+    assert resp.status_code == 422
