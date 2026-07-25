@@ -466,12 +466,95 @@ def test_test_source_endpoint(signals_db, monkeypatch, make_signal):
             pass
 
     monkeypatch.setattr("src.signals.news_source.NewsSource", _FakeSource)
+    # Hermetic no-LLM config regardless of developer-shell env credentials
+    monkeypatch.setattr("src.web.resolve_llm_config",
+                        lambda m: {"api_key": None, "auth_token": None, "base_url": None, "model": "m"})
     resp = client.post("/api/settings/sources/test", json={"url": "https://example.com/rss"})
     assert resp.status_code == 200
     data = resp.json()
     assert data["ok"] is True
     assert data["count"] == 2
     assert data["sample_titles"] == ["标题一", "标题二"]
+    # No LLM configured in the test DB → no triage preview, all kept
+    assert data["items"] == [{"title": "标题一", "kept": True}, {"title": "标题二", "kept": True}]
+    assert data["ai_used"] is False
 
     resp = client.post("/api/settings/sources/test", json={"url": "not-a-url"})
+    assert resp.status_code == 422
+
+
+def test_webpage_source_crud(signals_db):
+    payload = _custom_payload(name="gs_page", type="webpage", instruction="提取高盛观点")
+    assert client.post("/api/settings/sources/custom", json=payload).status_code == 201
+
+    sources = client.get("/api/settings/sources").json()
+    entry = [s for s in sources if s["name"] == "gs_page"][0]
+    assert entry["type"] == "webpage"
+    assert entry["instruction"] == "提取高盛观点"
+
+    resp = client.put("/api/settings/sources/custom/gs_page", json={"instruction": "提取目标价"})
+    assert resp.status_code == 200
+    entry = [s for s in client.get("/api/settings/sources").json() if s["name"] == "gs_page"][0]
+    assert entry["instruction"] == "提取目标价"
+
+
+def test_webpage_source_requires_instruction(signals_db):
+    resp = client.post(
+        "/api/settings/sources/custom",
+        json=_custom_payload(type="webpage", instruction=""),
+    )
+    assert resp.status_code == 422
+
+
+def test_webpage_edit_cannot_drop_instruction(signals_db):
+    payload = _custom_payload(name="wp", type="webpage", instruction="提取要点")
+    assert client.post("/api/settings/sources/custom", json=payload).status_code == 201
+    resp = client.put("/api/settings/sources/custom/wp", json={"instruction": "  "})
+    assert resp.status_code == 422
+
+
+def test_bad_source_type_rejected(signals_db):
+    resp = client.post("/api/settings/sources/custom", json=_custom_payload(type="topic"))
+    assert resp.status_code == 422
+
+
+def test_test_source_webpage_preview(signals_db, monkeypatch, make_signal):
+    """Webpage test runs extraction + AI triage preview with per-item keep flags."""
+    class _FakeWebSource:
+        def __init__(self, **kwargs):
+            self.fetch_note = ""
+
+        async def fetch(self, quarter):
+            return [make_signal(id="w1", title="要点一"), make_signal(id="w2", title="要点二")]
+
+        async def close(self):
+            pass
+
+    class _FakeTriage:
+        def __init__(self, *a, **kw):
+            pass
+
+        async def triage(self, items, label, policy):
+            from src.signals.ai_triage import TriageResult
+            return TriageResult(kept_indices=[0], fallback_used=False, note="")
+
+    monkeypatch.setattr("src.signals.webpage_source.WebpageSource", _FakeWebSource)
+    monkeypatch.setattr("src.web.AiTriage", _FakeTriage)
+    monkeypatch.setattr("src.web.resolve_llm_config",
+                        lambda m: {"api_key": None, "auth_token": "t", "base_url": "u", "model": "m"})
+
+    resp = client.post("/api/settings/sources/test", json={
+        "url": "https://example.com/page", "type": "webpage", "instruction": "提取要点",
+    })
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["ok"] is True
+    assert data["count"] == 2
+    assert data["ai_used"] is True
+    assert data["items"] == [{"title": "要点一", "kept": True}, {"title": "要点二", "kept": False}]
+
+
+def test_test_source_webpage_requires_instruction(signals_db):
+    resp = client.post("/api/settings/sources/test",
+                       json={"url": "https://example.com/p", "type": "webpage"})
     assert resp.status_code == 422

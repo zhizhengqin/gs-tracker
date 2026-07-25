@@ -12,7 +12,9 @@ from fastapi import Body, FastAPI, HTTPException, Path as PathParam
 from fastapi.responses import HTMLResponse, StreamingResponse
 
 from src.config import PROJECT_ROOT, REPORT_OUTPUT_DIR
+from src.llm_config import resolve_llm_config
 from src.main import run_pipeline
+from src.signals.ai_triage import AiTriage
 from src.signals.base import Signal
 from src.storage import (
     add_llm_model,
@@ -101,8 +103,6 @@ def _seed_default_llm_from_env() -> None:
 
 def _llm_client_kwargs(db_model: Optional[dict]) -> dict:
     """Thin wrapper kept for existing call sites; logic lives in llm_config."""
-    from src.llm_config import resolve_llm_config
-
     return resolve_llm_config(db_model)
 
 
@@ -492,11 +492,13 @@ _CUSTOM_NAME_RE = re.compile(r"^[a-z0-9_]+$")
 
 
 def _validate_custom_payload(config: dict) -> tuple:
-    """Return (name, label, url, filter_policy) or raise 422."""
+    """Return (name, label, url, filter_policy, source_type, instruction) or raise 422."""
     name = (config.get("name") or "").strip()
     label = (config.get("label") or "").strip()
     url = (config.get("url") or "").strip()
     filter_policy = config.get("filter_policy") or "gs_only"
+    source_type = config.get("type") or "rss"
+    instruction = (config.get("instruction") or "").strip()
     if not name or not _CUSTOM_NAME_RE.match(name):
         raise HTTPException(status_code=422, detail="标识 name 必填，仅限小写字母/数字/下划线")
     if not label or len(label) > 30:
@@ -505,22 +507,29 @@ def _validate_custom_payload(config: dict) -> tuple:
         raise HTTPException(status_code=422, detail="地址必须是 http(s) 链接")
     if filter_policy not in ("gs_only", "all"):
         raise HTTPException(status_code=422, detail="filter_policy 必须是 gs_only 或 all")
-    return name, label, url, filter_policy
+    if source_type not in ("rss", "webpage"):
+        raise HTTPException(status_code=422, detail="type 必须是 rss 或 webpage")
+    if source_type == "webpage" and not instruction:
+        raise HTTPException(status_code=422, detail="网页型源必须填写提取说明")
+    if len(instruction) > 100:
+        raise HTTPException(status_code=422, detail="提取说明不超过 100 字")
+    return name, label, url, filter_policy, source_type, instruction
 
 
 @app.post("/api/settings/sources/custom", status_code=201)
 async def api_add_custom_source(config: dict = Body(...)) -> dict:
-    """Add a custom RSS signal source."""
-    name, label, url, filter_policy = _validate_custom_payload(config)
+    """Add a custom signal source (RSS or webpage)."""
+    name, label, url, filter_policy, source_type, instruction = _validate_custom_payload(config)
     sources = _stored_or_default_sources()
     if any(s.get("name") == name for s in sources) or name in BUILTIN_SOURCE_NAMES:
         raise HTTPException(status_code=409, detail=f"标识 {name} 已存在")
     sources.append({
         "name": name,
         "label": label,
-        "type": "rss",
+        "type": source_type,
         "url": url,
         "filter_policy": filter_policy,
+        "instruction": instruction,
         "enabled": True,
         "builtin": False,
         "created_at": datetime.now(timezone.utc).isoformat(),
@@ -552,6 +561,17 @@ async def api_edit_custom_source(name: str, config: dict = Body(...)) -> dict:
         entry["filter_policy"] = config["filter_policy"]
     if "enabled" in config:
         entry["enabled"] = bool(config["enabled"])
+    if "type" in config:
+        if config["type"] not in ("rss", "webpage"):
+            raise HTTPException(status_code=422, detail="type 必须是 rss 或 webpage")
+        entry["type"] = config["type"]
+    if "instruction" in config:
+        instruction = (config.get("instruction") or "").strip()
+        if len(instruction) > 100:
+            raise HTTPException(status_code=422, detail="提取说明不超过 100 字")
+        entry["instruction"] = instruction
+    if entry.get("type") == "webpage" and not (entry.get("instruction") or "").strip():
+        raise HTTPException(status_code=422, detail="网页型源必须填写提取说明")
     set_setting("sources_config", json.dumps(sources, ensure_ascii=False))
     return {"status": "ok"}
 
@@ -571,21 +591,67 @@ async def api_delete_custom_source(name: str) -> dict:
 
 @app.post("/api/settings/sources/test")
 async def api_test_source(config: dict = Body(...)) -> dict:
-    """Fetch a candidate RSS URL once; return item count + sample titles.
-    No AI calls, nothing persisted."""
+    """Fetch a candidate source once, then preview AI triage keep/drop.
+    Nothing persisted. The triage preview consumes the normal daily budget."""
     url = (config.get("url") or "").strip()
+    source_type = config.get("type") or "rss"
+    filter_policy = config.get("filter_policy") or "gs_only"
+    instruction = (config.get("instruction") or "").strip()
+    label = (config.get("label") or "").strip() or url
     if not url.startswith(("http://", "https://")):
         raise HTTPException(status_code=422, detail="地址必须是 http(s) 链接")
-    from src.signals.news_source import NewsSource
+    if source_type not in ("rss", "webpage"):
+        raise HTTPException(status_code=422, detail="type 必须是 rss 或 webpage")
 
-    source = NewsSource(rss_urls=[url], source_name="_test", filter_policy="all")
+    if source_type == "webpage":
+        if not instruction:
+            raise HTTPException(status_code=422, detail="网页型源必须填写提取说明")
+        from src.signals.webpage_source import WebpageSource
+
+        source = WebpageSource(
+            url=url, instruction=instruction, source_name="_test",
+            filter_policy=filter_policy,
+            llm_config=resolve_llm_config(get_default_llm_model()),
+            get_setting=get_setting, set_setting=set_setting,
+        )
+    else:
+        from src.signals.news_source import NewsSource
+
+        source = NewsSource(rss_urls=[url], source_name="_test", filter_policy=filter_policy)
+
     try:
         signals = await source.fetch("")
-        return {
+        result = {
             "ok": True,
             "count": len(signals),
             "sample_titles": [s.title for s in signals[:3]],
+            "ai_used": False,
+            "items": [{"title": s.title, "kept": True} for s in signals[:20]],
         }
+        note = getattr(source, "fetch_note", "")
+        if note:
+            result["note"] = note
+            return result
+        items = [{"title": s.title, "summary": s.summary} for s in signals[:20]]
+        if not items:
+            return result
+        llm_cfg = resolve_llm_config(get_default_llm_model())
+        if not (llm_cfg.get("api_key") or llm_cfg.get("auth_token")):
+            result["note"] = "未配置大模型，未预览 AI 预筛"
+            return result
+        triage = AiTriage(llm_cfg, get_setting, set_setting)
+        verdict = await triage.triage(items, label, filter_policy)
+        kept_set = set(verdict.kept_indices)
+        result["items"] = [
+            {"title": it["title"], "kept": i in kept_set}
+            for i, it in enumerate(items)
+        ]
+        result["ai_used"] = not verdict.fallback_used
+        if verdict.fallback_used:
+            result["note"] = verdict.note
+        return result
+    except HTTPException:
+        raise
     except Exception as exc:
         return {"ok": False, "error": f"抓取失败：{exc}"}
     finally:
