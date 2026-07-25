@@ -85,6 +85,30 @@ async def test_batches_split(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_truncated_reason_still_uses_keep_array(monkeypatch):
+    """Model blew the token budget mid-reason: JSON tail is cut off, but the
+    keep array closed cleanly and must still be honored (no fallback)."""
+    store, gs, ss = _store()
+    truncated = '{"keep": [1, 9], "reason": "第1条直接引用高盛交易主管报告及其对反身性风险'
+    _patch_client(monkeypatch, [truncated])
+    triage = AiTriage(LLM_CFG, gs, ss)
+    result = await triage.triage(_items(10), "测试源", "gs_only")
+    assert result.kept_indices == [0, 8]
+    assert result.fallback_used is False
+
+
+@pytest.mark.asyncio
+async def test_truncated_inside_keep_array_falls_back(monkeypatch):
+    """Truncation inside the keep array itself → boundary unknown → keep-all."""
+    store, gs, ss = _store()
+    _patch_client(monkeypatch, ['{"keep": [1, 9'])
+    triage = AiTriage(LLM_CFG, gs, ss)
+    result = await triage.triage(_items(2), "测试源", "gs_only")
+    assert result.kept_indices == [0, 1]
+    assert result.fallback_used is True
+
+
+@pytest.mark.asyncio
 async def test_garbage_json_falls_back(monkeypatch):
     store, gs, ss = _store()
     _patch_client(monkeypatch, ["我觉得都不错"])

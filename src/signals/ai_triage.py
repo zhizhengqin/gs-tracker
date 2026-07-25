@@ -19,8 +19,9 @@ DEFAULT_DAILY_BUDGET = 20
 
 _CRITERIA = {
     "gs_only": (
-        "仅保留与高盛（Goldman Sachs）相关的内容：高盛的观点、研报、评级、"
-        "目标价、人事与业务动态。与高盛无关的一律不留。"
+        "保留与高盛（Goldman Sachs）相关且对理解市场有帮助的内容：高盛的观点、研报、"
+        "评级、目标价、人事与业务动态，或引用高盛观点分析市场的报道。"
+        "仅当高盛被一笔带过、内容主体与高盛无关时才丢弃。"
     ),
     "all": (
         "保留对 A 股投资者有参考价值的内容：市场趋势、宏观政策、机构观点、"
@@ -37,18 +38,23 @@ class TriageResult:
 
 
 def _parse_keep(text: str, batch_len: int) -> Optional[list]:
-    """Extract {"keep": [1-based indices]} from model output; None if unparseable."""
-    match = re.search(r"\{.*\}", text, re.S)
+    """Extract 1-based keep indices from model output; None if unparseable.
+
+    The keep array is extracted directly instead of parsing the whole JSON
+    object: models occasionally blow the token budget mid-"reason", leaving a
+    truncated tail that is not valid JSON — the array itself is still sound.
+    A truncated array (no closing "]") returns None → caller falls back.
+    """
+    match = re.search(r'"keep"\s*:\s*\[([^\]]*)\]', text)
     if not match:
         return None
     try:
-        obj = json.loads(match.group(0))
+        indices = json.loads(f"[{match.group(1)}]")
     except json.JSONDecodeError:
         return None
-    keep = obj.get("keep")
-    if not isinstance(keep, list):
+    if not isinstance(indices, list):
         return None
-    return [i - 1 for i in keep if isinstance(i, int) and 1 <= i <= batch_len]
+    return [i - 1 for i in indices if isinstance(i, int) and 1 <= i <= batch_len]
 
 
 class AiTriage:
@@ -90,7 +96,7 @@ class AiTriage:
             f"信息源：{source_label}\n"
             f"筛选标准：{criteria}\n\n"
             f"候选内容（编号. 标题 — 摘要）：\n{numbered}\n\n"
-            '只输出 JSON，不要输出其他内容：{"keep": [要保留的编号], "reason": "一句话理由"}'
+            '只输出 JSON，不要输出其他内容：{"keep": [要保留的编号], "reason": "不超过20字"}'
         )
 
     async def triage(self, items: list, source_label: str, filter_policy: str) -> TriageResult:
@@ -124,7 +130,9 @@ class AiTriage:
             try:
                 resp = await client.messages.create(
                     model=self.llm_config["model"],
-                    max_tokens=512,
+                    # Thinking models burn output tokens on a reasoning block
+                    # before the JSON — 512 was exhausted by it, leaving "".
+                    max_tokens=2048,
                     messages=[{"role": "user", "content": prompt}],
                 )
                 self._increment_calls()
