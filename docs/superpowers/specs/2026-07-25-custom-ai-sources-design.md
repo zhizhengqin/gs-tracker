@@ -171,8 +171,8 @@ class AiTriage:
 
 | 阶段 | 内容 | 状态 |
 |---|---|---|
-| P1（本次实施） | 数据模型 + 设置 API + 设置页 UI + CustomRssSource + AiTriage + 流水线集成 + 测试源按钮 | 本 spec 实施目标 |
-| P2 | `webpage` 型（httpx 抓正文 + 按 instruction 让 AI 提取要点）+ 预筛效果预览（测试源按钮展示 AI keep/drop） | 本 spec 仅留接口 |
+| P1（已实施 2026-07-25） | 数据模型 + 设置 API + 设置页 UI + CustomRssSource + AiTriage + 流水线集成 + 测试源按钮 | ✅ 已上线 |
+| P2（已实施 2026-07-25） | `webpage` 型（httpx 抓正文 + 按 instruction 让 AI 提取要点）+ 预筛效果预览（测试源按钮展示 AI keep/drop） | ✅ 已上线 |
 | P3 | `topic` 型（AI 按主题自行搜索整理） | 本 spec 仅留类型枚举 |
 
 ## 不变更 / 非目标
