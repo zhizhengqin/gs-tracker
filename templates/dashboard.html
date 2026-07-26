@@ -234,7 +234,15 @@
             .sidebar.open { transform: none; box-shadow: 4px 0 24px rgba(0,0,0,.35); }
             .main { margin-left: 0; padding: 68px 16px 16px; }
 
-            /* --- Daily intel (Task 2) --- */
+            /* --- Daily intel --- */
+            .daily-header { gap: 8px; }
+            .daily-header h2 { font-size: 1.25em; }
+            .daily-stats { grid-template-columns: repeat(2, 1fr); gap: 10px; }
+            .stat-card { padding: 14px; }
+            .date-picker-row { flex-wrap: wrap; width: 100%; }
+            .date-picker-row input[type=date] { flex: 1; min-width: 0; font-size: 16px; }
+            .signal-card { padding: 12px 14px; }
+            .signal-card h4, .signal-card .sig-summary, .signal-card .sig-meta { overflow-wrap: anywhere; }
             /* --- Settings (Task 3) --- */
             /* --- Quarter + tables (Task 4) --- */
             /* --- Touch targets (Task 4) --- */
