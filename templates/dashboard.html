@@ -1529,6 +1529,18 @@ async function loadDateSignals(dateStr) {
     } catch(e) { document.getElementById('mainContent').innerHTML = '<div class="empty-state"><div class="icon">📭</div><p>加载失败: ' + e.message + '</p></div>'; }
 }
 
+// Keep the mobile topbar title in sync for ALL view switches, including
+// programmatic ones (e.g. refreshReports after a pipeline completes).
+const _origSwitchMainView = switchMainView;
+switchMainView = async function(view) {
+    const titleEl = document.getElementById('mobilePageTitle');
+    if (titleEl) {
+        const t = ({ daily: '📡 每日情报', quarter: '📅 季度报告', settings: '⚙️ 设置' })[view];
+        if (t) titleEl.textContent = t;
+    }
+    return _origSwitchMainView(view);
+};
+
 // ====== Mobile drawer ======
 function toggleDrawer(force) {
     const sb = document.querySelector('.sidebar');
@@ -1540,7 +1552,8 @@ function toggleDrawer(force) {
 }
 
 // Delegated listener survives renderQuarterList() re-renders; additive, no
-// changes to switchMainView/switchTab.
+// changes to switchMainView/switchTab. The topbar title is synced by the
+// switchMainView wrapper above, so this only closes the drawer.
 (function bindMobileNav() {
     const sb = document.querySelector('.sidebar');
     if (!sb) return;
@@ -1548,13 +1561,6 @@ function toggleDrawer(force) {
         const item = e.target.closest('#mainNav li, #navTabs li, #quarterList li');
         if (!item) return;
         toggleDrawer(false);
-        const titleEl = document.getElementById('mobilePageTitle');
-        if (!titleEl) return;
-        if (item.closest('#quarterList') || item.dataset.view === 'quarter') {
-            titleEl.textContent = '📅 季度报告';
-        } else if (item.dataset.view) {
-            titleEl.textContent = item.textContent.trim();
-        }
     });
 })();
 
