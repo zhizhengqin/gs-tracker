@@ -248,9 +248,25 @@
             .source-row > div:not(.info), .model-row > div:not(.info) { display: flex; gap: 6px; flex-wrap: wrap; }
             .add-form input, .add-form select { flex: 1 1 100% !important; min-width: 0 !important; width: 100%; font-size: 16px; }
             .add-form label { display: flex; align-items: center; gap: 6px; min-height: 44px; }
-            /* --- Quarter + tables (Task 4) --- */
-            /* --- Touch targets (Task 4) --- */
-            /* --- Progress panel (Task 4) --- */
+            /* --- Quarter + tables --- */
+            .stats-row { grid-template-columns: repeat(2, 1fr); gap: 10px; }
+            .page-header { flex-wrap: wrap; }
+            .card { padding: 16px; }
+            .table-wrap { position: relative; }
+            .table-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+            .table-wrap::after {
+                content: ''; position: absolute; top: 0; right: 0; bottom: 0; width: 24px;
+                background: linear-gradient(to right, rgba(255,255,255,0), rgba(26,35,126,.08));
+                pointer-events: none;
+            }
+            .main img { max-width: 100%; height: auto; }
+            /* --- Touch targets --- */
+            .run-btn, .toggle-btn, .btn-sm, .day-btn { min-height: 44px; }
+            .toggle-btn, .btn-sm { display: inline-flex; align-items: center; justify-content: center; }
+            .main-nav li, .nav-tabs li, .quarter-list li { padding-top: 12px; padding-bottom: 12px; }
+            .signal-filter label { min-height: 44px; }
+            /* --- Progress panel --- */
+            #progressPanel { min-width: 0 !important; max-width: 420px !important; width: calc(100vw - 32px); max-height: 85vh; overflow-y: auto; }
         }
     </style>
 </head>
@@ -946,10 +962,12 @@ function renderHoldingsPanel(d) {
             <span class="meta">${d.quarter} · ${d.holdings.length} 条记录</span>
         </div>
         <div class="card">
+            <div class="table-wrap"><div class="table-scroll">
             <table>
                 <thead><tr><th style="width:40px;">#</th><th>公司名称</th><th style="text-align:right;">持仓价值（美元）</th></tr></thead>
                 <tbody>${rows || '<tr><td colspan="3" style="text-align:center;color:#999;">暂无持仓数据</td></tr>'}</tbody>
             </table>
+            </div></div>
         </div>
     `;
 }
