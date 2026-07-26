@@ -223,7 +223,9 @@
             }
             .mobile-topbar .page-title { font-weight: 600; font-size: 0.95em; }
             .mobile-mask {
-                display: block; position: fixed; inset: 0; background: rgba(0,0,0,.45);
+                display: block; position: fixed; top: 0; bottom: 0; right: 0;
+                left: min(78vw, 300px); /* only the area beside the drawer — keeps the box's center clickable */
+                background: rgba(0,0,0,.45);
                 opacity: 0; pointer-events: none; transition: opacity .25s; z-index: 180;
             }
             .mobile-mask.open { opacity: 1; pointer-events: auto; }
