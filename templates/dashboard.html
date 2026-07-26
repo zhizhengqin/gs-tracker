@@ -171,7 +171,6 @@
         .main-nav li:hover { background: rgba(255,255,255,0.08); color: #fff; }
         .main-nav li.active { background: var(--accent); color: #fff; font-weight: 600; }
 
-        @media (max-width: 768px) { .daily-stats { grid-template-columns: repeat(2, 1fr); } }
 
         /* Settings page */
         .settings-section { margin-bottom: 28px; }
@@ -208,15 +207,50 @@
         .date-picker-row { display:flex; align-items:center; gap:10px; }
         .date-picker-row input[type=date] { padding:8px 12px; border:1px solid #ddd; border-radius:8px; font-size:0.9em; }
 
-        /* Responsive */
+        /* ====== Mobile (<=768px) ====== */
+        .mobile-topbar, .mobile-mask { display: none; }
+
         @media (max-width: 768px) {
-            .sidebar { width: 100%; position: relative; height: auto; }
-            .main { margin-left: 0; }
-            .stats-row { grid-template-columns: repeat(2, 1fr); }
+            /* --- Topbar + drawer navigation --- */
+            .mobile-topbar {
+                display: flex; align-items: center; gap: 8px;
+                position: fixed; top: 0; left: 0; right: 0; height: 52px;
+                background: var(--sidebar-bg); color: #fff; padding: 0 12px; z-index: 150;
+            }
+            .mobile-topbar .menu-btn {
+                background: none; border: none; color: #fff; font-size: 1.3em;
+                cursor: pointer; min-width: 44px; min-height: 44px;
+            }
+            .mobile-topbar .page-title { font-weight: 600; font-size: 0.95em; }
+            .mobile-mask {
+                display: block; position: fixed; inset: 0; background: rgba(0,0,0,.45);
+                opacity: 0; pointer-events: none; transition: opacity .25s; z-index: 180;
+            }
+            .mobile-mask.open { opacity: 1; pointer-events: auto; }
+            .sidebar {
+                width: min(78vw, 300px);
+                transform: translateX(-105%); transition: transform .25s ease; z-index: 200;
+            }
+            .sidebar.open { transform: none; box-shadow: 4px 0 24px rgba(0,0,0,.35); pointer-events: none; }
+            .sidebar.open li, .sidebar.open button, .sidebar.open label, .sidebar.open input, .sidebar.open a { pointer-events: auto; }
+            .main { margin-left: 0; padding: 68px 16px 16px; }
+
+            /* --- Daily intel (Task 2) --- */
+            /* --- Settings (Task 3) --- */
+            /* --- Quarter + tables (Task 4) --- */
+            /* --- Touch targets (Task 4) --- */
+            /* --- Progress panel (Task 4) --- */
         }
     </style>
 </head>
 <body>
+
+<!-- Mobile topbar + drawer mask (desktop: display:none) -->
+<div class="mobile-topbar">
+    <button class="menu-btn" onclick="toggleDrawer()" aria-label="菜单">☰</button>
+    <span class="page-title" id="mobilePageTitle">📡 每日情报</span>
+</div>
+<div class="mobile-mask" id="mobileMask" onclick="toggleDrawer(false)"></div>
 
 <!-- ====== SIDEBAR ====== -->
 <aside class="sidebar">
@@ -1463,6 +1497,35 @@ async function loadDateSignals(dateStr) {
         });
     } catch(e) { document.getElementById('mainContent').innerHTML = '<div class="empty-state"><div class="icon">📭</div><p>加载失败: ' + e.message + '</p></div>'; }
 }
+
+// ====== Mobile drawer ======
+function toggleDrawer(force) {
+    const sb = document.querySelector('.sidebar');
+    const mask = document.getElementById('mobileMask');
+    if (!sb || !mask) return;
+    const open = typeof force === 'boolean' ? force : !sb.classList.contains('open');
+    sb.classList.toggle('open', open);
+    mask.classList.toggle('open', open);
+}
+
+// Delegated listener survives renderQuarterList() re-renders; additive, no
+// changes to switchMainView/switchTab.
+(function bindMobileNav() {
+    const sb = document.querySelector('.sidebar');
+    if (!sb) return;
+    sb.addEventListener('click', (e) => {
+        const item = e.target.closest('#mainNav li, #navTabs li, #quarterList li');
+        if (!item) return;
+        toggleDrawer(false);
+        const titleEl = document.getElementById('mobilePageTitle');
+        if (!titleEl) return;
+        if (item.closest('#quarterList') || item.dataset.view === 'quarter') {
+            titleEl.textContent = '📅 季度报告';
+        } else if (item.dataset.view) {
+            titleEl.textContent = item.textContent.trim();
+        }
+    });
+})();
 
 // ====== Boot ======
 init();
