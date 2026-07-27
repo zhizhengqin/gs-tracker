@@ -749,3 +749,13 @@ def test_dashboard_mobile_date_picker_min_width(tmp_path, monkeypatch):
     response = client.get("/")
     assert response.status_code == 200
     assert "min-width: 160px" in response.text
+
+
+def test_dashboard_recon_source_report(tmp_path, monkeypatch):
+    """Manual quarterly reconciliation shows a per-source fetch report,
+    like the daily intel progress panel."""
+    monkeypatch.setattr("src.web.REPORT_OUTPUT_DIR", tmp_path)
+    response = client.get("/")
+    assert response.status_code == 200
+    assert "showReconReport" in response.text
+    assert "季度对账信息源汇报" in response.text

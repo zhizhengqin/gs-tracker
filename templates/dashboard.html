@@ -670,9 +670,68 @@ async function pollPipelineStatus() {
             setRunMsg('✅ 运行完成，正在刷新数据…', 'ok');
             await refreshReports();
             setRunMsg('✅ 数据已更新', 'ok');
+            await showReconReport();
         }
         return;
     }
+}
+
+// ====== Quarterly reconciliation per-source report ======
+async function showReconReport() {
+    if (!currentQuarter) return;
+    try {
+        const resp = await fetch(`/api/signals/${currentQuarter}`);
+        if (!resp.ok) return;
+        const data = await resp.json();
+        const signals = Array.isArray(data.signals) ? data.signals : [];
+        const counts = {};
+        signals.forEach(s => { counts[s.source] = (counts[s.source] || 0) + 1; });
+        const sourceStates = {};
+        Object.entries(data.source_status || {}).forEach(([name, st]) => {
+            sourceStates[name] = { status: st, count: counts[name] || 0, error: '' };
+        });
+        showProgressPanel();
+        updateQuarterProgressPanel(sourceStates, {
+            quarter: currentQuarter,
+            signalCount: signals.length,
+            errors: data.errors || [],
+        });
+    } catch (e) { /* the report panel is best-effort; data view is already refreshed */ }
+}
+
+function updateQuarterProgressPanel(sourceStates, summary) {
+    const panel = document.getElementById('progressPanel');
+    if (!panel) return;
+    const sourceLabels = {'13F': '13F 持仓', '8-K': 'SEC 8-K 重大事件', '13D/13G': '13D/13G 大动作', 'research_view': '高盛研究观点', 'news': 'RSS 新闻', 'macro_view': 'FRED 宏观', ..._sourceLabels};
+    const statusIcons = {'waiting': '⏳', 'ok': '✅', 'error': '❌'};
+    const statusColors = {'waiting': '#999', 'ok': '#2e7d32', 'error': '#d32f2f'};
+
+    let html = '<h3 style="margin-bottom:16px;font-size:1.1em;">🔄 季度对账信息源汇报</h3>';
+    for (const [name, state] of Object.entries(sourceStates)) {
+        const icon = statusIcons[state.status] || '⏳';
+        const color = statusColors[state.status] || '#999';
+        const label = sourceLabels[name] || name;
+        html += `<div style="display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid #eee;">
+            <span style="font-weight:600;">${icon} ${esc(label)}</span>
+            <span style="color:${color};font-size:0.9em;">
+                ${state.status === 'ok' ? state.count + ' 条信号' : state.status === 'error' ? '抓取失败' : '等待中'}
+            </span>
+        </div>`;
+    }
+
+    if (summary) {
+        const errCount = (summary.errors || []).length;
+        html += `<div style="margin-top:16px;padding-top:12px;border-top:2px solid var(--accent);">
+            <strong>📊 运行报告</strong><br>
+            <span style="font-size:0.9em;">对账季度：${esc(summary.quarter || '')}</span><br>
+            <span style="font-size:0.9em;">信号总数：${summary.signalCount || 0} 条</span><br>
+            <span style="font-size:0.9em;color:${errCount ? 'var(--danger)' : 'var(--success)'};">${errCount ? '⚠️ ' + errCount + ' 个源出错' : '✅ 全部成功'}</span>
+            ${(summary.errors || []).map(e => `<div style="color:#b26a00;font-size:0.82em;padding:3px 0;">🟡 ${esc(String(e)).substring(0, 120)}</div>`).join('')}
+        </div>
+        <button class="run-btn" style="margin-top:12px;" onclick="document.getElementById('progressPanel').style.display='none'">关闭</button>`;
+    }
+
+    panel.innerHTML = html;
 }
 
 // ====== Manual daily intel trigger (SSE progress) ======
