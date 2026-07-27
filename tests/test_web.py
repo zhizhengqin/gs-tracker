@@ -63,6 +63,18 @@ def test_dashboard_contains_user_guide(tmp_path, monkeypatch):
     assert "5%" in response.text  # 13D/13G ownership threshold
 
 
+def test_dashboard_holdings_aggregation(tmp_path, monkeypatch):
+    """The holdings panel aggregates duplicate issuers into one row per company."""
+    monkeypatch.setattr("src.web.REPORT_OUTPUT_DIR", tmp_path)
+    response = client.get("/")
+    assert response.status_code == 200
+    # Client-side aggregation helper
+    assert "aggregateHoldingsByName" in response.text
+    # Toggle between aggregated and raw views
+    assert "按公司汇总" in response.text
+    assert "原始明细" in response.text
+
+
 def test_api_reports(tmp_path, monkeypatch):
     monkeypatch.setattr("src.web.REPORT_OUTPUT_DIR", tmp_path)
     (tmp_path / "2026-Q1.html").write_text("<html>Q1</html>", encoding="utf-8")

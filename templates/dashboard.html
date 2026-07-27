@@ -73,6 +73,9 @@
         .run-msg { margin-top: 8px; font-size: 0.78em; line-height: 1.4; min-height: 1em; }
         .run-msg.ok { color: #7be3a8; }
         .run-msg.err { color: #ff9a9a; }
+        .holdings-toggle { display: inline-flex; gap: 0; margin-bottom: 12px; border: 1px solid #ddd; border-radius: 8px; overflow: hidden; }
+        .holdings-toggle button { padding: 7px 18px; border: none; background: #fff; color: #666; font-size: 0.85em; font-weight: 600; cursor: pointer; }
+        .holdings-toggle button.active { background: var(--accent); color: #fff; }
         .run-msg.info { color: #c4c9e0; }
 
         /* ====== Main Content ====== */
@@ -484,7 +487,7 @@
         </ul>
         <h4>📅 季度报告</h4>
         <ul>
-            <li>左侧选季度，右侧四个模块：<strong>概览</strong>（关键数据）、<strong>AI 分析</strong>（整季中文解读）、<strong>多源信号</strong>（当季相关情报）、<strong>持仓明细</strong>（完整持仓表格）。</li>
+            <li>左侧选季度，右侧四个模块：<strong>概览</strong>（关键数据）、<strong>AI 分析</strong>（整季中文解读）、<strong>多源信号</strong>（当季相关情报）、<strong>持仓明细</strong>（默认按公司汇总持仓，可切换"原始明细"查看逐笔记录）。</li>
         </ul>
         <h4>⚙️ 设置</h4>
         <ul>
@@ -1117,6 +1120,41 @@ function formatSignalDate(publishedAt) {
 }
 
 function renderHoldingsPanel(d) {
+    const mode = holdingsViewMode;
+    const toggle = `
+        <div class="holdings-toggle">
+            <button class="${mode === 'aggregated' ? 'active' : ''}" onclick="setHoldingsView('aggregated')">按公司汇总</button>
+            <button class="${mode === 'raw' ? 'active' : ''}" onclick="setHoldingsView('raw')">原始明细</button>
+        </div>
+    `;
+
+    if (mode === 'aggregated') {
+        const companies = aggregateHoldingsByName(d.holdings);
+        const rows = companies.map((c, i) => `
+            <tr>
+                <td style="color:#888;">${i + 1}</td>
+                <td><strong>${c.name}</strong></td>
+                <td style="text-align:center;color:#888;">${c.count > 1 ? c.count + ' 笔' : ''}</td>
+                <td style="text-align:right;font-family:monospace;">${formatHoldingsValue(c.value)}</td>
+            </tr>
+        `).join('');
+        return `
+            <div class="page-header">
+                <h2>📋 持仓明细</h2>
+                <span class="meta">${d.quarter} · ${companies.length} 家公司（由 ${d.holdings.length} 条记录汇总）</span>
+            </div>
+            <div class="card">
+                ${toggle}
+                <div class="table-wrap"><div class="table-scroll">
+                <table>
+                    <thead><tr><th style="width:40px;">#</th><th>公司名称</th><th style="text-align:center;">合并笔数</th><th style="text-align:right;">持仓价值合计（美元）</th></tr></thead>
+                    <tbody>${rows || '<tr><td colspan="4" style="text-align:center;color:#999;">暂无持仓数据</td></tr>'}</tbody>
+                </table>
+                </div></div>
+            </div>
+        `;
+    }
+
     const rows = d.holdings.map((h, i) => `
         <tr>
             <td style="color:#888;">${i + 1}</td>
@@ -1131,6 +1169,7 @@ function renderHoldingsPanel(d) {
             <span class="meta">${d.quarter} · ${d.holdings.length} 条记录</span>
         </div>
         <div class="card">
+            ${toggle}
             <div class="table-wrap"><div class="table-scroll">
             <table>
                 <thead><tr><th style="width:40px;">#</th><th>公司名称</th><th style="text-align:right;">持仓价值（美元）</th></tr></thead>
@@ -1139,6 +1178,34 @@ function renderHoldingsPanel(d) {
             </div></div>
         </div>
     `;
+}
+
+// ====== Holdings aggregation ======
+let holdingsViewMode = 'aggregated';
+
+function setHoldingsView(mode) {
+    holdingsViewMode = mode;
+    switchTab('holdings');
+}
+
+function parseHoldingsValue(text) {
+    const n = Number(String(text).replace(/[^0-9.-]/g, ''));
+    return Number.isFinite(n) ? n : 0;
+}
+
+function formatHoldingsValue(n) {
+    return Math.round(n).toLocaleString('en-US');
+}
+
+function aggregateHoldingsByName(holdings) {
+    const byName = new Map();
+    holdings.forEach(h => {
+        if (!byName.has(h.name)) byName.set(h.name, { name: h.name, value: 0, count: 0 });
+        const agg = byName.get(h.name);
+        agg.value += parseHoldingsValue(h.value);
+        agg.count += 1;
+    });
+    return Array.from(byName.values()).sort((a, b) => b.value - a.value);
 }
 
 // ====== Quarter switching ======
