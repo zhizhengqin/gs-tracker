@@ -45,6 +45,24 @@ def test_root_fallback_when_no_dashboard(tmp_path, monkeypatch):
     assert "暂无报告" in response.text
 
 
+def test_dashboard_contains_user_guide(tmp_path, monkeypatch):
+    """The dashboard ships an in-app user guide reachable from the sidebar."""
+    monkeypatch.setattr("src.web.REPORT_OUTPUT_DIR", tmp_path)
+    response = client.get("/")
+    assert response.status_code == 200
+    # Sidebar nav entry
+    assert 'data-view="guide"' in response.text
+    assert "使用指南" in response.text
+    # Guide content explains the three SEC signal sources for beginners
+    assert "13F" in response.text
+    assert "8-K" in response.text
+    assert "13D" in response.text and "13G" in response.text
+    # Beginner-friendly explanations of what each form means
+    assert "季度" in response.text  # 13F is a quarterly filing
+    assert "重大事件" in response.text  # 8-K covers material events
+    assert "5%" in response.text  # 13D/13G ownership threshold
+
+
 def test_api_reports(tmp_path, monkeypatch):
     monkeypatch.setattr("src.web.REPORT_OUTPUT_DIR", tmp_path)
     (tmp_path / "2026-Q1.html").write_text("<html>Q1</html>", encoding="utf-8")

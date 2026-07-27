@@ -154,6 +154,35 @@
         .empty-state .icon { font-size: 3em; margin-bottom: 12px; }
         .loading { text-align: center; padding: 40px; color: #999; }
 
+        /* User guide view */
+        .guide-doc { max-width: 920px; }
+        .guide-hero { margin-bottom: 20px; }
+        .guide-hero h2 { font-size: 1.5em; color: var(--primary); margin-bottom: 6px; }
+        .guide-hero p { color: #888; font-size: 0.9em; }
+        .guide-toc { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+        .guide-toc a {
+            font-size: 0.82em; color: var(--accent); text-decoration: none;
+            background: #f4f6ff; padding: 5px 12px; border-radius: 16px; transition: all 0.15s;
+        }
+        .guide-toc a:hover { background: var(--accent); color: #fff; }
+        .guide-doc h4 { font-size: 0.98em; color: var(--primary); margin: 18px 0 8px; }
+        .guide-doc p, .guide-doc li { font-size: 0.9em; color: #444; line-height: 1.7; }
+        .guide-doc p { margin: 8px 0; }
+        .guide-doc ul, .guide-doc ol { padding-left: 22px; margin: 6px 0 10px; }
+        .guide-doc .tip {
+            background: #f4f6ff; border-left: 4px solid var(--accent); padding: 10px 14px;
+            border-radius: 6px; font-size: 0.87em; color: #555; margin: 12px 0;
+        }
+        .guide-doc .warn {
+            background: #fff8e6; border-left: 4px solid var(--warn); padding: 10px 14px;
+            border-radius: 6px; font-size: 0.87em; color: #6b5b1e; margin: 12px 0;
+        }
+        .guide-doc table { margin: 10px 0; background: #fff; border: 1px solid #eee; }
+        .guide-doc .src-tag {
+            display: inline-block; font-size: 0.75em; font-weight: 700;
+            padding: 2px 8px; border-radius: 4px; margin-right: 6px; vertical-align: 2px;
+        }
+
         /* Daily intel view */
         .daily-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; flex-wrap: wrap; gap: 12px; }
         .day-selector { display: flex; gap: 6px; }
@@ -301,6 +330,7 @@
             <li class="active" data-view="daily">📡 每日情报</li>
             <li data-view="quarter">📅 季度报告</li>
             <li data-view="settings">⚙️ 设置</li>
+            <li data-view="guide">📖 使用指南</li>
         </ul>
     </div>
 
@@ -359,6 +389,132 @@
 <main class="main" id="mainContent">
     <div class="loading">加载中...</div>
 </main>
+
+<!-- ====== USER GUIDE (rendered into #mainContent on demand) ====== -->
+<template id="guideTpl">
+<div class="guide-doc">
+    <div class="guide-hero">
+        <h2>📖 系统使用指南</h2>
+        <p>写给完全不懂金融和编程的你：看完这一页，就能独立使用 GS-Tracker。</p>
+        <div class="guide-toc">
+            <a href="#g-what">系统是什么</a>
+            <a href="#g-start">三分钟上手</a>
+            <a href="#g-sources">信号源科普</a>
+            <a href="#g-priority">优先级</a>
+            <a href="#g-pages">页面说明</a>
+            <a href="#g-faq">常见问题</a>
+        </div>
+    </div>
+
+    <div class="card" id="g-what">
+        <h3>一、这个系统是干什么的？</h3>
+        <p>一句话：<strong>自动盯着高盛（Goldman Sachs）在公开市场上的各种动作，每天汇总成一份中文情报送到你眼前。</strong></p>
+        <p>美国证监会（SEC）要求像高盛这样的大机构定期公开披露大量信息，比如买了哪些股票、公司发生了什么大事。这些信息虽然公开，但分散在不同网站、全是英文、格式晦涩。本系统会自动把它们抓回来，由 AI 筛选出重要内容并翻译成中文，整理成你每天花几分钟就能看完的情报日报。</p>
+        <div class="warn">⚠️ 所有信息都来自公开渠道，且存在不同程度的滞后；本系统仅供学习参考，<strong>不构成任何投资建议</strong>。</div>
+    </div>
+
+    <div class="card" id="g-start">
+        <h3>二、三分钟快速上手</h3>
+        <ol>
+            <li><strong>打开网页</strong>，默认就是「📡 每日情报」页：最上面是 AI 自动生成的今日日报，下面是一条一条的原始信号。</li>
+            <li>今天还没有情报？点左侧边栏的 <strong>「📡 手动运行每日情报」</strong>，等一两分钟，页面会自动刷新出结果。</li>
+            <li>对某条信号感兴趣，点卡片上的 <strong>「🤖 AI 解读」</strong>，AI 会用中文解释这条消息意味着什么。</li>
+            <li>想看高盛上个季度到底买了什么股票？点左侧 <strong>「📅 季度报告」</strong>。</li>
+            <li>手机上也能用：点左上角 <strong>☰</strong> 展开同样的菜单，功能完全一致。</li>
+        </ol>
+    </div>
+
+    <div class="card" id="g-sources">
+        <h3>三、信号源科普（重点）</h3>
+        <p>系统的情报来自多个「信号源」，左侧边栏的「🔍 信号筛选」里可以按来源勾选/取消。下面逐一解释每个来源是什么意思。</p>
+
+        <h4><span class="src-tag" style="background:#e3f2fd;color:#1565c0;">13F</span>13F 持仓 —— 高盛每个季度买了什么股票</h4>
+        <p><strong>是什么：</strong>SEC 规定，凡是管理资产超过 1 亿美元的投资机构，每个季度结束后都必须提交一份叫「13F」的表格，如实列出自己持有的全部美股（哪些公司、多少股、值多少钱）。高盛也必须提交。</p>
+        <p><strong>有什么用：</strong>这是唯一能直接看到「高盛买了什么」的官方渠道。对比前后两个季度的 13F，就能看出它在加仓什么、抛售什么。</p>
+        <div class="warn">⚠️ 两个重要局限：① <strong>滞后最长 45 天</strong>——比如一季度的持仓最晚 5 月 15 日才披露，你看到的是一两个月前的动作；② 13F 只包含<strong>美股多头持仓</strong>，看不到做空、债券、期权等操作。所以它适合观察中长期布局，不适合抄短线作业。</div>
+
+        <h4><span class="src-tag" style="background:#e8f5e9;color:#2e7d32;">8-K</span>SEC 8-K —— 公司突发大事的「官方快讯」</h4>
+        <p><strong>是什么：</strong>上市公司一旦发生重大事件，必须在 <strong>4 个工作日</strong>内向 SEC 提交一份「8-K」临时报告。所谓重大事件包括：高管辞职或上任、并购收购、财报发布、债务违约、退市风险等。</p>
+        <p><strong>有什么用：</strong>8-K 相当于公司突发新闻的「官方版本」，比媒体报道更权威、更及时。系统会盯住高盛自身及关联公司的 8-K，一有大事你马上就能看到。</p>
+
+        <h4><span class="src-tag" style="background:#ede7f6;color:#6a1b9a;">13D/13G</span>13D / 13G —— 大股东「举牌」公告</h4>
+        <p><strong>是什么：</strong>任何投资者买入某家上市公司超过 <strong>5%</strong> 的股份，都必须向 SEC 公开申报，俗称「举牌」。申报分两种：</p>
+        <ul>
+            <li><strong>13D（积极投资）</strong>：买方打算干预公司经营（比如要求更换管理层、推动并购），必须在 10 天内申报。出现 13D 通常意味着「大事要发生」。</li>
+            <li><strong>13G（被动投资）</strong>：买方只是单纯财务投资、不打算插手管理，申报期限更宽松。高盛这类机构的大部分持仓走的就是 13G。</li>
+        </ul>
+        <p><strong>有什么用：</strong>当高盛对某家公司的持股突破 5% 时，13D/13G 能比 13F 更早暴露它的重仓动作，是弥补 13F 滞后的重要补充。</p>
+
+        <h4>三个 SEC 信号源对比</h4>
+        <table>
+            <tr><th>信号源</th><th>回答的问题</th><th>披露频率</th><th>时效性</th></tr>
+            <tr><td><strong>13F</strong></td><td>高盛整体持仓长什么样？</td><td>每季度一次</td><td>滞后最长 45 天</td></tr>
+            <tr><td><strong>8-K</strong></td><td>公司出了什么突发大事？</td><td>事件发生后 4 个工作日内</td><td>很及时</td></tr>
+            <tr><td><strong>13D/13G</strong></td><td>谁在重仓（超过 5%）某公司？</td><td>突破 5% 后申报（13D 为 10 天内）</td><td>较及时</td></tr>
+        </table>
+
+        <h4>其他信号源</h4>
+        <ul>
+            <li><strong>高盛研究</strong>：高盛官方发布的研究观点和市场展望。</li>
+            <li><strong>新闻</strong>：主流财经媒体中与高盛相关的报道（系统会自动过滤和高盛无关的噪音）。</li>
+            <li><strong>宏观指标</strong>：高盛经济学家对美联储利率、GDP 等宏观问题的最新判断。</li>
+            <li><strong>自定义网页 / 主题订阅</strong>：在「⚙️ 设置」里添加你关心的网页或关键词主题，系统会一并盯梢，由 AI 预筛出相关内容。</li>
+        </ul>
+    </div>
+
+    <div class="card" id="g-priority">
+        <h3>四、信号优先级怎么看？</h3>
+        <p>每条信号都会被自动评一个优先级，左侧筛选区可以按优先级过滤：</p>
+        <ul>
+            <li>🔴 <strong>高优先级</strong>：值得当天就看，比如大额持仓变动、高管变动、官方重大公告。</li>
+            <li>🟡 <strong>中优先级</strong>：有一定参考价值，扫一眼标题即可。</li>
+            <li>🟢 <strong>低优先级</strong>：背景信息，知道有这回事就行。</li>
+        </ul>
+        <div class="tip">💡 日常用法：只看「🔴 高」加顶部 AI 日报，一分钟掌握全局；有空再展开中低优先级。</div>
+    </div>
+
+    <div class="card" id="g-pages">
+        <h3>五、各个页面怎么用</h3>
+        <h4>📡 每日情报（默认页）</h4>
+        <ul>
+            <li><strong>顶部 AI 日报</strong>：当天所有信号的 AI 中文汇总，先读它。</li>
+            <li><strong>今日情报列表</strong>：一条条原始信号，点「🤖 AI 解读」可看单条详解（结果有缓存，不重复消耗 AI 额度）。</li>
+            <li><strong>查看日期</strong>：页面顶部可选择任意历史日期回溯当天的情报。</li>
+            <li><strong>更早的情报</strong>：页面底部折叠区，展开可看最近 30 天。</li>
+        </ul>
+        <h4>📅 季度报告</h4>
+        <ul>
+            <li>左侧选季度，右侧四个模块：<strong>概览</strong>（关键数据）、<strong>AI 分析</strong>（整季中文解读）、<strong>多源信号</strong>（当季相关情报）、<strong>持仓明细</strong>（完整持仓表格）。</li>
+        </ul>
+        <h4>⚙️ 设置</h4>
+        <ul>
+            <li><strong>大模型管理</strong>：配置 AI 的 API Key（支持 Kimi 等 Anthropic 兼容接口），可添加多个模型并设置默认。</li>
+            <li><strong>信号源开关</strong>：不想看的来源直接关掉，流水线会跳过它。</li>
+            <li><strong>自定义源</strong>：添加自己的网页源 / 主题订阅，AI 会帮你预筛内容是否相关。</li>
+        </ul>
+        <h4>左侧两个按钮的区别</h4>
+        <ul>
+            <li><strong>📡 手动运行每日情报</strong>：立刻抓取今天的多源信号并生成日报（平时系统每天自动跑，这个按钮用于你想「现在就要」的时刻）。</li>
+            <li><strong>▶️ 手动运行季度对账</strong>：抓取最新的 13F 持仓并生成季度报告（每季度跑一次即可，在 13F 披露截止日后使用）。</li>
+        </ul>
+    </div>
+
+    <div class="card" id="g-faq">
+        <h3>六、常见问题</h3>
+        <p><strong>Q：为什么 13F 持仓数据是一两个月前的？</strong><br>
+        A：这是 SEC 规则决定的，所有机构都一样，最长滞后 45 天。想更早发现重仓线索，多留意 13D/13G 信号。</p>
+        <p><strong>Q：为什么有些新闻看起来和高盛关系不大？</strong><br>
+        A：系统默认只保留与高盛相关的新闻并会定期清理噪音；如有个别漏网之鱼，可在设置里关闭「新闻」源，或调整自定义主题。</p>
+        <p><strong>Q：AI 解读和日报会重复消耗额度吗？</strong><br>
+        A：不会。单条解读和每日日报都有缓存，同一天同一内容只调用一次 AI。</p>
+        <p><strong>Q：我的 API Key 安全吗？</strong><br>
+        A：Key 只保存在你自己服务器的本地数据库里，不会外传；代码中也没有硬编码任何密钥。</p>
+        <p><strong>Q：手机上功能完整吗？</strong><br>
+        A：完整。点左上角 ☰ 展开菜单，所有功能都能使用。</p>
+        <div class="warn">⚠️ 再次提醒：本系统所有内容仅供学习参考，不构成投资建议。投资有风险，决策需谨慎。</div>
+    </div>
+</div>
+</template>
 
 <script>
 // ====== State ======
@@ -1039,7 +1195,22 @@ async function switchMainView(view) {
         if (filterSection) filterSection.style.display = 'none';
         document.querySelectorAll('#quarterList li').forEach(li => li.classList.remove('active'));
         await renderSettings();
+    } else if (view === 'guide') {
+        if (moduleSection) moduleSection.style.display = 'none';
+        if (filterSection) filterSection.style.display = 'none';
+        document.querySelectorAll('#quarterList li').forEach(li => li.classList.remove('active'));
+        renderGuide();
     }
+}
+
+// ====== User guide view ======
+function renderGuide() {
+    const tpl = document.getElementById('guideTpl');
+    const main = document.getElementById('mainContent');
+    if (!tpl || !main) return;
+    main.innerHTML = '';
+    main.appendChild(tpl.content.cloneNode(true));
+    window.scrollTo(0, 0);
 }
 
 // ====== Daily intel view ======
@@ -1590,7 +1761,7 @@ const _origSwitchMainView = switchMainView;
 switchMainView = async function(view) {
     const titleEl = document.getElementById('mobilePageTitle');
     if (titleEl) {
-        const t = ({ daily: '📡 每日情报', quarter: '📅 季度报告', settings: '⚙️ 设置' })[view];
+        const t = ({ daily: '📡 每日情报', quarter: '📅 季度报告', settings: '⚙️ 设置', guide: '📖 使用指南' })[view];
         if (t) titleEl.textContent = t;
     }
     return _origSwitchMainView(view);
