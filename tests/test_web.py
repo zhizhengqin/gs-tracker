@@ -633,3 +633,25 @@ def test_test_source_topic_preview(signals_db, monkeypatch, make_signal):
 def test_test_source_topic_requires_instruction(signals_db):
     resp = client.post("/api/settings/sources/test", json={"type": "topic"})
     assert resp.status_code == 422
+
+
+def test_daily_report_endpoint_delegates(monkeypatch):
+    import src.web as web
+
+    async def _fake(date):
+        return {"date": date, "report": "伪日报", "signal_count": 1, "cached": True}
+
+    monkeypatch.setattr(web, "generate_daily_report", _fake)
+
+    async def _none(date):
+        return None
+
+    monkeypatch.setattr(web, "ensure_daily_report", _none)
+    resp = client.get("/api/daily-report/2026-07-27")
+    assert resp.status_code == 200
+    assert resp.json()["report"] == "伪日报"
+
+
+def test_daily_report_endpoint_bad_date():
+    resp = client.get("/api/daily-report/2026-13-99")
+    assert resp.status_code == 422
