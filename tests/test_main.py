@@ -492,3 +492,64 @@ class TestDailyIntel:
             sources = _build_daily_sources()
 
         assert [n for n, _ in sources] == ["13D/13G", "news"]
+
+
+@pytest.mark.asyncio
+async def test_stream_schedules_daily_report(monkeypatch):
+    """complete 事件前，流水线应调度当日日报生成（fire-and-forget）。"""
+    import json as _json
+    from datetime import datetime, timezone
+    import src.main as main_mod
+
+    calls = []
+
+    async def _fake_ensure(date):
+        calls.append(date)
+        return None
+
+    monkeypatch.setattr(main_mod, "ensure_daily_report", _fake_ensure)
+    monkeypatch.setattr(main_mod, "_build_daily_sources", lambda: [])
+    monkeypatch.setattr(main_mod, "get_recent_signals", lambda days=30: [])
+    monkeypatch.setattr(main_mod, "save_signals_incremental", lambda *a, **kw: None)
+    monkeypatch.setattr(main_mod, "save_signal_run", lambda *a, **kw: None)
+    monkeypatch.setattr(main_mod, "cleanup_expired_signals", lambda *a, **kw: None)
+
+    events = []
+    async for event_json in main_mod.run_daily_intel_stream():
+        events.append(_json.loads(event_json))
+
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    assert calls == [today]
+    assert events[-1]["event"] == "complete"
+
+
+@pytest.mark.asyncio
+async def test_run_daily_intel_awaits_report_task(monkeypatch):
+    """调度器/CLI 路径必须等日报生成完（一次性进程退出前落地）。"""
+    import asyncio
+    from datetime import datetime, timezone
+    import src.main as main_mod
+
+    generated = []
+    _task = None
+
+    async def _gen():
+        await asyncio.sleep(0)
+        generated.append("done")
+
+    async def _fake_ensure(date):
+        nonlocal _task
+        if _task is None:
+            _task = asyncio.create_task(_gen())
+        return _task
+
+    monkeypatch.setattr(main_mod, "ensure_daily_report", _fake_ensure)
+    monkeypatch.setattr(main_mod, "_build_daily_sources", lambda: [])
+    monkeypatch.setattr(main_mod, "get_recent_signals", lambda days=30: [])
+    monkeypatch.setattr(main_mod, "save_signals_incremental", lambda *a, **kw: None)
+    monkeypatch.setattr(main_mod, "save_signal_run", lambda *a, **kw: None)
+    monkeypatch.setattr(main_mod, "cleanup_expired_signals", lambda *a, **kw: None)
+
+    summary = await main_mod.run_daily_intel()
+    assert generated == ["done"]
+    assert summary["new_signals"] == 0

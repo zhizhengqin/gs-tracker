@@ -18,6 +18,7 @@ from src.config import (  # noqa: F401  (REPORT_OUTPUT_DIR kept as a patchable n
     ensure_directories,
 )
 from src.data_fetcher import SEC13FFetcher
+from src.daily_report import ensure_daily_report
 from src.llm_config import resolve_llm_config
 from src.notifier import Notification, Notifier, _format_summary
 from src.quarter_compare import QuarterComparator
@@ -271,6 +272,14 @@ async def run_daily_intel_stream():
         except Exception:
             logger.exception("Source close failed")
 
+    # Kick off daily report generation (add-on: never blocks/fails the pipeline;
+    # web SSE keeps the loop alive so the task completes).
+    try:
+        today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        await ensure_daily_report(today)
+    except Exception:
+        logger.exception("Failed to schedule daily report generation")
+
     yield json.dumps({
         "event": "complete",
         "new_signals": len(new_signals),
@@ -297,6 +306,16 @@ async def run_daily_intel() -> dict:
                 "source_status": data.get("source_status", {}),
                 "errors": data.get("errors", []),
             }
+    # Scheduler/CLI path: wait for the report so one-shot processes don't exit
+    # before it lands (dedupe: the stream already scheduled it above).
+    try:
+        today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        task = await ensure_daily_report(today)
+        if task is not None:
+            await task
+    except Exception:
+        logger.exception("Daily report generation wait failed")
+
     return summary
 
 
