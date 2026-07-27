@@ -205,6 +205,13 @@
         .daily-report-card h4 { color:#ffcc80; font-size:0.95em; margin:12px 0 4px; }
         .daily-report-card p { font-size:0.9em; line-height:1.7; opacity:0.92; }
         .date-picker-row { display:flex; align-items:center; gap:10px; }
+        .today-title { font-size: 1.0em; color: var(--primary); margin: 18px 0 10px; }
+        .earlier-section { margin-top: 20px; }
+        .earlier-toggle {
+            width: 100%; padding: 12px; border: 1px dashed #c9ced6; border-radius: 10px;
+            background: #fafbfc; color: #667; font-size: 0.9em; cursor: pointer; transition: all .15s;
+        }
+        .earlier-toggle:hover { border-color: var(--accent); color: var(--accent); }
         .date-picker-row input[type=date] { padding:8px 12px; border:1px solid #ddd; border-radius:8px; font-size:0.9em; }
 
         /* ====== Mobile (<=768px) ====== */
@@ -358,7 +365,8 @@
 let currentQuarter = null;
 let reportData = null;
 let reports = [];
-let dailyData = [];       // signals from /api/signals/recent
+let dailyData = [];       // signals from /api/signals/recent (earlier range view)
+let todayData = [];       // today's signals (today view)
 let dailyDays = 30;       // current day range
 let currentView = 'daily'; // 'daily' | 'quarter'
 
@@ -572,8 +580,11 @@ async function runDailyIntel() {
                     setDailyMsg('✅ 情报已更新：' + totalNew + ' 条新信号', 'ok');
                 }
                 updateProgressPanel(sourceStates, true, data);
-                // Reload daily intel view
-                setTimeout(() => loadDailyIntel(dailyDays || 30), 1500);
+                // Reload the active daily view (today view by default)
+                setTimeout(() => {
+                    if (document.getElementById('todayFeed')) loadTodayView();
+                    else loadDailyIntel(dailyDays || 30);
+                }, 1500);
             }
         } catch(ex) { console.error('SSE parse error', ex); }
     };
@@ -1014,7 +1025,7 @@ async function switchMainView(view) {
         if (moduleSection) moduleSection.style.display = 'none';
         if (filterSection) filterSection.style.display = 'block';
         document.querySelectorAll('#quarterList li').forEach(li => li.classList.remove('active'));
-        await loadDailyIntel(dailyDays);
+        await loadTodayView();
     } else if (view === 'quarter') {
         if (moduleSection) moduleSection.style.display = 'block';
         if (filterSection) filterSection.style.display = 'block';
@@ -1032,9 +1043,87 @@ async function switchMainView(view) {
 }
 
 // ====== Daily intel view ======
+// ====== Today view (default daily view) ======
+async function loadTodayView() {
+    dailyDays = null;  // today mode
+    document.getElementById('mainContent').innerHTML = '<div class="loading">加载中...</div>';
+    const today = new Date().toISOString().slice(0, 10);
+    try {
+        const resp = await fetch(`/api/signals/date/${today}`);
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+        const json = await resp.json();
+        todayData = json.signals || [];
+    } catch (e) {
+        console.error('Failed to load today signals', e);
+        todayData = [];
+    }
+    renderTodayView(today);
+    loadDailyReport(today);  // auto: cached -> instant; missing -> generated on demand
+}
+
+function renderTodayView(today) {
+    document.getElementById('mainContent').innerHTML = `
+        <div class="daily-header">
+            <h2>📡 每日情报</h2>
+            <div class="date-picker-row">
+                <span style="font-size:0.85em;color:#888;">📅 查看日期：</span>
+                <input type="date" id="dailyDatePicker" value="${today}" onchange="loadDateSignals(this.value)">
+                <button class="btn-sm primary" onclick="loadDateSignals(document.getElementById('dailyDatePicker').value)">查看</button>
+            </div>
+        </div>
+        <div id="dailyReportContainer"></div>
+        <div id="todayFeed"></div>
+        <div class="earlier-section">
+            <button class="earlier-toggle" id="earlierToggle" onclick="toggleEarlier()">▾ 查看更早的情报</button>
+            <div id="earlierBody" style="display:none;"></div>
+        </div>`;
+    renderTodayFeed();
+}
+
+function renderTodayFeed() {
+    const el = document.getElementById('todayFeed');
+    if (!el) return;
+    const filtered = filterSignalsBy(todayData);
+    if (filtered.length === 0) {
+        el.innerHTML = `<div class="empty-state">
+            <div class="icon">📭</div>
+            <p>今日暂无情报</p>
+            <p style="font-size:0.85em;margin-top:8px;">点左侧「📡 手动运行每日情报」开始抓取</p>
+        </div>`;
+        return;
+    }
+    el.innerHTML = `<h3 class="today-title">今日情报（${filtered.length} 条）</h3>
+        <div class="daily-feed">${filtered.map(s => renderSignalCard(s)).join('')}</div>`;
+    addAiToggles(el);
+}
+
+function filterSignalsBy(data) {
+    const activeSources = [...document.querySelectorAll('.filter-source:checked')].map(cb => cb.value);
+    const activeStrengths = [...document.querySelectorAll('.filter-strength:checked')].map(cb => cb.value);
+    return data.filter(s => activeSources.includes(s.source) && activeStrengths.includes(s.strength));
+}
+
+async function toggleEarlier() {
+    const body = document.getElementById('earlierBody');
+    const btn = document.getElementById('earlierToggle');
+    if (!body || !btn) return;
+    if (body.style.display === 'none') {
+        body.style.display = 'block';
+        btn.textContent = '▴ 收起更早的情报';
+        if (!body.dataset.loaded) {
+            body.dataset.loaded = '1';
+            await loadDailyIntel(30);
+        }
+    } else {
+        body.style.display = 'none';
+        btn.textContent = '▾ 查看更早的情报';
+    }
+}
+
 async function loadDailyIntel(days) {
     dailyDays = days;
-    document.getElementById('mainContent').innerHTML = '<div class="loading">加载中...</div>';
+    const target = document.getElementById('earlierBody') || document.getElementById('mainContent');
+    target.innerHTML = '<div class="loading">加载中...</div>';
 
     // Highlight active day button
     document.querySelectorAll('.day-btn').forEach(b => {
@@ -1059,8 +1148,9 @@ function renderDailyIntel() {
     const sources = new Set(filtered.map(s => s.source));
     const dayLabel = {7:'最近 7 天',14:'最近 14 天',30:'最近 30 天',90:'最近 90 天'}[dailyDays] || `最近 ${dailyDays} 天`;
 
+    const target = document.getElementById('earlierBody') || document.getElementById('mainContent');
     if (dailyData.length === 0 && filtered.length === 0) {
-        document.getElementById('mainContent').innerHTML = `
+        target.innerHTML = `
             <div class="daily-header">
                 <h2>📡 每日情报</h2>
                 <div class="day-selector">
@@ -1092,7 +1182,7 @@ function renderDailyIntel() {
             ${filtered.map(s => renderSignalCard(s)).join('')}
         </div>`;
 
-    document.getElementById('mainContent').innerHTML = html;
+    target.innerHTML = html;
 }
 
 function filterDailySignals() {
@@ -1115,7 +1205,13 @@ function srcClass(source) {
 
 function onFilterChange() {
     if (currentView === 'daily') {
-        renderDailyIntel();
+        if (document.getElementById('todayFeed')) {
+            renderTodayFeed();
+            const body = document.getElementById('earlierBody');
+            if (body && body.dataset.loaded) renderDailyIntel();
+        } else {
+            renderDailyIntel();
+        }
     } else {
         renderSignals();
     }
@@ -1408,29 +1504,9 @@ async function loadDailyReport(dateStr) {
     } catch(e) { container.innerHTML = '<p style="color:#999;">日报加载失败</p>'; }
 }
 
-// Override renderDailyIntel to add date picker + AI analysis + daily report
-const _origRenderDailyIntel = renderDailyIntel;
-renderDailyIntel = function() {
-    _origRenderDailyIntel();
-
-    // Add date picker to daily header
-    const today = new Date().toISOString().slice(0,10);
-    const header = document.querySelector('.daily-header');
-    if (header) {
-        const existingPicker = header.querySelector('.date-picker-row');
-        if (!existingPicker) {
-            const picker = document.createElement('div');
-            picker.className = 'date-picker-row';
-            picker.innerHTML = `<span style="font-size:0.85em;color:#888;">📅 查看日期：</span>
-                <input type="date" id="dailyDatePicker" value="${today}" onchange="loadDateSignals(this.value)">
-                <button class="btn-sm primary" onclick="loadDateSignals(document.getElementById('dailyDatePicker').value)">查看</button>
-                <button class="btn-sm" onclick="loadDailyReport(document.getElementById('dailyDatePicker').value)">📋 生成日报</button>`;
-            header.appendChild(picker);
-        }
-    }
-
-    // Add AI toggle to each signal card
-    document.querySelectorAll('.signal-card').forEach(card => {
+// Add AI-analysis toggles to every signal card under a root element.
+function addAiToggles(rootEl) {
+    (rootEl || document).querySelectorAll('.signal-card').forEach(card => {
         const titleEl = card.querySelector('h4');
         if (!titleEl) return;
         const sigId = card.dataset.signalId;
@@ -1457,15 +1533,15 @@ renderDailyIntel = function() {
         panel.id = 'ai-' + sigId;
         card.appendChild(panel);
     });
+}
 
-    // Daily report container
-    let reportContainer = document.getElementById('dailyReportContainer');
-    if (!reportContainer) {
-        reportContainer = document.createElement('div');
-        reportContainer.id = 'dailyReportContainer';
-        const feed = document.querySelector('.daily-feed');
-        if (feed) feed.appendChild(reportContainer);
-    }
+// Override renderDailyIntel (earlier range view) to add AI toggles.
+// Date picker lives in the today-view header; the daily report card is
+// rendered at the top of the today view, not appended to the feed.
+const _origRenderDailyIntel = renderDailyIntel;
+renderDailyIntel = function() {
+    _origRenderDailyIntel();
+    addAiToggles(document.getElementById('earlierBody') || document.getElementById('mainContent'));
 };
 
 async function loadDateSignals(dateStr) {
@@ -1489,6 +1565,7 @@ async function loadDateSignals(dateStr) {
                 <input type="date" id="dailyDatePicker" value="${dateStr}" onchange="loadDateSignals(this.value)">
                 <button class="btn-sm primary" onclick="loadDateSignals(document.getElementById('dailyDatePicker').value)">查看</button>
                 <button class="btn-sm" onclick="loadDailyReport(document.getElementById('dailyDatePicker').value)">📋 生成日报</button>
+                <button class="btn-sm" onclick="loadTodayView()">← 返回今日</button>
             </div>
         </div>
         <div class="daily-stats">
