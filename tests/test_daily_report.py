@@ -137,6 +137,35 @@ async def test_llm_failure_returns_fallback_not_cached(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_llm_empty_text_returns_error_not_cached(monkeypatch):
+    """An empty LLM response (e.g. thinking model truncated by max_tokens)
+    is a failure: nothing is cached so the next request retries."""
+    from src.daily_report import generate_daily_report
+    saved = _patch_storage(monkeypatch, signals=[_signal()])
+    _patch_llm(monkeypatch, text="")
+    result = await generate_daily_report("2026-07-27")
+    assert "error" in result
+    assert saved == {}
+
+
+@pytest.mark.asyncio
+async def test_cached_placeholder_regenerates(monkeypatch):
+    """A cached placeholder from a previously failed generation is treated
+    as a cache miss and regenerated."""
+    from src.daily_report import generate_daily_report
+    saved = _patch_storage(
+        monkeypatch,
+        cached={"report_text": "AI 未生成有效日报", "signal_count": 0},
+        signals=[_signal()],
+    )
+    client = _patch_llm(monkeypatch)
+    result = await generate_daily_report("2026-07-27")
+    assert client.calls == 1
+    assert "今日高盛观点" in result["report"]
+    assert saved["text"] != "AI 未生成有效日报"
+
+
+@pytest.mark.asyncio
 async def test_ensure_returns_none_when_cached(monkeypatch):
     import src.daily_report as dr
     _patch_storage(monkeypatch, cached={"report_text": "x", "signal_count": 1})

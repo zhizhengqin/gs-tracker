@@ -29,11 +29,15 @@ logger = logging.getLogger(__name__)
 # date -> in-flight generation Task (process-wide dedupe)
 _report_tasks: dict = {}
 
+# Marker written by older versions when the LLM returned no usable text;
+# such rows are treated as cache misses so they get regenerated.
+EMPTY_REPORT_PLACEHOLDER = "AI 未生成有效日报"
+
 
 async def generate_daily_report(date: str) -> dict:
     """Return (or generate) the daily summary report for `date` (YYYY-MM-DD)."""
     cached = await asyncio.to_thread(get_daily_report, date)
-    if cached:
+    if cached and cached["report_text"] != EMPTY_REPORT_PLACEHOLDER:
         return {"date": date, "report": cached["report_text"], "signal_count": cached["signal_count"], "cached": True}
 
     signals = await asyncio.to_thread(get_signals_by_date, date)
@@ -87,7 +91,7 @@ async def generate_daily_report(date: str) -> dict:
         )
         resp = await client.messages.create(
             model=llm["model"],
-            max_tokens=2048,  # leave room for thinking-block models
+            max_tokens=8192,  # thinking models burn several k tokens before the text block
             messages=[{"role": "user", "content": prompt}],
         )
         text = ""
@@ -95,7 +99,19 @@ async def generate_daily_report(date: str) -> dict:
             if hasattr(block, "text"):
                 text += block.text
 
-        report = text.strip() or "AI 未生成有效日报"
+        if not text.strip():
+            # Empty body (e.g. thinking model truncated): failure, do NOT
+            # cache so the next request retries instead of serving a stub.
+            logger.warning("Daily report LLM returned empty text for %s", date)
+            return {
+                "date": date,
+                "report": "AI 暂时未能生成日报，请稍后点击「生成日报」重试。",
+                "signal_count": len(signals),
+                "cached": False,
+                "error": "empty_llm_response",
+            }
+
+        report = text.strip()
         passed, violations = check_content(report)
         if not passed:
             logger.warning("Daily report compliance violations: %s", violations)

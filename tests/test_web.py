@@ -740,3 +740,12 @@ def test_dashboard_quarter_view_layout(tmp_path, monkeypatch):
     assert "持仓变化" in response.text
     # AI quarterly insight wiring
     assert "quarter-insight" in response.text
+
+
+def test_dashboard_mobile_date_picker_min_width(tmp_path, monkeypatch):
+    """On mobile the date input keeps a min-width so the full date stays
+    visible instead of being squeezed to '2026/07'."""
+    monkeypatch.setattr("src.web.REPORT_OUTPUT_DIR", tmp_path)
+    response = client.get("/")
+    assert response.status_code == 200
+    assert "min-width: 160px" in response.text
