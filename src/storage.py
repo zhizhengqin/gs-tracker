@@ -268,6 +268,13 @@ def init_db() -> None:
 
         conn.commit()
 
+    # Legacy cleanup: collapse cross-day duplicate signals (old fingerprints
+    # included the date). Never let cleanup failure break startup.
+    try:
+        dedupe_signals_by_url()
+    except Exception:
+        logger.exception("dedupe_signals_by_url failed during init_db")
+
 
 def save_holdings(
     cik: str,
@@ -404,18 +411,66 @@ def is_notification_sent(quarter: str) -> bool:
 def compute_fingerprint(signal: Signal) -> str:
     """Compute a deduplication fingerprint for a signal.
 
-    Fingerprint = SHA-256 of (source, title, publish_date, url).
-    When url is None (e.g. macro_view), the fingerprint falls back to
-    (source, title, publish_date) — same-day same-title without URL will
-    collide, which is correct for sources that produce at most one signal
-    per day per topic.
+    With a URL: SHA-256 of (source, title, url) — a URL uniquely identifies
+    the underlying item, so a source re-surfacing it on a later day (e.g.
+    research_view when GS bumps the sitemap lastmod) upserts the existing
+    row instead of creating a per-day duplicate.
+    Without a URL (e.g. macro_view): SHA-256 of (source, title,
+    publish_date) — same-day same-title collides, which is correct for
+    sources that produce at most one signal per day per topic.
     """
-    date_str = signal.published_at.strftime("%Y-%m-%d")
-    parts = [signal.source, signal.title, date_str]
+    parts = [signal.source, signal.title]
     if signal.url:
         parts.append(signal.url)
+    else:
+        parts.append(signal.published_at.strftime("%Y-%m-%d"))
     digest = hashlib.sha256("|".join(parts).encode("utf-8")).hexdigest()
     return digest
+
+
+def dedupe_signals_by_url() -> int:
+    """Remove legacy cross-day duplicate signals, keeping the earliest row.
+
+    Legacy fingerprints included the publish date, so a re-fetched URL
+    created one row per day. This keeps the earliest row per
+    (source, title, url) and deletes the later ones; daily_reports cached
+    for the affected dates are also dropped — they were generated from
+    duplicated signals and regenerate honestly on next view.
+
+    Idempotent. Returns the number of deleted signal rows.
+    """
+    predicate = """
+        url IS NOT NULL AND url != ''
+        AND EXISTS (
+            SELECT 1 FROM signals s2
+            WHERE s2.url = signals.url AND s2.source = signals.source
+              AND s2.title = signals.title
+              AND date(s2.published_at) < date(signals.published_at)
+        )
+    """
+    with get_connection() as conn:
+        affected_dates = [
+            row[0]
+            for row in conn.execute(
+                f"SELECT DISTINCT date(published_at) FROM signals WHERE {predicate}"
+            ).fetchall()
+        ]
+        cursor = conn.execute(f"DELETE FROM signals WHERE {predicate}")
+        deleted = cursor.rowcount
+        if affected_dates:
+            placeholders = ",".join("?" for _ in affected_dates)
+            conn.execute(
+                f"DELETE FROM daily_reports WHERE date IN ({placeholders})",
+                affected_dates,
+            )
+        conn.commit()
+    if deleted:
+        logger.info(
+            "dedupe_signals_by_url: removed %d duplicate signals, reset daily reports for %s",
+            deleted,
+            affected_dates,
+        )
+    return deleted
 
 
 _INSERT_SIGNAL_SQL = """

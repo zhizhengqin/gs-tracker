@@ -1,4 +1,6 @@
 """Tests for research_view GS Insights source."""
+from datetime import datetime, timezone
+
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -134,6 +136,35 @@ class TestResearchViewSource:
 
         assert signals == []
         assert wm == "last-url"
+
+    @pytest.mark.asyncio
+    async def test_missing_date_falls_back_to_lastmod_not_now(self):
+        """Article without datePublished: published_at = sitemap lastmod date.
+
+        GS bumps sitemap lastmod over time (changefreq=daily), so the same
+        article can be re-fetched on a later day. Pinning the date to the
+        sitemap lastmod (instead of fetch time) keeps the signal's date
+        stable and lets fingerprint dedupe collapse the re-fetch.
+        """
+        source = ResearchViewSource(max_items=1)
+        no_date_html = """<!DOCTYPE html><html><head>
+<meta name="description" content="No date fields anywhere.">
+<script type="application/ld+json">
+{"headline":"Legacy Playbook"}
+</script></head></html>"""
+
+        mock_get = AsyncMock()
+        mock_get.side_effect = [
+            _mock_httpx_response(200, SITEMAP_ONE),  # lastmod 2026-07-15
+            _mock_httpx_response(200, no_date_html),
+        ]
+        source.client.get = mock_get
+
+        signals, _ = await source.fetch_since()
+        await source.close()
+
+        assert len(signals) == 1
+        assert signals[0].published_at == datetime(2026, 7, 15, tzinfo=timezone.utc)
 
 
 def _mock_httpx_response(status: int, text: str):

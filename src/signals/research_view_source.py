@@ -141,14 +141,24 @@ class ResearchViewSource:
             date_str = _extract_first(_RE_DATE_PUBLISHED, html)
             description = _extract_first(_RE_META_DESC, html) or ""
 
-            published_at = datetime.now(timezone.utc)
-            if date_str:
+            # Date priority: article datePublished → sitemap lastmod → fetch
+            # time. GS pages often lack datePublished; lastmod keeps the
+            # date stable across re-fetches, while fetch time would stamp a
+            # new date each day and defeat fingerprint dedupe.
+            published_at: Optional[datetime] = None
+            for candidate in (date_str, lastmod):
+                if published_at is not None:
+                    break
+                if not candidate:
+                    continue
                 try:
                     published_at = datetime.strptime(
-                        date_str[:10], "%Y-%m-%d"
+                        candidate[:10], "%Y-%m-%d"
                     ).replace(tzinfo=timezone.utc)
                 except ValueError:
-                    pass
+                    continue
+            if published_at is None:
+                published_at = datetime.now(timezone.utc)
 
             signals.append(
                 Signal(

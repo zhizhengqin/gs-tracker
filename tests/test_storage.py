@@ -413,6 +413,106 @@ class TestSignalFingerprint:
         sig2 = make_signal(published_at=datetime(2026, 7, 1, 20, 0, tzinfo=timezone.utc))
         assert storage.compute_fingerprint(sig1) == storage.compute_fingerprint(sig2)
 
+    def test_fingerprint_with_url_ignores_date(self, make_signal):
+        """Same (source, title, url) on different days = one signal.
+
+        A source re-surfacing the same URL on a later day (e.g. research_view
+        when GS bumps the sitemap lastmod) must not create a duplicate row.
+        """
+        sig_a = make_signal(
+            title="高盛研究: Legacy",
+            source="research_view",
+            published_at=datetime(2026, 7, 25, tzinfo=timezone.utc),
+            url="https://www.goldmansachs.com/x",
+        )
+        sig_b = make_signal(
+            title="高盛研究: Legacy",
+            source="research_view",
+            published_at=datetime(2026, 7, 27, tzinfo=timezone.utc),
+            url="https://www.goldmansachs.com/x",
+        )
+        assert storage.compute_fingerprint(sig_a) == storage.compute_fingerprint(sig_b)
+
+    def test_fingerprint_no_url_keeps_date(self, make_signal):
+        """Without URL the date stays in the key — daily topics (macro_view)
+        on different days remain distinct signals."""
+        sig_a = make_signal(
+            title="宏观信号",
+            source="macro_view",
+            published_at=datetime(2026, 7, 25, tzinfo=timezone.utc),
+            url=None,
+        )
+        sig_b = make_signal(
+            title="宏观信号",
+            source="macro_view",
+            published_at=datetime(2026, 7, 27, tzinfo=timezone.utc),
+            url=None,
+        )
+        assert storage.compute_fingerprint(sig_a) != storage.compute_fingerprint(sig_b)
+
+
+class TestDedupeSignalsByUrl:
+    """Tests for the one-time legacy duplicate cleanup."""
+
+    def _insert_legacy_pair(self, make_signal):
+        """Insert two rows that only differ by date — legacy duplicates whose
+        fingerprints were computed when the date was part of the key."""
+        older = make_signal(
+            title="高盛研究: X",
+            source="research_view",
+            published_at=datetime(2026, 7, 25, tzinfo=timezone.utc),
+            url="https://www.goldmansachs.com/x",
+        )
+        newer = make_signal(
+            id="sig-dup-2",
+            title="高盛研究: X",
+            source="research_view",
+            published_at=datetime(2026, 7, 27, tzinfo=timezone.utc),
+            url="https://www.goldmansachs.com/x",
+        )
+        with storage.get_connection() as conn:
+            conn.executemany(
+                storage._INSERT_SIGNAL_SQL,
+                [
+                    storage._signal_row("2026-Q3", older, fingerprint="legacy-fp-a"),
+                    storage._signal_row("2026-Q3", newer, fingerprint="legacy-fp-b"),
+                ],
+            )
+            conn.commit()
+        return older, newer
+
+    def test_keeps_earliest_and_drops_poisoned_reports(self, fresh_db, make_signal):
+        self._insert_legacy_pair(make_signal)
+        storage.save_daily_report("2026-07-25", "正常日报", 1)
+        storage.save_daily_report("2026-07-27", "被污染的日报", 1)
+
+        deleted = storage.dedupe_signals_by_url()
+
+        assert deleted == 1
+        assert len(storage.get_signals_by_date("2026-07-25")) == 1
+        assert storage.get_signals_by_date("2026-07-27") == []
+        # The later date's cached report was generated from the duplicate —
+        # drop it so it regenerates honestly on next view; the clean date's
+        # report is untouched.
+        assert storage.get_daily_report("2026-07-27") is None
+        assert storage.get_daily_report("2026-07-25") is not None
+
+    def test_idempotent_and_ignores_distinct_urls(self, fresh_db, make_signal):
+        self._insert_legacy_pair(make_signal)
+        other = make_signal(
+            id="sig-other",
+            title="高盛研究: Y",
+            source="research_view",
+            published_at=datetime(2026, 7, 27, tzinfo=timezone.utc),
+            url="https://www.goldmansachs.com/y",
+        )
+        storage.save_signals_incremental("2026-Q3", [other])
+
+        assert storage.dedupe_signals_by_url() == 1
+        assert storage.dedupe_signals_by_url() == 0  # second run: no-op
+        # The distinct URL on the same day is untouched
+        assert len(storage.get_signals_by_date("2026-07-27")) == 1
+
 
 class TestUpsertSignals:
     """Tests for incremental upsert by signal_fingerprint."""
