@@ -1574,35 +1574,13 @@ async function loadDateSignals(dateStr) {
             <div class="stat-card"><div class="num">${sources.size}</div><div class="label">活跃信号源</div></div>
             <div class="stat-card"><div class="num" style="font-size:1.2em;">${dateStr}</div><div class="label">查看日期</div></div>
         </div>
-        <div class="daily-feed">${filtered.map(s => renderSignalCard(s)).join('')}</div>
-        <div id="dailyReportContainer"></div>`;
+        <div id="dailyReportContainer"></div>
+        <div class="daily-feed">${filtered.map(s => renderSignalCard(s)).join('')}</div>`;
 
         document.getElementById('mainContent').innerHTML = html;
 
-        // Add AI toggles
-        document.querySelectorAll('.signal-card').forEach(card => {
-            const sigId = card.dataset.signalId;
-            if (!sigId) return;
-            const titleEl = card.querySelector('h4');
-            if (!titleEl) return;
-            if (card.querySelector('.ai-toggle')) return;
-            const toggle = document.createElement('span');
-            toggle.className = 'ai-toggle';
-            toggle.textContent = '🤖 AI 解读';
-            toggle.onclick = function() {
-                const title = titleEl.textContent || '';
-                const summaryEl = card.querySelector('.sig-summary');
-                const summary = summaryEl ? summaryEl.textContent : '';
-                const sourceEl = card.querySelector('.sig-source');
-                const source = sourceEl ? sourceEl.textContent : '';
-                analyzeSignal(sigId, title, summary, source);
-            };
-            card.appendChild(toggle);
-            const panel = document.createElement('div');
-            panel.className = 'ai-panel';
-            panel.id = 'ai-' + sigId;
-            card.appendChild(panel);
-        });
+        addAiToggles(document.getElementById('mainContent'));
+        loadDailyReport(dateStr);  // auto: cached -> instant; missing -> generated on demand
     } catch(e) { document.getElementById('mainContent').innerHTML = '<div class="empty-state"><div class="icon">📭</div><p>加载失败: ' + e.message + '</p></div>'; }
 }
 

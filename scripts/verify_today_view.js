@@ -52,6 +52,12 @@ process.on('unhandledRejection', e => {
         check(tag + ': historical view offers back-to-today', await pg.evaluate(() =>
             [...document.querySelectorAll('button')].some(b => b.textContent.includes('返回今日'))
         ));
+        check(tag + ': historical report above feed', await pg.evaluate(() => {
+            const rc = document.getElementById('dailyReportContainer');
+            const feed = document.querySelector('.daily-feed');
+            if (!rc || !feed) return false;
+            return !!(rc.compareDocumentPosition(feed) & Node.DOCUMENT_POSITION_FOLLOWING);
+        }));
         await pg.screenshot({ path: path.join(OUT, tag + '_historical.png'), fullPage: true });
 
         await pg.click('button:has-text("返回今日")');
