@@ -15,6 +15,7 @@ from src.config import PROJECT_ROOT, REPORT_OUTPUT_DIR
 from src.daily_report import ensure_daily_report, generate_daily_report
 from src.llm_config import resolve_llm_config
 from src.main import run_pipeline
+from src.quarter_insight import ensure_quarter_insight, generate_quarter_insight
 from src.signals.ai_triage import AiTriage
 from src.signals.base import Signal
 from src.storage import (
@@ -894,6 +895,34 @@ async def api_get_daily_report(date: str) -> dict:
 
 # ====== Quarter comparison ======
 
+
+# ====== Quarter insight ======
+
+
+def _validate_quarter_format(quarter: str) -> None:
+    import re
+
+    if not re.match(r"^\d{4}-Q[1-4]$", quarter):
+        raise HTTPException(status_code=422, detail="季度格式必须为 YYYY-QN（如 2026-Q1）")
+
+
+@app.get("/api/quarter-insight/{quarter}")
+async def api_get_quarter_insight(quarter: str, previous: str = "") -> dict:
+    """Return (or generate) the AI insight report for the given quarter."""
+    _validate_quarter_format(quarter)
+    task = await ensure_quarter_insight(quarter, previous or None)
+    if task is not None:
+        await task
+    return await generate_quarter_insight(quarter, previous or None)
+
+
+@app.post("/api/quarter-insight/{quarter}/regenerate")
+async def api_regenerate_quarter_insight(quarter: str, previous: str = "") -> dict:
+    """Force-regenerate the AI insight report, bypassing the cache."""
+    _validate_quarter_format(quarter)
+    return await generate_quarter_insight(quarter, previous or None, force=True)
+
+
 @app.get("/api/quarters/comparison")
 async def api_quarters_comparison(current: str = "", previous: str = "") -> dict:
     """Return quarter-over-quarter comparison data."""
@@ -912,7 +941,7 @@ async def api_quarters_comparison(current: str = "", previous: str = "") -> dict
         cur_df = pd.DataFrame(current_holdings)
         prev_df = pd.DataFrame(previous_holdings)
         comparator = QuarterComparator()
-        comparison = comparator.compare(cur_df, prev_df)
+        comparison = comparator.compare(cur_df, prev_df, current, previous)
         return {
             "current": current,
             "previous": previous,

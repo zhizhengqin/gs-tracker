@@ -228,6 +228,12 @@ def init_db() -> None:
                 signal_count INTEGER DEFAULT 0,
                 generated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
+
+            CREATE TABLE IF NOT EXISTS quarter_insights (
+                quarter TEXT PRIMARY KEY,
+                report_text TEXT NOT NULL,
+                generated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
             """
         )
 
@@ -914,6 +920,33 @@ def save_daily_report(date_str: str, report_text: str, signal_count: int = 0) ->
             "report_text=excluded.report_text, signal_count=excluded.signal_count, "
             "generated_at=CURRENT_TIMESTAMP",
             (date_str, report_text, signal_count),
+        )
+        conn.commit()
+
+
+# ====== Quarter insights ======
+
+
+def get_quarter_insight(quarter: str) -> Optional[dict]:
+    """Return cached AI quarter insight for a quarter, or None."""
+    with get_connection() as conn:
+        row = conn.execute(
+            "SELECT quarter, report_text, generated_at "
+            "FROM quarter_insights WHERE quarter = ?",
+            (quarter,),
+        ).fetchone()
+        return dict(row) if row else None
+
+
+def save_quarter_insight(quarter: str, report_text: str) -> None:
+    """Cache an AI quarter insight report (idempotent upsert)."""
+    with get_connection() as conn:
+        conn.execute(
+            "INSERT INTO quarter_insights (quarter, report_text, generated_at) "
+            "VALUES (?, ?, CURRENT_TIMESTAMP) "
+            "ON CONFLICT(quarter) DO UPDATE SET "
+            "report_text=excluded.report_text, generated_at=CURRENT_TIMESTAMP",
+            (quarter, report_text),
         )
         conn.commit()
 

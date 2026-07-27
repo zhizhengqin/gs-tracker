@@ -76,6 +76,16 @@
         .holdings-toggle { display: inline-flex; gap: 0; margin-bottom: 12px; border: 1px solid #ddd; border-radius: 8px; overflow: hidden; }
         .holdings-toggle button { padding: 7px 18px; border: none; background: #fff; color: #666; font-size: 0.85em; font-weight: 600; cursor: pointer; }
         .holdings-toggle button.active { background: var(--accent); color: #fff; }
+        .quarter-tabs { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; }
+        .quarter-tab { padding: 7px 16px; border-radius: 20px; border: 1px solid #ddd; background: #fff; color: #666; font-size: 0.85em; font-weight: 600; cursor: pointer; }
+        .quarter-tab.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+        #quarterSelect { padding: 6px 10px; border: 1px solid #ddd; border-radius: 6px; font-size: 0.9em; background: #fff; }
+        .change-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 14px; }
+        .change-group ul { list-style: none; margin: 8px 0 0; padding: 0; }
+        .change-group li { display: flex; justify-content: space-between; gap: 10px; padding: 6px 0; border-bottom: 1px solid #f0f0f0; font-size: 0.85em; }
+        .change-group li:last-child { border-bottom: none; }
+        .change-group .val { font-family: monospace; white-space: nowrap; }
+        .change-count { display: inline-block; min-width: 22px; text-align: center; border-radius: 10px; padding: 1px 8px; font-size: 0.78em; font-weight: 700; margin-left: 6px; }
         .run-msg.info { color: #c4c9e0; }
 
         /* ====== Main Content ====== */
@@ -337,24 +347,6 @@
         </ul>
     </div>
 
-    <div class="sidebar-section">
-        <h3>📅 季度报告</h3>
-        <ul class="quarter-list" id="quarterList">
-            <li data-quarter="2026-Q2">2026-Q2 <span class="badge">最新</span></li>
-            <li data-quarter="2026-Q1">2026-Q1</li>
-        </ul>
-    </div>
-
-    <div class="sidebar-section" id="moduleSection" style="display:none;">
-        <h3>📋 模块</h3>
-        <ul class="nav-tabs" id="navTabs">
-            <li class="active" data-tab="overview">📊 概览</li>
-            <li data-tab="analysis">🤖 AI 分析</li>
-            <li data-tab="signals">📡 多源信号</li>
-            <li data-tab="holdings">📋 持仓明细</li>
-        </ul>
-    </div>
-
     <div class="sidebar-section" id="signalFilterSection" style="display:none;">
         <h3>🔍 信号筛选</h3>
         <div class="signal-filter">
@@ -487,7 +479,7 @@
         </ul>
         <h4>📅 季度报告</h4>
         <ul>
-            <li>左侧选季度，右侧四个模块：<strong>概览</strong>（关键数据）、<strong>AI 分析</strong>（整季中文解读）、<strong>多源信号</strong>（当季相关情报）、<strong>持仓明细</strong>（默认按公司汇总持仓，可切换"原始明细"查看逐笔记录）。</li>
+            <li>页面顶部下拉框选择季度，下方标签栏可切换：<strong>全部</strong>（一屏到底的长页面）、<strong>概览</strong>（关键数据）、<strong>AI 分析</strong>（含 AI 季度洞察：调仓解读、A 股题材映射、宏观看点）、<strong>持仓变化</strong>（与上一季度对比：新建仓/增持/减持/清仓）、<strong>多源信号</strong>（当季相关情报）、<strong>持仓明细</strong>（默认按公司汇总，可切换"原始明细"）。</li>
         </ul>
         <h4>⚙️ 设置</h4>
         <ul>
@@ -524,6 +516,7 @@
 let currentQuarter = null;
 let reportData = null;
 let reports = [];
+let currentQuarterTab = 'all'; // 'all' = stacked long page
 let dailyData = [];       // signals from /api/signals/recent (earlier range view)
 let todayData = [];       // today's signals (today view)
 let dailyDays = 30;       // current day range
@@ -536,16 +529,10 @@ async function init() {
         li.addEventListener('click', () => switchMainView(li.dataset.view));
     });
 
-    // Bind module tabs
-    document.querySelectorAll('#navTabs li').forEach(li => {
-        li.addEventListener('click', () => switchTab(li.dataset.tab));
-    });
-
     // Preload report list in background
     try {
         const resp = await fetch('/api/reports');
         reports = await resp.json();
-        renderQuarterList();
         if (reports.length > 0) currentQuarter = reports[0].quarter;
     } catch(e) { console.error('Failed to load reports', e); }
 
@@ -630,8 +617,7 @@ async function loadQuarter(quarter) {
         reportData = null;
     }
 
-    renderAll();
-    updateQuarterListActive();
+    renderQuarterView();
 }
 
 // ====== Manual pipeline trigger ======
@@ -813,7 +799,6 @@ async function refreshReports() {
     try {
         const resp = await fetch('/api/reports');
         reports = await resp.json();
-        renderQuarterList();
         if (reports.length > 0) {
             currentQuarter = reports[0].quarter;  // newest first — a new run may add a quarter
             await switchMainView('quarter');
@@ -916,36 +901,176 @@ function extractHoldings(doc) {
     return holdings;
 }
 
-// ====== Render ======
-function renderAll() {
-    switchTab(document.querySelector('#navTabs li.active')?.dataset?.tab || 'overview');
+// ====== Quarter view render (selector + in-content tabs + panels) ======
+const QUARTER_TABS = [
+    ['all', '📑 全部'],
+    ['overview', '📊 概览'],
+    ['analysis', '🤖 AI 分析'],
+    ['changes', '📈 持仓变化'],
+    ['signals', '📡 多源信号'],
+    ['holdings', '📋 持仓明细'],
+];
+
+function previousQuarterOf(q) {
+    const i = reports.findIndex(r => r.quarter === q);
+    return (i >= 0 && i + 1 < reports.length) ? reports[i + 1].quarter : '';
 }
 
-function switchTab(tab) {
-    document.querySelectorAll('#navTabs li').forEach(li => li.classList.remove('active'));
-    const activeLi = document.querySelector(`#navTabs li[data-tab="${tab}"]`);
-    if (activeLi) activeLi.classList.add('active');
-
-    // Show/hide signal filter
-    const filterSection = document.getElementById('signalFilterSection');
-    filterSection.style.display = tab === 'signals' ? 'block' : 'none';
-
+function renderQuarterView() {
+    const main = document.getElementById('mainContent');
     if (!reportData) {
-        document.getElementById('mainContent').innerHTML = '<div class="empty-state"><div class="icon">📭</div><p>暂无数据</p></div>';
+        main.innerHTML = '<div class="empty-state"><div class="icon">📭</div><p>暂无数据</p></div>';
         return;
     }
+    const options = reports.map((r, i) =>
+        `<option value="${r.quarter}" ${r.quarter === currentQuarter ? 'selected' : ''}>${r.quarter}${i === 0 ? '（最新）' : ''}</option>`
+    ).join('');
+    main.innerHTML = `
+        <div class="daily-header">
+            <h2>📅 季度报告</h2>
+            <div class="date-picker-row">
+                <span style="font-size:0.85em;color:#888;">📅 选择季度：</span>
+                <select id="quarterSelect" onchange="loadQuarter(this.value)">${options}</select>
+            </div>
+        </div>
+        <div class="quarter-tabs">${QUARTER_TABS.map(([k, label]) =>
+            `<button class="quarter-tab ${k === currentQuarterTab ? 'active' : ''}" data-qtab="${k}">${label}</button>`
+        ).join('')}</div>
+        <div id="quarterPanel"></div>`;
+    document.querySelectorAll('.quarter-tab').forEach(b =>
+        b.addEventListener('click', () => switchQuarterTab(b.dataset.qtab))
+    );
+    renderQuarterPanel();
+}
 
+function switchQuarterTab(tab) {
+    currentQuarterTab = tab;
+    document.querySelectorAll('.quarter-tab').forEach(b =>
+        b.classList.toggle('active', b.dataset.qtab === tab)
+    );
+    renderQuarterPanel();
+}
+
+function renderQuarterPanel() {
+    const el = document.getElementById('quarterPanel');
+    if (!el || !reportData) return;
     const d = reportData;
-    let html = '';
-    switch(tab) {
-        case 'overview': html = renderOverview(d); break;
-        case 'analysis': html = renderAnalysis(d); break;
-        case 'signals': html = renderSignalsPanel(d); break;
-        case 'holdings': html = renderHoldingsPanel(d); break;
+    const filterSection = document.getElementById('signalFilterSection');
+    const showFilter = currentQuarterTab === 'signals' || currentQuarterTab === 'all';
+    if (filterSection && currentView === 'quarter') filterSection.style.display = showFilter ? 'block' : 'none';
+
+    switch (currentQuarterTab) {
+        case 'overview':
+            el.innerHTML = renderOverview(d);
+            break;
+        case 'analysis':
+            el.innerHTML = '<div id="insightSlot"><div class="loading">🤖 AI 季度洞察生成中...</div></div>' + renderAnalysis(d);
+            loadQuarterInsight(d);
+            break;
+        case 'changes':
+            el.innerHTML = '<div class="loading">加载中...</div>';
+            loadQuarterChanges(d, el);
+            break;
+        case 'signals':
+            el.innerHTML = renderSignalsPanel(d);
+            renderSignals();
+            break;
+        case 'holdings':
+            el.innerHTML = renderHoldingsPanel(d);
+            break;
+        case 'all':
+        default:
+            el.innerHTML = renderOverview(d)
+                + '<div id="insightSlot"><div class="loading">🤖 AI 季度洞察生成中...</div></div>'
+                + '<div id="changesSlot"><div class="loading">加载中...</div></div>'
+                + renderSignalsPanel(d)
+                + renderHoldingsPanel(d);
+            loadQuarterInsight(d);
+            loadQuarterChanges(d, document.getElementById('changesSlot'));
+            renderSignals();
+            break;
     }
-    document.getElementById('mainContent').innerHTML = html;
-    // Scripts injected via innerHTML never execute, so render signals explicitly
-    if (tab === 'signals') renderSignals();
+}
+
+async function loadQuarterInsight(d, force = false) {
+    const slot = document.getElementById('insightSlot');
+    if (!slot) return;
+    const prev = previousQuarterOf(d.quarter);
+    if (force) slot.innerHTML = '<div class="loading">🤖 AI 季度洞察重新生成中...</div>';
+    try {
+        const query = prev ? `?previous=${prev}` : '';
+        const resp = force
+            ? await fetch(`/api/quarter-insight/${d.quarter}/regenerate${query}`, { method: 'POST' })
+            : await fetch(`/api/quarter-insight/${d.quarter}${query}`);
+        const r = await resp.json();
+        if (r.report) {
+            const formatted = esc(r.report).replace(/\n/g, '<br>').replace(/## ([^<]+)/g, '<h4>$1</h4>');
+            slot.innerHTML = `<div class="daily-report-card">
+                <h3>🤖 ${d.quarter} AI 季度洞察</h3>
+                <div>${formatted}</div>
+                <div style="margin-top:10px;"><button class="btn-sm" onclick="loadQuarterInsight(reportData, true)">🔄 重新生成</button></div>
+            </div>`;
+        } else {
+            slot.innerHTML = '';
+        }
+    } catch (e) {
+        slot.innerHTML = '<p style="color:#999;">AI 季度洞察加载失败</p>';
+    }
+}
+
+function fmtYi(v) {
+    const n = Number(v);
+    return Number.isFinite(n) ? (n / 1e8).toLocaleString('zh-CN', { maximumFractionDigits: 1 }) + ' 亿' : '-';
+}
+
+function renderChangeGroup(title, items, valueFn, badgeColor) {
+    const rows = (items || []).slice(0, 10).map(it =>
+        `<li><span>${esc(it.name_of_issuer || '')}</span><span class="val">${valueFn(it)}</span></li>`
+    ).join('') || '<li style="color:#999;">无</li>';
+    return `<div class="card change-group">
+        <h3>${title}<span class="change-count" style="background:${badgeColor};">${(items || []).length}</span></h3>
+        <ul>${rows}</ul>
+    </div>`;
+}
+
+function renderChangesCard(quarter, previous, r) {
+    if (r.message) {
+        return `<div class="card"><h3>📈 持仓变化（${quarter} vs ${previous}）</h3><p style="color:#999;">上一季度暂无持仓数据，无法进行环比对比。</p></div>`;
+    }
+    const hhi = Number(r.concentration_change || 0);
+    const hhiText = `${hhi >= 0 ? '+' : ''}${hhi.toFixed(4)}（${hhi > 0 ? '持仓更集中' : hhi < 0 ? '持仓更分散' : '基本持平'}）`;
+    const pct = it => {
+        const prev = Number(it.value_prev), cur = Number(it.value);
+        if (!prev) return '';
+        const p = ((cur - prev) / prev * 100).toFixed(0);
+        return `${fmtYi(prev)} → ${fmtYi(cur)}（${p > 0 ? '+' : ''}${p}%）`;
+    };
+    return `<div class="card" style="margin-bottom:14px;">
+            <h3>📈 持仓变化（${quarter} vs ${previous}）</h3>
+            <p style="font-size:0.85em;color:#888;margin:6px 0 0;">金额单位：美元 · 增减持阈值为市值变动 ±20% · 集中度变化：${hhiText}</p>
+        </div>
+        <div class="change-grid">
+            ${renderChangeGroup('🆕 新建仓', r.new_positions, it => fmtYi(it.value), '#e8f5e9;color:#2e7d32;')}
+            ${renderChangeGroup('📈 增持', r.increased_positions, pct, '#e3f2fd;color:#1565c0;')}
+            ${renderChangeGroup('📉 减持', r.decreased_positions, pct, '#fff3e0;color:#e65100;')}
+            ${renderChangeGroup('🗑️ 清仓', r.sold_positions, it => fmtYi(it.value), '#fce4ec;color:#c2185b;')}
+        </div>`;
+}
+
+async function loadQuarterChanges(d, el) {
+    if (!el) return;
+    const prev = previousQuarterOf(d.quarter);
+    if (!prev) {
+        el.innerHTML = `<div class="card"><h3>📈 持仓变化（对比上季）</h3><p style="color:#999;">暂无上一季度数据，跑完下一季度对账后即可查看环比变化。</p></div>`;
+        return;
+    }
+    try {
+        const resp = await fetch(`/api/quarters/comparison?current=${d.quarter}&previous=${prev}`);
+        const r = await resp.json();
+        el.innerHTML = renderChangesCard(d.quarter, prev, r);
+    } catch (e) {
+        el.innerHTML = '<p style="color:#999;">持仓变化加载失败</p>';
+    }
 }
 
 function renderOverview(d) {
@@ -1185,7 +1310,7 @@ let holdingsViewMode = 'aggregated';
 
 function setHoldingsView(mode) {
     holdingsViewMode = mode;
-    switchTab('holdings');
+    renderQuarterPanel();
 }
 
 function parseHoldingsValue(text) {
@@ -1208,30 +1333,6 @@ function aggregateHoldingsByName(holdings) {
     return Array.from(byName.values()).sort((a, b) => b.value - a.value);
 }
 
-// ====== Quarter switching ======
-function renderQuarterList() {
-    const ul = document.getElementById('quarterList');
-    ul.innerHTML = reports.map((r, i) => `
-        <li data-quarter="${r.quarter}" class="${r.quarter === currentQuarter ? 'active' : ''}">
-            ${r.quarter}
-            ${i === 0 ? '<span class="badge">最新</span>' : ''}
-        </li>
-    `).join('');
-
-    ul.querySelectorAll('li').forEach(li => {
-        li.addEventListener('click', async () => {
-            currentQuarter = li.dataset.quarter;
-            await switchMainView('quarter');
-        });
-    });
-}
-
-function updateQuarterListActive() {
-    document.querySelectorAll('#quarterList li').forEach(li => {
-        li.classList.toggle('active', li.dataset.quarter === currentQuarter && currentView === 'quarter');
-    });
-}
-
 // ====== Main view switcher ======
 async function switchMainView(view) {
     currentView = view;
@@ -1240,17 +1341,12 @@ async function switchMainView(view) {
     const navItem = document.querySelector(`#mainNav li[data-view="${view}"]`);
     if (navItem) navItem.classList.add('active');
 
-    // Show/hide module tabs
-    const moduleSection = document.getElementById('moduleSection');
     const filterSection = document.getElementById('signalFilterSection');
 
     if (view === 'daily') {
-        if (moduleSection) moduleSection.style.display = 'none';
         if (filterSection) filterSection.style.display = 'block';
-        document.querySelectorAll('#quarterList li').forEach(li => li.classList.remove('active'));
         await loadTodayView();
     } else if (view === 'quarter') {
-        if (moduleSection) moduleSection.style.display = 'block';
         if (filterSection) filterSection.style.display = 'block';
         if (currentQuarter) {
             await loadQuarter(currentQuarter);
@@ -1258,14 +1354,10 @@ async function switchMainView(view) {
             document.getElementById('mainContent').innerHTML = '<div class="loading">暂无报告数据，请先运行季度对账</div>';
         }
     } else if (view === 'settings') {
-        if (moduleSection) moduleSection.style.display = 'none';
         if (filterSection) filterSection.style.display = 'none';
-        document.querySelectorAll('#quarterList li').forEach(li => li.classList.remove('active'));
         await renderSettings();
     } else if (view === 'guide') {
-        if (moduleSection) moduleSection.style.display = 'none';
         if (filterSection) filterSection.style.display = 'none';
-        document.querySelectorAll('#quarterList li').forEach(li => li.classList.remove('active'));
         renderGuide();
     }
 }
@@ -1844,14 +1936,13 @@ function toggleDrawer(force) {
     mask.classList.toggle('open', open);
 }
 
-// Delegated listener survives renderQuarterList() re-renders; additive, no
-// changes to switchMainView/switchTab. The topbar title is synced by the
-// switchMainView wrapper above, so this only closes the drawer.
+// Delegated listener; the topbar title is synced by the switchMainView
+// wrapper above, so this only closes the drawer.
 (function bindMobileNav() {
     const sb = document.querySelector('.sidebar');
     if (!sb) return;
     sb.addEventListener('click', (e) => {
-        const item = e.target.closest('#mainNav li, #navTabs li, #quarterList li');
+        const item = e.target.closest('#mainNav li');
         if (!item) return;
         toggleDrawer(false);
     });

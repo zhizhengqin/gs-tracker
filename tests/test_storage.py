@@ -691,3 +691,20 @@ class TestSignalRunJobDimension:
         run = storage.get_signal_run("2026-Q2")
         assert run is not None
         assert run["job"] == "daily"
+
+
+class TestQuarterInsights:
+    def test_save_and_get_quarter_insight(self, fresh_db):
+        storage.save_quarter_insight("2026-Q1", "## 持仓变化解读\n测试内容")
+        row = storage.get_quarter_insight("2026-Q1")
+        assert row is not None
+        assert row["quarter"] == "2026-Q1"
+        assert "测试内容" in row["report_text"]
+
+    def test_get_quarter_insight_missing(self, fresh_db):
+        assert storage.get_quarter_insight("2099-Q4") is None
+
+    def test_save_quarter_insight_upsert(self, fresh_db):
+        storage.save_quarter_insight("2026-Q1", "旧版")
+        storage.save_quarter_insight("2026-Q1", "新版")
+        assert storage.get_quarter_insight("2026-Q1")["report_text"] == "新版"

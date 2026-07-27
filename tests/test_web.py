@@ -685,3 +685,58 @@ def test_daily_report_endpoint_delegates(monkeypatch):
 def test_daily_report_endpoint_bad_date():
     resp = client.get("/api/daily-report/2026-13-99")
     assert resp.status_code == 422
+
+
+def test_quarter_insight_endpoint_delegates(monkeypatch):
+    import src.web as web
+
+    async def _fake(quarter, previous=None, force=False):
+        return {"quarter": quarter, "report": "伪季度洞察", "cached": True}
+
+    monkeypatch.setattr(web, "generate_quarter_insight", _fake)
+
+    async def _none(quarter, previous=None):
+        return None
+
+    monkeypatch.setattr(web, "ensure_quarter_insight", _none)
+    resp = client.get("/api/quarter-insight/2026-Q1?previous=2025-Q4")
+    assert resp.status_code == 200
+    assert resp.json()["report"] == "伪季度洞察"
+
+
+def test_quarter_insight_endpoint_bad_quarter():
+    resp = client.get("/api/quarter-insight/2026-Q5")
+    assert resp.status_code == 422
+
+
+def test_quarter_insight_regenerate(monkeypatch):
+    import src.web as web
+
+    async def _fake(quarter, previous=None, force=False):
+        assert force is True
+        return {"quarter": quarter, "report": "重新生成的洞察", "cached": False}
+
+    monkeypatch.setattr(web, "generate_quarter_insight", _fake)
+    resp = client.post("/api/quarter-insight/2026-Q1/regenerate")
+    assert resp.status_code == 200
+    assert resp.json()["report"] == "重新生成的洞察"
+
+
+def test_dashboard_quarter_view_layout(tmp_path, monkeypatch):
+    """Quarter reports live in the main content area like the daily view:
+    a quarter selector replaces the sidebar quarter list, and in-content
+    tabs offer both a stacked long page and per-module views."""
+    monkeypatch.setattr("src.web.REPORT_OUTPUT_DIR", tmp_path)
+    response = client.get("/")
+    assert response.status_code == 200
+    # Quarter selector in the content header; sidebar quarter list gone
+    assert 'id="quarterSelect"' in response.text
+    assert 'id="quarterList"' not in response.text
+    assert 'id="moduleSection"' not in response.text
+    # In-content tabs: stacked long page + per-module views + QoQ changes
+    # (tab keys are rendered dynamically from QUARTER_TABS)
+    assert "data-qtab" in response.text
+    assert "'changes'" in response.text
+    assert "持仓变化" in response.text
+    # AI quarterly insight wiring
+    assert "quarter-insight" in response.text
