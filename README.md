@@ -4,9 +4,17 @@
 
 ## 核心价值
 
-自动抓取 SEC 13F 季度持仓，叠加高盛研究报告、宏观策略、交易信号等多源信息，通过 Claude AI 推断高盛方向性意图，生成可视化 HTML 情报板。
+自动抓取 SEC 13F 季度持仓与每日多源情报（SEC 8-K/13D·13G、高盛研究、新闻、宏观指标、自定义网页/主题源），AI 预筛去重后生成每日情报日报与可视化仪表盘，手机和电脑浏览器均可使用。
 
 > **重要说明**: 13F 数据有 45 天滞后，精确实时持仓无法公开获取。本系统通过多源间接信号推断动向，不构成投资建议。
+
+## 功能特性
+
+- 📡 **每日情报**：今日视图置顶 AI 日报；更早情报折叠收纳；历史日期可回溯
+- 🤖 **AI 解读**：单条信号一键中文解读（带缓存）；日报由流水线自动生成，页面打开兜底
+- ⚙️ **设置页**：大模型管理（Kimi/Anthropic 兼容）、信号源开关、自定义网页/主题源（AI 预筛）
+- 📱 **手机适配**：汉堡抽屉导航，全部功能可在手机浏览器使用
+- 🔄 **流水线可视化**：SSE 实时进度面板，逐信号源状态与结果汇总
 
 ## 快速开始
 
@@ -24,13 +32,14 @@ pip install -r requirements.txt
 
 # 4. 配置环境变量
 cp .env.example .env
-# 编辑 .env，填入 ANTHROPIC_API_KEY 和 SEC_USER_AGENT
+# 编辑 .env：Kimi 填 ANTHROPIC_BASE_URL + ANTHROPIC_AUTH_TOKEN（或官方 ANTHROPIC_API_KEY）；
+# 必填 SEC_USER_AGENT（含联系邮箱）；宏观指标源可选 FRED_API_KEY
 
 # 5. 初始化数据库
 python -c "from src.storage import init_db; init_db()"
 
 # 6. 生成单份报告
-python src/main.py --run-now
+python -m src.main --run-now
 
 # 7. 启动 Web 服务
 uvicorn src.web:app --reload
@@ -40,7 +49,7 @@ uvicorn src.web:app --reload
 
 ```
 gs-tracker/
-├── src/          # 源代码
+├── src/          # 源代码（signals/ 为多源信号体系）
 ├── tests/        # 测试
 ├── deploy/       # Docker / Nginx / systemd 配置
 ├── docs/         # 设计文档与计划
@@ -52,9 +61,10 @@ gs-tracker/
 
 ## 文档
 
-- [完整方案](GS-Tracker-Complete-Scheme.md)
-- [京东云部署设计](docs/superpowers/specs/2026-07-17-jdcloud-deployment-design.md)
+- [部署手册（小白版）](DEPLOY.md) — 京东云从零部署 + 故障排查
 - [CLAUDE.md](CLAUDE.md) — 项目上下文与开发规范
+- [京东云部署设计](docs/superpowers/specs/2026-07-17-jdcloud-deployment-design.md)
+- [完整方案](GS-Tracker-Complete-Scheme.md) — 原始方案（历史文档）
 
 ## 免责声明
 
