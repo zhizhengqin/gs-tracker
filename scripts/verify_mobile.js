@@ -13,6 +13,17 @@ function check(name, ok) {
     console.log((ok ? 'PASS' : 'FAIL') + '  ' + name);
     if (!ok) failures.push(name);
 }
+// The app requires login; sign in if we land on the login page.
+// Credentials come from GS_VERIFY_USER / GS_VERIFY_PASS (default: built-in admin).
+async function loginIfNeeded(pg) {
+    if (await pg.$('#login-form')) {
+        await pg.fill('#username', process.env.GS_VERIFY_USER || 'gsadmin');
+        await pg.fill('#password', process.env.GS_VERIFY_PASS || 'admin123');
+        await pg.click('#login-btn');
+        await pg.waitForURL(u => !u.pathname.startsWith('/login'), { timeout: 10000 });
+        await pg.waitForLoadState('networkidle');
+    }
+}
 process.on('unhandledRejection', e => {
     console.log('FAIL  exception: ' + e.message);
     process.exit(1);
@@ -23,6 +34,7 @@ process.on('unhandledRejection', e => {
     const b = await pw.chromium.launch();
     const pg = await b.newPage({ viewport: { width: 390, height: 844 } });
     await pg.goto(URL_, { waitUntil: 'networkidle' });
+    await loginIfNeeded(pg);
     await pg.waitForTimeout(800);
     const noX = () => pg.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth);
     const drawerOpen = () => pg.evaluate(() => document.querySelector('.sidebar').classList.contains('open'));

@@ -67,6 +67,8 @@ node scripts/verify_today_view.js http://127.0.0.1:8770 /tmp/verify  # 页面结
 ```
 
 ## API 端点
+- 认证：`GET /login`（登录页）；`POST /api/auth/login`；`POST /api/auth/logout`；`GET /api/auth/me`。除 /login、/api/auth/login、/api/health 外所有页面与 API 需登录（HttpOnly Cookie 会话，7 天）；`/api/settings/**` 仅管理员（内置 gsadmin/admin123 首次启动自动创建）
+- 用户管理（管理员）：`GET/POST /api/settings/users`；`PUT/DELETE /api/settings/users/{username}`（gsadmin 不可删除/降角色，改密码或角色会使该用户所有会话失效）
 - 季度/报告：`GET /api/signals/{quarter}`（404=该季度未跑过，422=格式错误）；`GET /api/quarters/comparison`；`GET /api/reports`；`GET /reports/{quarter}.html`；`GET /api/health`
 - 每日情报：`GET /api/signals/recent?days=N`；`GET /api/signals/date/{date}`；`POST /api/signals/{signal_id}/analyze` + `GET /api/signals/{signal_id}/analysis`；`GET /api/daily-report/{date}`（无缓存则自动生成）；`POST /api/daily-report/{date}/regenerate`（强制重生成）；`POST /api/quarter-insight/{quarter}/regenerate`（季度洞察重生成）
 - 流水线：`POST /api/pipeline/run`（季度对账）；`POST /api/pipeline/run-daily`；`GET /api/pipeline/run/stream` 与 `GET /api/pipeline/run-daily/stream`（SSE 实时进度）；`GET /api/pipeline/status`、`GET /api/pipeline/run-daily/status`

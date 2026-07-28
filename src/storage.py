@@ -234,6 +234,21 @@ def init_db() -> None:
                 report_text TEXT NOT NULL,
                 generated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
+
+            CREATE TABLE IF NOT EXISTS users (
+                username TEXT PRIMARY KEY,
+                password_hash TEXT NOT NULL,
+                role TEXT NOT NULL DEFAULT 'viewer',
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+
+            CREATE TABLE IF NOT EXISTS sessions (
+                token TEXT PRIMARY KEY,
+                username TEXT NOT NULL,
+                expires_at TEXT NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (username) REFERENCES users(username)
+            );
             """
         )
 
@@ -639,6 +654,130 @@ def get_signals(quarter: str) -> List[Signal]:
                     "Skipping malformed signal row (id=%s): %s", row["id"], exc
                 )
         return signals
+
+
+# ====== Users & sessions ======
+
+def create_user(username: str, password_hash: str, role: str = "viewer") -> None:
+    """Insert a new user. Raises sqlite3.IntegrityError if username exists."""
+    with get_connection() as conn:
+        conn.execute(
+            "INSERT INTO users (username, password_hash, role) VALUES (?, ?, ?)",
+            (username, password_hash, role),
+        )
+        conn.commit()
+
+
+def get_user(username: str) -> Optional[dict]:
+    """Return a user row (including password_hash), or None."""
+    with get_connection() as conn:
+        row = conn.execute(
+            "SELECT username, password_hash, role, created_at FROM users WHERE username = ?",
+            (username,),
+        ).fetchone()
+        return dict(row) if row else None
+
+
+def list_users() -> List[dict]:
+    """Return all users (without password hashes), oldest first."""
+    with get_connection() as conn:
+        rows = conn.execute(
+            "SELECT username, role, created_at FROM users ORDER BY created_at ASC"
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+
+def update_user(
+    username: str,
+    password_hash: Optional[str] = None,
+    role: Optional[str] = None,
+) -> bool:
+    """Update password and/or role for a user. Returns False if not found."""
+    sets: List[str] = []
+    params: List[str] = []
+    if password_hash is not None:
+        sets.append("password_hash = ?")
+        params.append(password_hash)
+    if role is not None:
+        sets.append("role = ?")
+        params.append(role)
+    if not sets:
+        return get_user(username) is not None
+    params.append(username)
+    with get_connection() as conn:
+        cur = conn.execute(
+            f"UPDATE users SET {', '.join(sets)} WHERE username = ?", params
+        )
+        conn.commit()
+        return cur.rowcount > 0
+
+
+def delete_user(username: str) -> bool:
+    """Delete a user and all their sessions. Returns False if not found."""
+    with get_connection() as conn:
+        cur = conn.execute("DELETE FROM users WHERE username = ?", (username,))
+        conn.execute("DELETE FROM sessions WHERE username = ?", (username,))
+        conn.commit()
+        return cur.rowcount > 0
+
+
+def count_users() -> int:
+    """Return the total number of users."""
+    with get_connection() as conn:
+        row = conn.execute("SELECT COUNT(*) AS n FROM users").fetchone()
+        return int(row["n"])
+
+
+def save_session(token: str, username: str, expires_at: datetime) -> None:
+    """Persist a login session."""
+    with get_connection() as conn:
+        conn.execute(
+            "INSERT INTO sessions (token, username, expires_at) VALUES (?, ?, ?)",
+            (token, username, expires_at.isoformat()),
+        )
+        conn.commit()
+
+
+def get_session(token: str) -> Optional[dict]:
+    """Return a session row joined with the user's role, or None.
+
+    Expired sessions are deleted on read and treated as missing.
+    """
+    with get_connection() as conn:
+        row = conn.execute(
+            "SELECT s.token, s.username, s.expires_at, u.role "
+            "FROM sessions s JOIN users u ON u.username = s.username "
+            "WHERE s.token = ?",
+            (token,),
+        ).fetchone()
+        if not row:
+            return None
+        session = dict(row)
+        try:
+            expires_at = datetime.fromisoformat(session["expires_at"])
+        except (ValueError, TypeError):
+            expires_at = datetime.now(timezone.utc) - timedelta(seconds=1)
+        if expires_at.tzinfo is None:
+            expires_at = expires_at.replace(tzinfo=timezone.utc)
+        if expires_at <= datetime.now(timezone.utc):
+            conn.execute("DELETE FROM sessions WHERE token = ?", (token,))
+            conn.commit()
+            return None
+        return session
+
+
+def delete_session(token: str) -> None:
+    """Remove a single session (logout)."""
+    with get_connection() as conn:
+        conn.execute("DELETE FROM sessions WHERE token = ?", (token,))
+        conn.commit()
+
+
+def delete_user_sessions(username: str) -> None:
+    """Remove every session for a user (e.g. after password change)."""
+    with get_connection() as conn:
+        conn.execute("DELETE FROM sessions WHERE username = ?", (username,))
+        conn.commit()
 
 
 def get_recent_signals(

@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>登录 — GS-Tracker 高盛动向情报系统</title>
+    <style>
+        :root {
+            --primary: #1a237e;
+            --accent: #ff9800;
+            --bg: #f0f2f5;
+            --sidebar-bg: #121858;
+            --danger: #d32f2f;
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background: var(--bg); color: #333;
+            display: flex; align-items: center; justify-content: center;
+            min-height: 100vh; padding: 20px;
+        }
+        .login-card {
+            background: #fff; border-radius: 8px; width: 100%; max-width: 380px;
+            box-shadow: 0 4px 24px rgba(18, 24, 88, 0.12); overflow: hidden;
+        }
+        .login-header {
+            background: var(--sidebar-bg); color: #fff; padding: 28px 28px 22px;
+        }
+        .login-header h1 { font-size: 1.25em; font-weight: 700; }
+        .login-header .sub { font-size: 0.82em; color: #8890b5; margin-top: 6px; }
+        .login-body { padding: 26px 28px 30px; }
+        .field { margin-bottom: 18px; }
+        .field label { display: block; font-size: 0.85em; font-weight: 600; color: #555; margin-bottom: 6px; }
+        .field input {
+            width: 100%; padding: 11px 12px; border: 1px solid #d5d9e0; border-radius: 6px;
+            font-size: 0.95em; outline: none; transition: border-color 0.15s;
+        }
+        .field input:focus { border-color: var(--primary); }
+        .error-msg {
+            display: none; background: #fdecea; color: var(--danger);
+            border: 1px solid #f5c6c0; border-radius: 6px;
+            padding: 9px 12px; font-size: 0.85em; margin-bottom: 16px;
+        }
+        .error-msg.show { display: block; }
+        .login-btn {
+            width: 100%; padding: 12px; border: none; border-radius: 6px;
+            background: var(--accent); color: #fff; font-size: 1em; font-weight: 700;
+            cursor: pointer; transition: opacity 0.15s;
+        }
+        .login-btn:hover { opacity: 0.9; }
+        .login-btn:disabled { opacity: 0.55; cursor: not-allowed; }
+    </style>
+</head>
+<body>
+    <div class="login-card">
+        <div class="login-header">
+            <h1>GS-Tracker 高盛动向情报系统</h1>
+            <div class="sub">请登录后使用</div>
+        </div>
+        <div class="login-body">
+            <div id="error" class="error-msg"></div>
+            <form id="login-form">
+                <div class="field">
+                    <label for="username">用户名</label>
+                    <input id="username" name="username" type="text" autocomplete="username" required autofocus>
+                </div>
+                <div class="field">
+                    <label for="password">密码</label>
+                    <input id="password" name="password" type="password" autocomplete="current-password" required>
+                </div>
+                <button id="login-btn" class="login-btn" type="submit">登 录</button>
+            </form>
+        </div>
+    </div>
+    <script>
+        const form = document.getElementById('login-form');
+        const errorBox = document.getElementById('error');
+        const btn = document.getElementById('login-btn');
+
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            errorBox.classList.remove('show');
+            btn.disabled = true;
+            btn.textContent = '登录中…';
+            try {
+                const resp = await fetch('/api/auth/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        username: document.getElementById('username').value.trim(),
+                        password: document.getElementById('password').value,
+                    }),
+                });
+                if (resp.ok) {
+                    window.location.href = '/';
+                    return;
+                }
+                const data = await resp.json().catch(() => ({}));
+                errorBox.textContent = data.detail || '登录失败，请稍后重试';
+                errorBox.classList.add('show');
+            } catch (err) {
+                errorBox.textContent = '网络错误，请检查连接后重试';
+                errorBox.classList.add('show');
+            } finally {
+                btn.disabled = false;
+                btn.textContent = '登 录';
+            }
+        });
+    </script>
+</body>
+</html>

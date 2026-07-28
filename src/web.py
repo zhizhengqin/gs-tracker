@@ -8,9 +8,19 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from fastapi import Body, FastAPI, HTTPException, Path as PathParam
-from fastapi.responses import HTMLResponse, StreamingResponse
+from fastapi import Body, FastAPI, HTTPException, Path as PathParam, Request
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, StreamingResponse
 
+from src.auth import (
+    SESSION_COOKIE,
+    SESSION_TTL_DAYS,
+    authenticate,
+    create_session,
+    current_user_from_token,
+    destroy_session,
+    ensure_default_admin,
+    hash_password,
+)
 from src.config import PROJECT_ROOT, REPORT_OUTPUT_DIR
 from src.daily_report import ensure_daily_report, generate_daily_report
 from src.llm_config import resolve_llm_config
@@ -19,8 +29,11 @@ from src.signals.ai_triage import AiTriage
 from src.signals.base import Signal
 from src.storage import (
     add_llm_model,
+    create_user,
     delete_daily_report,
     delete_llm_model,
+    delete_user,
+    delete_user_sessions,
     get_all_settings,
     get_connection,
     get_daily_report,
@@ -32,11 +45,14 @@ from src.storage import (
     get_signal_run,
     get_signals,
     get_signals_by_date,
+    get_user,
     init_db,
+    list_users,
     save_daily_report,
     save_signal_analysis,
     set_default_llm_model,
     set_setting,
+    update_user,
 )
 
 logger = logging.getLogger(__name__)
@@ -46,6 +62,7 @@ logger = logging.getLogger(__name__)
 async def lifespan(app: FastAPI):
     """Ensure the database schema exists before serving requests."""
     init_db()
+    ensure_default_admin()
     _seed_default_llm_from_env()
     _purge_non_gs_news_signals()
     yield
@@ -111,6 +128,38 @@ def _llm_client_kwargs(db_model: Optional[dict]) -> dict:
 app = FastAPI(title="GS-Tracker", version="0.2.0", lifespan=lifespan)
 
 DASHBOARD_TEMPLATE = PROJECT_ROOT / "templates" / "dashboard.html"
+LOGIN_TEMPLATE = PROJECT_ROOT / "templates" / "login.html"
+
+
+@app.middleware("http")
+async def auth_middleware(request: Request, call_next):
+    """Site-wide auth guard.
+
+    Public: /login, /api/auth/login, /api/health.
+    Everything else needs a valid session cookie; /api/settings/** is
+    admin-only. API callers get 401/403 JSON, page visitors get
+    redirected to the login page.
+    """
+    path = request.url.path
+    if path in ("/login", "/api/auth/login", "/api/health"):
+        return await call_next(request)
+    if not (path.startswith("/api/") or path == "/" or path.startswith("/reports/")):
+        return await call_next(request)
+    user = current_user_from_token(request.cookies.get(SESSION_COOKIE))
+    if not user:
+        if path.startswith("/api/"):
+            return JSONResponse(
+                status_code=401,
+                content={"detail": "未登录或登录已过期，请重新登录"},
+            )
+        return RedirectResponse(url="/login", status_code=303)
+    if path.startswith("/api/settings") and user["role"] != "admin":
+        return JSONResponse(
+            status_code=403,
+            content={"detail": "只有管理员可以访问配置项"},
+        )
+    request.state.user = user
+    return await call_next(request)
 
 
 def _list_report_files() -> List[Path]:
@@ -118,6 +167,121 @@ def _list_report_files() -> List[Path]:
     if not REPORT_OUTPUT_DIR.exists():
         return []
     return sorted(REPORT_OUTPUT_DIR.glob("*.html"), reverse=True)
+
+
+# ====== Auth: login page + session endpoints ======
+
+@app.get("/login", response_class=HTMLResponse)
+async def login_page(request: Request) -> object:
+    """Serve the login page; already-authenticated users go to the dashboard."""
+    if current_user_from_token(request.cookies.get(SESSION_COOKIE)):
+        return RedirectResponse(url="/", status_code=303)
+    if LOGIN_TEMPLATE.exists():
+        return HTMLResponse(LOGIN_TEMPLATE.read_text(encoding="utf-8"))
+    raise HTTPException(status_code=500, detail="登录页面缺失")
+
+
+@app.post("/api/auth/login")
+async def api_login(payload: dict = Body(...)) -> JSONResponse:
+    """Validate credentials and set the session cookie."""
+    username = str(payload.get("username") or "").strip()
+    password = str(payload.get("password") or "")
+    if not username or not password:
+        raise HTTPException(status_code=422, detail="请输入用户名和密码")
+    user = authenticate(username, password)
+    if not user:
+        raise HTTPException(status_code=401, detail="用户名或密码错误")
+    token = create_session(user["username"])
+    response = JSONResponse(
+        content={"username": user["username"], "role": user["role"]}
+    )
+    response.set_cookie(
+        SESSION_COOKIE,
+        token,
+        max_age=SESSION_TTL_DAYS * 24 * 3600,
+        httponly=True,
+        samesite="lax",
+    )
+    return response
+
+
+@app.post("/api/auth/logout")
+async def api_logout(request: Request) -> JSONResponse:
+    """Invalidate the current session and clear the cookie."""
+    token = request.cookies.get(SESSION_COOKIE)
+    if token:
+        destroy_session(token)
+    response = JSONResponse(content={"ok": True})
+    response.delete_cookie(SESSION_COOKIE)
+    return response
+
+
+@app.get("/api/auth/me")
+async def api_auth_me(request: Request) -> dict:
+    """Return the currently logged-in user (middleware guarantees one)."""
+    return request.state.user
+
+
+# ====== User management (admin only; enforced by middleware) ======
+
+_VALID_ROLES = ("admin", "viewer")
+
+
+@app.get("/api/settings/users")
+async def api_list_users() -> List[dict]:
+    """List all users (no password data)."""
+    return list_users()
+
+
+@app.post("/api/settings/users", status_code=201)
+async def api_create_user(payload: dict = Body(...)) -> dict:
+    """Create a new user."""
+    username = str(payload.get("username") or "").strip()
+    password = str(payload.get("password") or "")
+    role = str(payload.get("role") or "viewer").strip()
+    if not username or not password:
+        raise HTTPException(status_code=422, detail="用户名和密码为必填")
+    if role not in _VALID_ROLES:
+        raise HTTPException(status_code=422, detail="角色必须是 admin 或 viewer")
+    if get_user(username):
+        raise HTTPException(status_code=409, detail="该用户名已存在")
+    create_user(username, hash_password(password), role)
+    logger.info("User created: %s (role=%s)", username, role)
+    return {"username": username, "role": role}
+
+
+@app.put("/api/settings/users/{username}")
+async def api_update_user(username: str, payload: dict = Body(...)) -> dict:
+    """Change a user's password and/or role."""
+    existing = get_user(username)
+    if not existing:
+        raise HTTPException(status_code=404, detail="用户不存在")
+    password = payload.get("password")
+    role = payload.get("role")
+    if role is not None and role not in _VALID_ROLES:
+        raise HTTPException(status_code=422, detail="角色必须是 admin 或 viewer")
+    if username == "gsadmin" and role is not None and role != "admin":
+        raise HTTPException(status_code=422, detail="内置管理员 gsadmin 必须保持 admin 角色")
+    new_hash = hash_password(str(password)) if password else None
+    update_user(username, password_hash=new_hash, role=role)
+    # Password or role change invalidates existing sessions.
+    if password or role is not None:
+        delete_user_sessions(username)
+    logger.info("User updated: %s", username)
+    return {"username": username, "role": role or existing["role"]}
+
+
+@app.delete("/api/settings/users/{username}")
+async def api_delete_user(username: str, request: Request) -> dict:
+    """Delete a user (gsadmin and self-deletion are not allowed)."""
+    if username == "gsadmin":
+        raise HTTPException(status_code=422, detail="内置管理员 gsadmin 不可删除")
+    if request.state.user.get("username") == username:
+        raise HTTPException(status_code=422, detail="不能删除当前登录的账号")
+    if not delete_user(username):
+        raise HTTPException(status_code=404, detail="用户不存在")
+    logger.info("User deleted: %s", username)
+    return {"ok": True}
 
 
 @app.get("/", response_class=HTMLResponse)

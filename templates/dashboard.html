@@ -63,6 +63,18 @@
             border-top: 1px solid rgba(255,255,255,0.06);
         }
 
+        .user-bar {
+            padding: 12px 20px; border-top: 1px solid rgba(255,255,255,0.06);
+            display: flex; align-items: center; justify-content: space-between; gap: 8px;
+        }
+        .user-bar .who { font-size: 0.8em; color: var(--sidebar-text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .user-bar .who .role-tag { font-size: 0.75em; background: rgba(255,255,255,0.12); border-radius: 8px; padding: 1px 7px; margin-left: 5px; }
+        .user-bar .logout-btn {
+            background: none; border: 1px solid rgba(255,255,255,0.25); color: var(--sidebar-text);
+            border-radius: 6px; padding: 4px 10px; font-size: 0.75em; cursor: pointer; flex-shrink: 0;
+        }
+        .user-bar .logout-btn:hover { background: rgba(255,255,255,0.1); color: #fff; }
+
         .run-btn {
             width: 100%; padding: 10px 14px; border: none; border-radius: 8px;
             background: var(--accent); color: #fff; font-size: 0.9em; font-weight: 600;
@@ -374,6 +386,10 @@
         <div class="run-msg" id="runPipelineMsg"></div>
     </div>
 
+    <div class="user-bar">
+        <span class="who" id="currentUser">…</span>
+        <button class="logout-btn" onclick="logout()">退出登录</button>
+    </div>
     <div class="sidebar-footer">
         GS-Tracker v1.0 · 数据来源 SEC EDGAR / RSS<br>
         本内容仅供学习参考，不构成投资建议
@@ -517,6 +533,18 @@
 </template>
 
 <script>
+// ====== Auth: redirect to login on 401 for every API call ======
+const _rawFetch = window.fetch.bind(window);
+window.fetch = async (...args) => {
+    const resp = await _rawFetch(...args);
+    if (resp.status === 401 && !String(args[0]).includes('/api/auth/')) {
+        window.location.href = '/login';
+    }
+    return resp;
+};
+
+let currentUser = null; // {username, role}
+
 // ====== State ======
 let currentQuarter = null;
 let reportData = null;
@@ -527,8 +555,29 @@ let todayData = [];       // today's signals (today view)
 let dailyDays = 30;       // current day range
 let currentView = 'daily'; // 'daily' | 'quarter'
 
+// ====== Logout ======
+async function logout() {
+    try { await fetch('/api/auth/logout', {method: 'POST'}); } catch(e) { /* ignore */ }
+    window.location.href = '/login';
+}
+
 // ====== Init ======
 async function init() {
+    // Who am I? (middleware already guarantees a session; this drives role-based UI)
+    try {
+        const me = await (await fetch('/api/auth/me')).json();
+        currentUser = me;
+        const whoEl = document.getElementById('currentUser');
+        if (whoEl) {
+            const roleName = me.role === 'admin' ? '管理员' : '普通用户';
+            whoEl.innerHTML = `👤 ${esc(me.username)}<span class="role-tag">${roleName}</span>`;
+        }
+        if (me.role !== 'admin') {
+            const settingsNav = document.querySelector('#mainNav li[data-view="settings"]');
+            if (settingsNav) settingsNav.style.display = 'none';
+        }
+    } catch(e) { console.error('Failed to load current user', e); }
+
     // Bind main nav (每日情报)
     document.querySelectorAll('#mainNav li').forEach(li => {
         li.addEventListener('click', () => switchMainView(li.dataset.view));
@@ -1424,6 +1473,9 @@ function aggregateHoldingsByName(holdings) {
 
 // ====== Main view switcher ======
 async function switchMainView(view) {
+    if (view === 'settings' && currentUser && currentUser.role !== 'admin') {
+        return; // 非管理员无设置入口（服务端接口同样被拦截）
+    }
     currentView = view;
     // Highlight sidebar nav
     document.querySelectorAll('#mainNav li').forEach(li => li.classList.remove('active'));
@@ -1691,8 +1743,116 @@ async function renderSettings() {
     </div>`;
     html += '</div>';
 
+    // --- User management (admin only; the settings view itself is admin-only) ---
+    html += '<div class="settings-section"><h3>👥 用户管理</h3><div id="userList">加载中...</div>';
+    html += `<div class="add-form">
+        <input id="newUserName" placeholder="用户名">
+        <input id="newUserPassword" placeholder="密码" type="password">
+        <select id="newUserRole"><option value="viewer">普通用户</option><option value="admin">管理员</option></select>
+        <button class="btn-sm primary" onclick="addUser()">➕ 添加用户</button>
+        <div id="userFormMsg" style="width:100%;font-size:0.85em;color:#555;"></div>
+    </div>`;
+    html += '</div>';
+
     document.getElementById('mainContent').innerHTML = html;
     loadLLMModelList();
+    loadUserList();
+}
+
+// ====== User management ======
+async function loadUserList() {
+    const container = document.getElementById('userList');
+    if (!container) return;
+    try {
+        const resp = await fetch('/api/settings/users');
+        const users = await resp.json();
+        if (users.length === 0) {
+            container.innerHTML = '<p style="color:#999;">暂无用户</p>';
+            return;
+        }
+        container.innerHTML = users.map(u => {
+            const isBuiltin = u.username === 'gsadmin';
+            const isSelf = currentUser && u.username === currentUser.username;
+            const roleName = u.role === 'admin' ? '管理员' : '普通用户';
+            const toggleRole = u.role === 'admin' ? 'viewer' : 'admin';
+            const toggleLabel = u.role === 'admin' ? '⬇ 设为普通用户' : '⬆ 设为管理员';
+            return `<div class="model-row">
+                <div class="info">
+                    <div class="model-name">👤 ${esc(u.username)}
+                        ${u.role === 'admin' ? '<span class="badge-default">管理员</span>' : ''}
+                        ${isBuiltin ? '<span style="font-size:0.7em;color:#888;">（内置账号）</span>' : ''}
+                    </div>
+                    <div class="model-detail">角色：${roleName} · 创建于 ${esc((u.created_at || '').slice(0, 10))}</div>
+                </div>
+                <div>
+                    <button class="btn-sm" onclick="resetUserPassword('${esc(u.username)}')">🔑 重置密码</button>
+                    ${!isBuiltin ? `<button class="btn-sm" onclick="changeUserRole('${esc(u.username)}','${toggleRole}')">${toggleLabel}</button>` : ''}
+                    ${!isBuiltin && !isSelf ? `<button class="btn-sm danger" onclick="deleteUser('${esc(u.username)}')">🗑 删除</button>` : ''}
+                </div>
+            </div>`;
+        }).join('');
+    } catch(e) { container.innerHTML = '<p style="color:#999;">加载失败</p>'; }
+}
+
+function setUserMsg(text, isErr) {
+    const el = document.getElementById('userFormMsg');
+    if (el) { el.textContent = text; el.style.color = isErr ? 'var(--danger)' : 'var(--success)'; }
+}
+
+async function addUser() {
+    const username = document.getElementById('newUserName').value.trim();
+    const password = document.getElementById('newUserPassword').value;
+    const role = document.getElementById('newUserRole').value;
+    if (!username || !password) { setUserMsg('请填写用户名和密码', true); return; }
+    try {
+        const resp = await fetch('/api/settings/users', {
+            method: 'POST', headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({username, password, role}),
+        });
+        const data = await resp.json().catch(() => ({}));
+        if (!resp.ok) { setUserMsg(data.detail || '添加失败', true); return; }
+        setUserMsg(`✅ 用户 ${username} 已添加`, false);
+        document.getElementById('newUserName').value = '';
+        document.getElementById('newUserPassword').value = '';
+        loadUserList();
+    } catch(e) { setUserMsg('网络错误，请重试', true); }
+}
+
+async function resetUserPassword(username) {
+    const password = prompt(`为用户「${username}」设置新密码：`);
+    if (!password) return;
+    try {
+        const resp = await fetch('/api/settings/users/' + encodeURIComponent(username), {
+            method: 'PUT', headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({password}),
+        });
+        const data = await resp.json().catch(() => ({}));
+        if (!resp.ok) { alert(data.detail || '重置失败'); return; }
+        setUserMsg(`✅ 已重置 ${username} 的密码（该用户需重新登录）`, false);
+    } catch(e) { alert('网络错误，请重试'); }
+}
+
+async function changeUserRole(username, role) {
+    try {
+        const resp = await fetch('/api/settings/users/' + encodeURIComponent(username), {
+            method: 'PUT', headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({role}),
+        });
+        const data = await resp.json().catch(() => ({}));
+        if (!resp.ok) { alert(data.detail || '修改失败'); return; }
+        loadUserList();
+    } catch(e) { alert('网络错误，请重试'); }
+}
+
+async function deleteUser(username) {
+    if (!confirm(`确定要删除用户「${username}」吗？`)) return;
+    try {
+        const resp = await fetch('/api/settings/users/' + encodeURIComponent(username), {method: 'DELETE'});
+        const data = await resp.json().catch(() => ({}));
+        if (!resp.ok) { alert(data.detail || '删除失败'); return; }
+        setUserMsg(`✅ 用户 ${username} 已删除`, false);
+        loadUserList();
+    } catch(e) { alert('网络错误，请重试'); }
 }
 
 async function loadLLMModelList() {

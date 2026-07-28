@@ -9,10 +9,30 @@ from fastapi.testclient import TestClient
 
 import src.web
 from src import storage
+from src.auth import ensure_default_admin
 from src.web import app
 
 
 client = TestClient(app)
+storage.init_db()
+ensure_default_admin()
+_login = client.post(
+    "/api/auth/login", json={"username": "gsadmin", "password": "admin123"}
+)
+assert _login.status_code == 200, _login.text
+
+
+@pytest.fixture(autouse=True)
+def _ensure_logged_in():
+    """Every test starts with a valid admin session on the shared client.
+
+    Fixtures like signals_db re-login against their temp database, which
+    would otherwise leave the shared client with a dead session cookie.
+    """
+    resp = client.post(
+        "/api/auth/login", json={"username": "gsadmin", "password": "admin123"}
+    )
+    assert resp.status_code == 200, resp.text
 
 
 def test_health_endpoint():
@@ -123,6 +143,12 @@ def signals_db(tmp_path, monkeypatch):
     db_file = tmp_path / "test.db"
     monkeypatch.setattr("src.storage.DATABASE_URL", f"sqlite:///{db_file}")
     storage.init_db()
+    # Re-login so the shared client's session exists in this temp database.
+    ensure_default_admin()
+    resp = client.post(
+        "/api/auth/login", json={"username": "gsadmin", "password": "admin123"}
+    )
+    assert resp.status_code == 200, resp.text
     return db_file
 
 
@@ -143,6 +169,10 @@ def test_api_signals_fresh_db_initialized_at_startup(tmp_path, monkeypatch):
     db_file = tmp_path / "fresh.db"
     monkeypatch.setattr("src.storage.DATABASE_URL", f"sqlite:///{db_file}")
     with TestClient(app) as startup_client:
+        login = startup_client.post(
+            "/api/auth/login", json={"username": "gsadmin", "password": "admin123"}
+        )
+        assert login.status_code == 200, login.text
         response = startup_client.get("/api/signals/2026-Q1")
     assert response.status_code == 404
     assert response.json()["detail"] == "该季度暂无信号数据"
