@@ -4,7 +4,7 @@ import asyncio
 import json
 import logging
 import sys
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 import pandas as pd
@@ -56,6 +56,9 @@ logging.basicConfig(
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
 )
 logger = logging.getLogger(__name__)
+
+# The dashboard and daily report think in Asia/Shanghai days (UTC+8).
+BEIJING_TZ = timezone(timedelta(hours=8))
 
 
 ALL_SOURCE_NAMES = ("13F", "8-K", "13D/13G", "research_view", "news", "macro_view")
@@ -275,7 +278,7 @@ async def run_daily_intel_stream():
     # Kick off daily report generation (add-on: never blocks/fails the pipeline;
     # web SSE keeps the loop alive so the task completes).
     try:
-        today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        today = datetime.now(BEIJING_TZ).strftime("%Y-%m-%d")
         await ensure_daily_report(today)
     except Exception:
         logger.exception("Failed to schedule daily report generation")
@@ -309,7 +312,7 @@ async def run_daily_intel() -> dict:
     # Scheduler/CLI path: wait for the report so one-shot processes don't exit
     # before it lands (dedupe: the stream already scheduled it above).
     try:
-        today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        today = datetime.now(BEIJING_TZ).strftime("%Y-%m-%d")
         task = await ensure_daily_report(today)
         if task is not None:
             await task

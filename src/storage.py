@@ -924,6 +924,13 @@ def save_daily_report(date_str: str, report_text: str, signal_count: int = 0) ->
         conn.commit()
 
 
+def delete_daily_report(date_str: str) -> None:
+    """Delete a cached daily report so it can be regenerated."""
+    with get_connection() as conn:
+        conn.execute("DELETE FROM daily_reports WHERE date = ?", (date_str,))
+        conn.commit()
+
+
 # ====== Quarter insights ======
 
 
@@ -954,14 +961,19 @@ def save_quarter_insight(quarter: str, report_text: str) -> None:
 # ====== Signals by date ======
 
 def get_signals_by_date(date_str: str) -> List[Signal]:
-    """Return all signals published on a specific date (YYYY-MM-DD)."""
+    """Return all signals published on a specific date (YYYY-MM-DD).
+
+    published_at is stored as UTC ISO text, but the dashboard thinks in
+    Asia/Shanghai days — group by UTC+8 so a signal published at 01:00
+    Beijing time shows up under its Beijing date, not the UTC day before.
+    """
     with get_connection() as conn:
         cursor = conn.execute(
             """
             SELECT id, source, title, published_at, summary,
                    companies, strength, url, cross_refs
             FROM signals
-            WHERE DATE(published_at) = ?
+            WHERE DATE(published_at, '+8 hours') = ?
             ORDER BY published_at DESC
             """,
             (date_str,),

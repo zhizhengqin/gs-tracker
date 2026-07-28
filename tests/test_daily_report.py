@@ -77,6 +77,34 @@ async def test_cache_hit_returns_without_llm(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_cache_hit_flags_stale_when_new_signals_arrive(monkeypatch):
+    """Report cached with 1 signal but 4 now exist → stale so UI offers regen."""
+    from src.daily_report import generate_daily_report
+    _patch_storage(
+        monkeypatch,
+        cached={"report_text": "旧日报", "signal_count": 1},
+        signals=[_signal() for _ in range(4)],
+    )
+    result = await generate_daily_report("2026-07-27")
+    assert result["cached"] is True
+    assert result["stale"] is True
+    assert result["signal_count"] == 1
+    assert result["current_signal_count"] == 4
+
+
+@pytest.mark.asyncio
+async def test_cache_hit_not_stale_when_count_matches(monkeypatch):
+    from src.daily_report import generate_daily_report
+    _patch_storage(
+        monkeypatch,
+        cached={"report_text": "旧日报", "signal_count": 2},
+        signals=[_signal(), _signal()],
+    )
+    result = await generate_daily_report("2026-07-27")
+    assert result["stale"] is False
+
+
+@pytest.mark.asyncio
 async def test_no_signals_returns_notice_without_llm(monkeypatch):
     from src.daily_report import generate_daily_report
     _patch_storage(monkeypatch, signals=[])

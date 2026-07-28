@@ -38,7 +38,18 @@ async def generate_daily_report(date: str) -> dict:
     """Return (or generate) the daily summary report for `date` (YYYY-MM-DD)."""
     cached = await asyncio.to_thread(get_daily_report, date)
     if cached and cached["report_text"] != EMPTY_REPORT_PLACEHOLDER:
-        return {"date": date, "report": cached["report_text"], "signal_count": cached["signal_count"], "cached": True}
+        # Flag staleness: more signals may have arrived after the report was
+        # generated (e.g. a morning run backfills late-evening items), so the
+        # UI can offer a one-click regenerate.
+        current_count = len(await asyncio.to_thread(get_signals_by_date, date))
+        return {
+            "date": date,
+            "report": cached["report_text"],
+            "signal_count": cached["signal_count"],
+            "current_signal_count": current_count,
+            "stale": current_count != cached["signal_count"],
+            "cached": True,
+        }
 
     signals = await asyncio.to_thread(get_signals_by_date, date)
     if not signals:

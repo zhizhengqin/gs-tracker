@@ -705,6 +705,32 @@ def test_daily_report_endpoint_bad_date():
     assert resp.status_code == 422
 
 
+def test_daily_report_regenerate_deletes_cache_and_regenerates(monkeypatch):
+    import src.web as web
+
+    calls = []
+    monkeypatch.setattr(web, "delete_daily_report", lambda d: calls.append(("delete", d)))
+
+    async def _fake(date):
+        return {"date": date, "report": "新日报", "signal_count": 4, "cached": False}
+
+    monkeypatch.setattr(web, "generate_daily_report", _fake)
+
+    async def _none(date):
+        return None
+
+    monkeypatch.setattr(web, "ensure_daily_report", _none)
+    resp = client.post("/api/daily-report/2026-07-27/regenerate")
+    assert resp.status_code == 200
+    assert resp.json()["report"] == "新日报"
+    assert ("delete", "2026-07-27") in calls
+
+
+def test_daily_report_regenerate_bad_date():
+    resp = client.post("/api/daily-report/2026-13-99/regenerate")
+    assert resp.status_code == 422
+
+
 def test_quarter_insight_endpoint_delegates(monkeypatch):
     import src.web as web
 

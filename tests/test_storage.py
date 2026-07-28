@@ -708,3 +708,35 @@ class TestQuarterInsights:
         storage.save_quarter_insight("2026-Q1", "旧版")
         storage.save_quarter_insight("2026-Q1", "新版")
         assert storage.get_quarter_insight("2026-Q1")["report_text"] == "新版"
+
+
+class TestSignalsByDateBeijingGrouping:
+    """get_signals_by_date groups by Asia/Shanghai day (UTC+8), not UTC day."""
+
+    def test_late_utc_evening_belongs_to_next_beijing_day(self, fresh_db, make_signal):
+        # 2026-07-27 17:30 UTC = 2026-07-28 01:30 Beijing time
+        sig = make_signal(
+            id="sig-tz-late",
+            published_at=datetime(2026, 7, 27, 17, 30, tzinfo=timezone.utc),
+        )
+        storage.save_signals_incremental("2026-Q3", [sig])
+
+        assert storage.get_signals_by_date("2026-07-27") == []
+        beijing_day = storage.get_signals_by_date("2026-07-28")
+        assert [s.id for s in beijing_day] == ["sig-tz-late"]
+
+    def test_early_utc_morning_stays_on_same_beijing_day(self, fresh_db, make_signal):
+        # 2026-07-27 02:00 UTC = 2026-07-27 10:00 Beijing time
+        sig = make_signal(
+            id="sig-tz-early",
+            published_at=datetime(2026, 7, 27, 2, 0, tzinfo=timezone.utc),
+        )
+        storage.save_signals_incremental("2026-Q3", [sig])
+
+        assert [s.id for s in storage.get_signals_by_date("2026-07-27")] == ["sig-tz-early"]
+
+    def test_delete_daily_report(self, fresh_db):
+        storage.save_daily_report("2026-07-27", "旧日报", 1)
+        assert storage.get_daily_report("2026-07-27") is not None
+        storage.delete_daily_report("2026-07-27")
+        assert storage.get_daily_report("2026-07-27") is None

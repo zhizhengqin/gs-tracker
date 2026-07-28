@@ -1902,16 +1902,30 @@ async function analyzeSignal(signalId, title, summary, source) {
     } catch(e) { panel.innerHTML = '<span style="color:#d32f2f;">网络错误</span>'; }
 }
 
-async function loadDailyReport(dateStr) {
+async function loadDailyReport(dateStr, force) {
     const container = document.getElementById('dailyReportContainer');
     if (!container) return;
-    container.innerHTML = '<div class="loading">📋 生成每日报告中...</div>';
+    container.innerHTML = force
+        ? '<div class="loading">🤖 正在重新生成每日报告...</div>'
+        : '<div class="loading">📋 生成每日报告中...</div>';
     try {
-        const resp = await fetch(`/api/daily-report/${dateStr}`);
+        const resp = force
+            ? await fetch(`/api/daily-report/${dateStr}/regenerate`, {method: 'POST'})
+            : await fetch(`/api/daily-report/${dateStr}`);
         const r = await resp.json();
         if (r.report) {
             const formatted = esc(r.report).replace(/\n/g, '<br>').replace(/## ([^<]+)/g, '<h4>$1</h4>');
-            container.innerHTML = `<div class="daily-report-card"><h3>📋 ${dateStr} 每日情报摘要</h3><div>${formatted}</div></div>`;
+            const staleHint = r.stale
+                ? `<div style="color:#b26a00;font-size:0.85em;margin-top:8px;">⚠️ 这份摘要生成时只有 ${r.signal_count} 条情报，现在已有 ${r.current_signal_count} 条，可点击「重新生成」更新。</div>`
+                : '';
+            container.innerHTML = `<div class="daily-report-card">
+                <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;">
+                    <h3 style="margin:0;">📋 ${dateStr} 每日情报摘要</h3>
+                    <button class="btn-sm" onclick="loadDailyReport('${dateStr}', true)">🔄 重新生成</button>
+                </div>
+                <div style="margin-top:8px;">${formatted}</div>
+                ${staleHint}
+            </div>`;
         } else {
             container.innerHTML = '';
         }

@@ -19,6 +19,7 @@ from src.signals.ai_triage import AiTriage
 from src.signals.base import Signal
 from src.storage import (
     add_llm_model,
+    delete_daily_report,
     delete_llm_model,
     get_all_settings,
     get_connection,
@@ -976,6 +977,23 @@ async def api_get_daily_report(date: str) -> dict:
         raise HTTPException(status_code=422, detail="日期无效")
     # Route through the dedupe map so a pipeline-tail generation in flight
     # is awaited instead of duplicated.
+    task = await ensure_daily_report(date)
+    if task is not None:
+        await task
+    return await generate_daily_report(date)
+
+
+@app.post("/api/daily-report/{date}/regenerate")
+async def api_regenerate_daily_report(date: str) -> dict:
+    """Force-regenerate the daily summary report, bypassing the cache."""
+    import re
+    if not re.match(r"^\d{4}-\d{2}-\d{2}$", date):
+        raise HTTPException(status_code=422, detail="日期格式必须为 YYYY-MM-DD")
+    try:
+        datetime.strptime(date, "%Y-%m-%d")
+    except ValueError:
+        raise HTTPException(status_code=422, detail="日期无效")
+    await asyncio.to_thread(delete_daily_report, date)
     task = await ensure_daily_report(date)
     if task is not None:
         await task
