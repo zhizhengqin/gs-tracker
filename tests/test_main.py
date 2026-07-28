@@ -5,7 +5,7 @@ import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from src.data_fetcher import SEC13FFetcher
-from src.main import main, run_pipeline
+from src.main import main, run_pipeline, run_pipeline_stream
 
 
 def test_main_without_args_prints_help(capsys):
@@ -553,3 +553,61 @@ async def test_run_daily_intel_awaits_report_task(monkeypatch):
     summary = await main_mod.run_daily_intel()
     assert generated == ["done"]
     assert summary["new_signals"] == 0
+
+
+@pytest.mark.asyncio
+async def test_run_pipeline_stream_emits_progress_events(tmp_path, monkeypatch):
+    """The streaming pipeline yields start/step/source_done/complete events
+    so the dashboard can render live per-source progress."""
+    monkeypatch.setattr("src.main.REPORT_OUTPUT_DIR", tmp_path)
+    monkeypatch.setattr("src.config.REPORT_OUTPUT_DIR", tmp_path)
+
+    mock_df = pd.DataFrame(
+        {
+            "cusip": ["A"],
+            "name_of_issuer": ["Apple"],
+            "title_of_class": ["COM"],
+            "value": [1000000.0],
+            "shares": [1000],
+            "investment_discretion": ["SOLE"],
+        }
+    )
+
+    async def fake_fetch(filing_info):
+        filing_info["report_date"] = "2026-06-30"
+        return mock_df
+
+    with patch("src.main.SEC13FFetcher") as MockFetcher:
+        MockFetcher.report_date_to_quarter = SEC13FFetcher.report_date_to_quarter
+        instance = MockFetcher.return_value.__aenter__.return_value
+        instance.fetch_latest_holdings = fake_fetch
+        with patch("src.main.save_holdings"):
+            with patch("src.main.GSAnalyzer") as MockAnalyzer:
+                analyzer = MockAnalyzer.return_value
+                analyzer.analyze_holdings = AsyncMock(return_value=AsyncMock())
+                with patch("src.main.ReportGenerator") as MockReporter:
+                    reporter = MockReporter.return_value
+                    reporter.generate_report = lambda *args, **kwargs: tmp_path / "2026-Q2.html"
+                    events = [
+                        json.loads(e)
+                        async for e in run_pipeline_stream()
+                    ]
+
+    kinds = [e["event"] for e in events]
+    assert kinds[0] == "start"
+    assert "13F" in events[0]["sources"]
+    assert kinds[-1] == "complete"
+    assert events[-1]["quarter"] == "2026-Q2"
+
+    steps = {(e["step"], e["status"]) for e in events if e["event"] == "step"}
+    assert ("holdings", "running") in steps
+    assert ("holdings", "done") in steps
+    assert ("analysis", "done") in steps
+    assert ("report", "done") in steps
+
+    source_events = [e for e in events if e["event"] == "source_done"]
+    source_names = {e["source"] for e in source_events}
+    assert "13F" in source_names
+    thirteen_f = next(e for e in source_events if e["source"] == "13F")
+    assert thirteen_f["status"] == "ok"
+    assert thirteen_f["count"] >= 1

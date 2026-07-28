@@ -639,84 +639,108 @@ async function runPipeline() {
             setRunMsg('启动失败，请稍后重试', 'err');
             btn.disabled = false;
             return;
-        } else {
-            setRunMsg('⏳ 流水线运行中…（通常需要几分钟）', 'info');
         }
-        pollPipelineStatus();
+        setRunMsg('⏳ 流水线运行中…（通常需要几分钟）', 'info');
+        showProgressPanel();
+        attachPipelineStream();
     } catch (e) {
         setRunMsg('网络错误，无法启动', 'err');
         btn.disabled = false;
     }
 }
 
-async function pollPipelineStatus() {
+let _pipelineEventSource = null;
+
+function attachPipelineStream() {
     const btn = document.getElementById('runPipelineBtn');
-    while (true) {
-        await new Promise(r => setTimeout(r, 5000));
-        let st;
+    if (_pipelineEventSource) { _pipelineEventSource.close(); _pipelineEventSource = null; }
+    _pipelineEventSource = new EventSource('/api/pipeline/run/stream');
+    const sourceStates = {};
+    const steps = {};
+
+    _pipelineEventSource.onmessage = function(e) {
         try {
-            st = await (await fetch('/api/pipeline/status')).json();
-        } catch (e) {
-            continue;  // transient network error — keep polling
+            const data = JSON.parse(e.data);
+            if (data.event === 'start') {
+                data.sources.forEach(s => { sourceStates[s] = {status: 'waiting', count: 0, error: ''}; });
+                updatePipelinePanel(sourceStates, steps);
+            } else if (data.event === 'step') {
+                steps[data.step] = data;
+                updatePipelinePanel(sourceStates, steps);
+            } else if (data.event === 'source_done') {
+                sourceStates[data.source] = {status: data.status, count: data.count, error: data.error || ''};
+                updatePipelinePanel(sourceStates, steps);
+            } else if (data.event === 'complete') {
+                _pipelineEventSource.close();
+                _pipelineEventSource = null;
+                btn.disabled = false;
+                const errCount = (data.errors || []).length;
+                if (errCount) {
+                    setRunMsg('⚠️ 部分完成：' + (data.signal_count || 0) + ' 条信号，' + errCount + ' 个源出错', 'err');
+                } else {
+                    setRunMsg('✅ 数据已更新：' + (data.signal_count || 0) + ' 条信号', 'ok');
+                }
+                updatePipelinePanel(sourceStates, steps, data);
+                refreshReports();
+            } else if (data.event === 'job_error') {
+                _pipelineEventSource.close();
+                _pipelineEventSource = null;
+                btn.disabled = false;
+                setRunMsg('❌ 运行失败：' + data.error, 'err');
+                updatePipelinePanel(sourceStates, steps, {signal_count: 0, errors: [data.error]});
+            }
+        } catch(ex) { console.error('SSE parse error', ex); }
+    };
+
+    _pipelineEventSource.onerror = function() {
+        // EventSource auto-reconnects; the server replays the job's event log,
+        // so a proxy timeout mid-run just re-syncs the panel from the log.
+        if (_pipelineEventSource) {
+            setRunMsg('⏳ 连接中断，正在重连…', 'info');
         }
-        if (st.running) {
-            setRunMsg('⏳ 流水线运行中…（通常需要几分钟）', 'info');
-            continue;
-        }
-        btn.disabled = false;
-        if (st.last_error) {
-            setRunMsg('❌ 运行失败：' + st.last_error, 'err');
-        } else {
-            setRunMsg('✅ 运行完成，正在刷新数据…', 'ok');
-            await refreshReports();
-            setRunMsg('✅ 数据已更新', 'ok');
-            await showReconReport();
-        }
-        return;
-    }
+    };
 }
 
-// ====== Quarterly reconciliation per-source report ======
-async function showReconReport() {
-    if (!currentQuarter) return;
-    try {
-        const resp = await fetch(`/api/signals/${currentQuarter}`);
-        if (!resp.ok) return;
-        const data = await resp.json();
-        const signals = Array.isArray(data.signals) ? data.signals : [];
-        const counts = {};
-        signals.forEach(s => { counts[s.source] = (counts[s.source] || 0) + 1; });
-        const sourceStates = {};
-        Object.entries(data.source_status || {}).forEach(([name, st]) => {
-            sourceStates[name] = { status: st, count: counts[name] || 0, error: '' };
-        });
-        showProgressPanel();
-        updateQuarterProgressPanel(sourceStates, {
-            quarter: currentQuarter,
-            signalCount: signals.length,
-            errors: data.errors || [],
-        });
-    } catch (e) { /* the report panel is best-effort; data view is already refreshed */ }
-}
-
-function updateQuarterProgressPanel(sourceStates, summary) {
+// ====== Quarterly reconciliation live progress panel ======
+function updatePipelinePanel(sourceStates, steps, summary) {
     const panel = document.getElementById('progressPanel');
     if (!panel) return;
-    const sourceLabels = {'13F': '13F 持仓', '8-K': 'SEC 8-K 重大事件', '13D/13G': '13D/13G 大动作', 'research_view': '高盛研究观点', 'news': 'RSS 新闻', 'macro_view': 'FRED 宏观', ..._sourceLabels};
+    const sourceLabels = {'13F': '13F 持仓', '8-K': 'SEC 8-K 重大事件', 'news': 'RSS 新闻', ..._sourceLabels};
     const statusIcons = {'waiting': '⏳', 'ok': '✅', 'error': '❌'};
     const statusColors = {'waiting': '#999', 'ok': '#2e7d32', 'error': '#d32f2f'};
+    const stepOrder = ['holdings', 'analysis', 'comparison', 'report'];
+    const stepDefaults = {'holdings': '抓取 13F 持仓', 'analysis': 'AI 持仓分析', 'comparison': '季度持仓对比', 'report': '生成季度报告'};
+    const stepIcons = {'running': '⏳', 'done': '✅', 'error': '❌'};
 
-    let html = '<h3 style="margin-bottom:16px;font-size:1.1em;">🔄 季度对账信息源汇报</h3>';
-    for (const [name, state] of Object.entries(sourceStates)) {
-        const icon = statusIcons[state.status] || '⏳';
-        const color = statusColors[state.status] || '#999';
-        const label = sourceLabels[name] || name;
-        html += `<div style="display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid #eee;">
-            <span style="font-weight:600;">${icon} ${esc(label)}</span>
-            <span style="color:${color};font-size:0.9em;">
-                ${state.status === 'ok' ? state.count + ' 条信号' : state.status === 'error' ? '抓取失败' : '等待中'}
-            </span>
+    let html = '<h3 style="margin-bottom:16px;font-size:1.1em;">🔄 季度对账进度</h3>';
+
+    html += '<div style="margin-bottom:6px;">';
+    stepOrder.forEach(key => {
+        const st = steps[key];
+        const icon = st ? (stepIcons[st.status] || '⏳') : '⚪';
+        const color = st && st.status === 'done' ? '#2e7d32' : st && st.status === 'error' ? '#d32f2f' : '#999';
+        const label = st && st.label ? st.label : stepDefaults[key];
+        html += `<div style="display:flex;align-items:center;justify-content:space-between;padding:4px 0;font-size:0.9em;">
+            <span style="color:${color};">${icon} ${esc(label)}</span>
+            <span style="color:#999;font-size:0.85em;">${st && st.detail ? esc(st.detail) : ''}</span>
         </div>`;
+    });
+    html += '</div>';
+
+    if (Object.keys(sourceStates).length) {
+        html += '<div style="border-top:1px solid #eee;padding-top:8px;">';
+        for (const [name, state] of Object.entries(sourceStates)) {
+            const icon = statusIcons[state.status] || '⏳';
+            const color = statusColors[state.status] || '#999';
+            const label = sourceLabels[name] || name;
+            html += `<div style="display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid #eee;">
+                <span style="font-weight:600;">${icon} ${esc(label)}</span>
+                <span style="color:${color};font-size:0.9em;">
+                    ${state.status === 'ok' ? state.count + ' 条信号' : state.status === 'error' ? esc(state.error).substring(0,50) : '等待中'}
+                </span>
+            </div>`;
+        }
+        html += '</div>';
     }
 
     if (summary) {
@@ -724,7 +748,7 @@ function updateQuarterProgressPanel(sourceStates, summary) {
         html += `<div style="margin-top:16px;padding-top:12px;border-top:2px solid var(--accent);">
             <strong>📊 运行报告</strong><br>
             <span style="font-size:0.9em;">对账季度：${esc(summary.quarter || '')}</span><br>
-            <span style="font-size:0.9em;">信号总数：${summary.signalCount || 0} 条</span><br>
+            <span style="font-size:0.9em;">信号总数：${summary.signal_count || 0} 条</span><br>
             <span style="font-size:0.9em;color:${errCount ? 'var(--danger)' : 'var(--success)'};">${errCount ? '⚠️ ' + errCount + ' 个源出错' : '✅ 全部成功'}</span>
             ${(summary.errors || []).map(e => `<div style="color:#b26a00;font-size:0.82em;padding:3px 0;">🟡 ${esc(String(e)).substring(0, 120)}</div>`).join('')}
         </div>
@@ -865,14 +889,15 @@ async function refreshReports() {
     } catch (e) { console.error('Failed to refresh reports', e); }
 }
 
-// If a pipeline is already running when the page opens, reflect it and poll
+// If a pipeline is already running when the page opens, attach to its live stream
 async function syncPipelineButton() {
     try {
         const st = await (await fetch('/api/pipeline/status')).json();
         if (st.running) {
             document.getElementById('runPipelineBtn').disabled = true;
             setRunMsg('⏳ 流水线运行中…（通常需要几分钟）', 'info');
-            pollPipelineStatus();
+            showProgressPanel();
+            attachPipelineStream();
         }
     } catch (e) { /* status endpoint unreachable — leave button as-is */ }
     try {

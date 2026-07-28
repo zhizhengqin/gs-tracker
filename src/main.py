@@ -319,14 +319,27 @@ async def run_daily_intel() -> dict:
     return summary
 
 
-async def run_pipeline() -> None:
-    """Run the full fetch-analyze-report pipeline once."""
+async def run_pipeline_stream():
+    """Async generator: full pipeline with per-step/per-source progress (SSE)."""
     ensure_directories()
     init_db()
 
     quarter = "2026-Q1"
     cik = "0000886982"
 
+    source_names = ["13F", "8-K"] + (["news"] if RSS_FEEDS else [])
+    yield json.dumps({"event": "start", "sources": source_names})
+
+    def _step(step: str, status: str, label: str, detail: str = "") -> str:
+        return json.dumps({
+            "event": "step",
+            "step": step,
+            "status": status,
+            "label": label,
+            "detail": detail,
+        })
+
+    yield _step("holdings", "running", "抓取 13F 持仓")
     filing_info: dict[str, str] = {}
     async with SEC13FFetcher() as fetcher:
         df = await fetcher.fetch_latest_holdings(filing_info)
@@ -334,15 +347,19 @@ async def run_pipeline() -> None:
             quarter = SEC13FFetcher.report_date_to_quarter(filing_info["report_date"])
 
     save_holdings(cik, quarter, df.to_dict("records"), filing_info)
+    yield _step("holdings", "done", "抓取 13F 持仓", f"{quarter} · {len(df)} 条持仓")
 
+    yield _step("analysis", "running", "AI 持仓分析")
     analyzer = GSAnalyzer()
     analysis = await analyzer.analyze_holdings(df)
+    yield _step("analysis", "done", "AI 持仓分析")
 
     summary = None
     previous_quarter = _previous_quarter(quarter)
     if previous_quarter:
         previous_records = get_holdings(cik, previous_quarter)
         if previous_records:
+            yield _step("comparison", "running", "季度持仓对比")
             prev_df = pd.DataFrame(previous_records)
             comparison = QuarterComparator().compare(
                 df, prev_df, quarter, previous_quarter
@@ -354,6 +371,10 @@ async def run_pipeline() -> None:
                 "increased_positions": len(comparison.increased_positions),
                 "decreased_positions": len(comparison.decreased_positions),
             }
+            yield _step(
+                "comparison", "done", "季度持仓对比",
+                f"对比 {previous_quarter}：新增 {summary['new_positions']} · 清仓 {summary['sold_positions']}",
+            )
 
     # --- Multi-source signal aggregation ---
     aggregation_signals = []
@@ -365,7 +386,24 @@ async def run_pipeline() -> None:
         sec8k_source=Sec8kSource(),
     )
     try:
-        aggregation = await aggregator.aggregate(quarter, df.to_dict("records"), summary)
+        # Bridge the aggregator's sync progress callback into this async
+        # generator: the callback queues events, we drain them while awaiting.
+        progress_queue: asyncio.Queue[str] = asyncio.Queue()
+
+        def _progress_cb(event: dict) -> None:
+            progress_queue.put_nowait(json.dumps(event))
+
+        agg_task = asyncio.create_task(
+            aggregator.aggregate(
+                quarter, df.to_dict("records"), summary, progress_cb=_progress_cb,
+            )
+        )
+        while not (agg_task.done() and progress_queue.empty()):
+            try:
+                yield progress_queue.get_nowait()
+            except asyncio.QueueEmpty:
+                await asyncio.sleep(0.1)
+        aggregation = await agg_task
         aggregation_signals = aggregation.signals
         aggregation_errors = aggregation.errors
         aggregation_status = aggregation.source_status
@@ -402,6 +440,7 @@ async def run_pipeline() -> None:
         except Exception:
             logger.exception("Failed to persist signals for %s", quarter)
 
+    yield _step("report", "running", "生成季度报告")
     reporter = ReportGenerator()
     report_path = await asyncio.to_thread(
         reporter.generate_report,
@@ -413,33 +452,47 @@ async def run_pipeline() -> None:
         source_status=aggregation_status,
     )
     logger.info("Report generated at %s", report_path)
+    yield _step("report", "done", "生成季度报告")
 
     if FEISHU_WEBHOOK:
         if is_notification_sent(quarter):
             logger.info(
                 "Notification already sent for %s; skipping send", quarter
             )
-            return
-
-        base = (PUBLIC_BASE_URL or "").rstrip("/")
-        report_url = f"{base}/reports/{quarter}.html" if base else None
-        if not base:
-            logger.warning("PUBLIC_BASE_URL not set; notification will not include report link")
-
-        notification = Notification(
-            title=f"高盛动向情报 — {quarter} 报告已生成",
-            body=_format_summary(summary),
-            link=report_url,
-        )
-        notifier = Notifier()
-        try:
-            await notifier.send(notification)
-        except Exception:
-            logger.exception("Failed to send notification for %s", quarter)
         else:
-            mark_notification_sent(quarter)
-        finally:
-            await notifier.close()
+            base = (PUBLIC_BASE_URL or "").rstrip("/")
+            report_url = f"{base}/reports/{quarter}.html" if base else None
+            if not base:
+                logger.warning("PUBLIC_BASE_URL not set; notification will not include report link")
+
+            notification = Notification(
+                title=f"高盛动向情报 — {quarter} 报告已生成",
+                body=_format_summary(summary),
+                link=report_url,
+            )
+            notifier = Notifier()
+            try:
+                await notifier.send(notification)
+            except Exception:
+                logger.exception("Failed to send notification for %s", quarter)
+            else:
+                mark_notification_sent(quarter)
+            finally:
+                await notifier.close()
+
+    yield json.dumps({
+        "event": "complete",
+        "quarter": quarter,
+        "signal_count": len(aggregation_signals),
+        "source_status": aggregation_status,
+        "errors": aggregation_errors,
+    })
+
+
+async def run_pipeline() -> None:
+    """Run the full fetch-analyze-report pipeline once (non-streaming wrapper)."""
+    async for _event_json in run_pipeline_stream():
+        pass
 
 
 def _previous_quarter(quarter: str) -> Optional[str]:

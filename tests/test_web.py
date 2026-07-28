@@ -1,5 +1,6 @@
 """Tests for src.web."""
 import asyncio
+import json
 import time
 from unittest.mock import AsyncMock
 
@@ -193,6 +194,8 @@ def test_api_signals_empty_run_returns_empty_list(signals_db):
 @pytest.fixture
 def reset_pipeline_state():
     """Reset the module-level pipeline state before and after each test."""
+    old_job = src.web._pipeline_job
+    src.web._pipeline_job = None
     src.web._pipeline_state.update(
         running=False,
         last_started_at=None,
@@ -200,6 +203,7 @@ def reset_pipeline_state():
         last_error=None,
     )
     yield src.web._pipeline_state
+    src.web._pipeline_job = old_job
     src.web._pipeline_state.update(
         running=False,
         last_started_at=None,
@@ -209,8 +213,16 @@ def reset_pipeline_state():
 
 
 def test_pipeline_run_returns_202_and_completes(reset_pipeline_state, monkeypatch):
-    mock_run = AsyncMock()
-    monkeypatch.setattr("src.web.run_pipeline", mock_run)
+    started = []
+
+    async def fake_stream():
+        started.append(True)
+        yield json.dumps({
+            "event": "complete", "quarter": "2026-Q2", "signal_count": 0,
+            "source_status": {}, "errors": [],
+        })
+
+    monkeypatch.setattr("src.main.run_pipeline_stream", lambda: fake_stream())
 
     response = client.post("/api/pipeline/run")
     assert response.status_code == 202
@@ -222,7 +234,7 @@ def test_pipeline_run_returns_202_and_completes(reset_pipeline_state, monkeypatc
             break
         time.sleep(0.05)
 
-    mock_run.assert_awaited_once()
+    assert started == [True]
     status = client.get("/api/pipeline/status").json()
     assert status["running"] is False
     assert status["last_error"] is None
@@ -239,15 +251,21 @@ def test_pipeline_run_conflict_while_running(reset_pipeline_state):
 
 
 def test_pipeline_run_records_error(reset_pipeline_state, monkeypatch):
-    mock_run = AsyncMock(side_effect=RuntimeError("API key missing"))
-    monkeypatch.setattr("src.web.run_pipeline", mock_run)
+    async def failing_stream():
+        raise RuntimeError("API key missing")
+        yield  # pragma: no cover — makes this an async generator
 
-    asyncio.run(src.web._run_pipeline_tracked())
+    monkeypatch.setattr("src.main.run_pipeline_stream", lambda: failing_stream())
+
+    job = src.web._PipelineJob()
+    asyncio.run(src.web._pipeline_job_runner(job))
 
     state = src.web._pipeline_state
     assert state["running"] is False
     assert "API key missing" in state["last_error"]
     assert state["last_finished_at"] is not None
+    assert job.done is True
+    assert any("job_error" in e for e in job.events)
 
 
 # ====== Shared daily intel SSE job ======
@@ -752,10 +770,51 @@ def test_dashboard_mobile_date_picker_min_width(tmp_path, monkeypatch):
 
 
 def test_dashboard_recon_source_report(tmp_path, monkeypatch):
-    """Manual quarterly reconciliation shows a per-source fetch report,
-    like the daily intel progress panel."""
+    """Manual quarterly reconciliation streams live per-source progress
+    over SSE, like the daily intel progress panel."""
     monkeypatch.setattr("src.web.REPORT_OUTPUT_DIR", tmp_path)
     response = client.get("/")
     assert response.status_code == 200
-    assert "showReconReport" in response.text
-    assert "季度对账信息源汇报" in response.text
+    assert "/api/pipeline/run/stream" in response.text
+    assert "attachPipelineStream" in response.text
+    assert "季度对账进度" in response.text
+
+
+# ====== Shared quarterly pipeline SSE job ======
+
+
+@pytest.fixture
+def reset_pipeline_job():
+    old_job = src.web._pipeline_job
+    src.web._pipeline_job = None
+    yield
+    src.web._pipeline_job = old_job
+
+
+def test_pipeline_job_attach_or_start(reset_pipeline_job, monkeypatch):
+    """While a job runs, new connections attach to it instead of re-running;
+    within the grace window after finish, reconnects replay the same job;
+    only after the grace window does a new run start."""
+    async def fake_runner(job):
+        await asyncio.sleep(3600)  # never finishes within the test
+
+    monkeypatch.setattr(src.web, "_pipeline_job_runner", fake_runner)
+
+    async def scenario():
+        job1 = src.web._get_or_start_pipeline_job()
+        job2 = src.web._get_or_start_pipeline_job()
+        assert job1 is job2  # attach, no duplicate run
+
+        # Finished just now → still replayable
+        job1.done = True
+        job1.finished_at = datetime.now(timezone.utc)
+        assert src.web._get_or_start_pipeline_job() is job1
+
+        # Past the grace window → a brand-new run starts
+        job1.finished_at = datetime.now(timezone.utc) - timedelta(
+            seconds=src.web._PIPELINE_JOB_GRACE_SECONDS + 10
+        )
+        job4 = src.web._get_or_start_pipeline_job()
+        assert job4 is not job1
+
+    asyncio.run(scenario())

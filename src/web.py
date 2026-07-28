@@ -14,7 +14,6 @@ from fastapi.responses import HTMLResponse, StreamingResponse
 from src.config import PROJECT_ROOT, REPORT_OUTPUT_DIR
 from src.daily_report import ensure_daily_report, generate_daily_report
 from src.llm_config import resolve_llm_config
-from src.main import run_pipeline
 from src.quarter_insight import ensure_quarter_insight, generate_quarter_insight
 from src.signals.ai_triage import AiTriage
 from src.signals.base import Signal
@@ -231,23 +230,74 @@ _pipeline_state: Dict[str, Any] = {
 }
 
 
-async def _run_pipeline_tracked() -> None:
-    """Run the full pipeline, recording lifecycle state for the status endpoint."""
-    _pipeline_state.update(
-        running=True,
-        last_error=None,
-        last_started_at=datetime.now(timezone.utc).isoformat(),
-    )
+# ====== Shared quarterly pipeline job (SSE attach-or-start) ======
+
+_PIPELINE_JOB_GRACE_SECONDS = 120  # finished job stays replayable this long
+
+
+class _PipelineJob:
+    """A single quarterly pipeline run with an event log subscribers can replay."""
+
+    def __init__(self) -> None:
+        self.events: List[str] = []
+        self.done = False
+        self.finished_at: Optional[datetime] = None
+        self.cond = asyncio.Condition()
+
+
+_pipeline_job: Optional[_PipelineJob] = None
+
+
+async def _pipeline_job_runner(job: _PipelineJob) -> None:
+    """Run the quarterly pipeline stream once, appending events to the shared log."""
+    import json as _json
+
+    from src.main import run_pipeline_stream
+
     try:
-        await run_pipeline()
+        async for event_json in run_pipeline_stream():
+            async with job.cond:
+                job.events.append(event_json)
+                job.cond.notify_all()
     except Exception as exc:
-        logger.exception("Manual pipeline run failed")
+        logger.exception("Quarterly pipeline stream job failed")
         _pipeline_state["last_error"] = str(exc)
+        error_event = _json.dumps({"event": "job_error", "error": str(exc)})
+        async with job.cond:
+            job.events.append(error_event)
+            job.cond.notify_all()
     finally:
         _pipeline_state.update(
             running=False,
             last_finished_at=datetime.now(timezone.utc).isoformat(),
         )
+        async with job.cond:
+            job.done = True
+            job.finished_at = datetime.now(timezone.utc)
+            job.cond.notify_all()
+
+
+def _start_pipeline_job() -> _PipelineJob:
+    """Start a brand-new pipeline job, replacing any finished one."""
+    global _pipeline_job
+    job = _PipelineJob()
+    _pipeline_job = job
+    asyncio.create_task(_pipeline_job_runner(job))
+    return job
+
+
+def _get_or_start_pipeline_job() -> _PipelineJob:
+    """Return the active (or recently finished) job, starting a new one if needed."""
+    now = datetime.now(timezone.utc)
+    job = _pipeline_job
+    if job is not None:
+        if not job.done:
+            return job  # still running — attach
+        assert job.finished_at is not None
+        age = (now - job.finished_at).total_seconds()
+        if age < _PIPELINE_JOB_GRACE_SECONDS:
+            return job  # recently finished — let reconnects replay the summary
+    return _start_pipeline_job()
 
 
 @app.post("/api/pipeline/run", status_code=202)
@@ -261,8 +311,47 @@ async def api_pipeline_run() -> dict:
         last_error=None,
         last_started_at=datetime.now(timezone.utc).isoformat(),
     )
-    asyncio.create_task(_run_pipeline_tracked())
+    # Explicit user trigger always starts a NEW run (never replays a finished job)
+    _start_pipeline_job()
     return {"status": "已启动"}
+
+
+@app.get("/api/pipeline/run/stream")
+async def api_pipeline_stream():
+    """Stream quarterly pipeline progress over SSE.
+
+    Same attach-or-start semantics as the daily intel stream: the first
+    connection starts the run, later connections (including EventSource
+    auto-reconnects after a proxy timeout) attach to the SAME job and replay
+    its event log. A finished job stays attachable for a grace period so a
+    late reconnect still sees the final summary.
+    """
+    job = _get_or_start_pipeline_job()
+
+    async def event_stream():
+        cursor = 0
+        while True:
+            async with job.cond:
+                # Deliver any new events, else wait for more / completion
+                while cursor >= len(job.events) and not job.done:
+                    await job.cond.wait()
+                pending = job.events[cursor:]
+                cursor = len(job.events)
+                done = job.done
+            for event_json in pending:
+                yield f"data: {event_json}\n\n"
+            if done and cursor >= len(job.events):
+                return
+
+    return StreamingResponse(
+        event_stream(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
 
 
 # ====== Manual daily intel trigger ======

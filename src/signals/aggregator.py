@@ -2,7 +2,7 @@
 import asyncio
 import logging
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional
 
 from src.signals.base import Signal, SignalStrength
 from src.signals.scorer import SignalScorer
@@ -40,20 +40,33 @@ class SignalAggregator:
         quarter: str,
         holdings_records: List[Dict[str, Any]],
         comparison: Optional[Dict[str, Any]] = None,
+        progress_cb: Optional[Callable[[Dict[str, Any]], None]] = None,
     ) -> AggregationResult:
         """Fetch all sources in parallel, merge, dedup, sort."""
         result = AggregationResult()
         all_signals: List[Signal] = []
+
+        def _emit(source: str, status: str, count: int, error: str = "") -> None:
+            if progress_cb is not None:
+                progress_cb({
+                    "event": "source_done",
+                    "source": source,
+                    "status": status,
+                    "count": count,
+                    "error": error,
+                })
 
         # 13F: synchronous conversion (no async needed)
         try:
             signals_13f = self.adapter_13f.to_signals(holdings_records, quarter, comparison)
             all_signals.extend(signals_13f)
             result.source_status["13F"] = "ok"
+            _emit("13F", "ok", len(signals_13f))
         except Exception as exc:
             logger.exception("13F adapter failed")
             result.errors.append(f"13F 信号转换失败: {exc}")
             result.source_status["13F"] = "error"
+            _emit("13F", "error", 0, str(exc))
 
         # News + 8-K: parallel async fetch
         news_task = None
@@ -61,11 +74,11 @@ class SignalAggregator:
 
         if self.news_source:
             news_task = asyncio.create_task(self._safe_fetch(
-                self.news_source, quarter, "news", result,
+                self.news_source, quarter, "news", result, _emit,
             ))
         if self.sec8k_source:
             sec8k_task = asyncio.create_task(self._safe_fetch(
-                self.sec8k_source, quarter, "8-K", result,
+                self.sec8k_source, quarter, "8-K", result, _emit,
             ))
 
         if news_task:
@@ -115,16 +128,21 @@ class SignalAggregator:
         quarter: str,
         source_name: str,
         result: AggregationResult,
+        emit: Optional[Callable[[str, str, int, str], None]] = None,
     ) -> List[Signal]:
         """Fetch from one source, catching all errors — one failure doesn't block others."""
         try:
             signals = await source.fetch(quarter)
             result.source_status[source_name] = "ok"
+            if emit is not None:
+                emit(source_name, "ok", len(signals))
             return signals
         except Exception as exc:
             logger.exception("%s source failed", source_name)
             result.errors.append(f"{source_name} 信号获取失败: {exc}")
             result.source_status[source_name] = "error"
+            if emit is not None:
+                emit(source_name, "error", 0, str(exc))
             return []
 
     async def close(self) -> None:
