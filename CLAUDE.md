@@ -49,6 +49,7 @@ gs-tracker/
 - Goldman Sachs CIK: `0000886982`
 - 13F 截止日: Q1(5/15), Q2(8/14), Q3(11/14), Q4(2/14)
 - 信号去重指纹: 有 URL 按 (source,title,url)，无 URL 按 (source,title,日期)；同一 URL 跨天重现只更新原行，不产生新行
+- 日期分组按北京时间（UTC+8）：`get_signals_by_date` 用 `DATE(published_at, '+8 hours')` 归组，日报"今日"判断同理，勿回退到 UTC
 
 ## 语言规范
 - **所有用户可见的输出必须使用中文**：HTML 报告、通知消息、邮件/飞书/钉钉文案、Web 界面、CLI 提示
@@ -67,8 +68,8 @@ node scripts/verify_today_view.js http://127.0.0.1:8770 /tmp/verify  # 页面结
 
 ## API 端点
 - 季度/报告：`GET /api/signals/{quarter}`（404=该季度未跑过，422=格式错误）；`GET /api/quarters/comparison`；`GET /api/reports`；`GET /reports/{quarter}.html`；`GET /api/health`
-- 每日情报：`GET /api/signals/recent?days=N`；`GET /api/signals/date/{date}`；`POST /api/signals/{signal_id}/analyze` + `GET /api/signals/{signal_id}/analysis`；`GET /api/daily-report/{date}`（无缓存则自动生成）
-- 流水线：`POST /api/pipeline/run`（季度对账）；`POST /api/pipeline/run-daily`；`GET /api/pipeline/run-daily/stream`（SSE 进度）；`GET /api/pipeline/status`、`GET /api/pipeline/run-daily/status`
+- 每日情报：`GET /api/signals/recent?days=N`；`GET /api/signals/date/{date}`；`POST /api/signals/{signal_id}/analyze` + `GET /api/signals/{signal_id}/analysis`；`GET /api/daily-report/{date}`（无缓存则自动生成）；`POST /api/daily-report/{date}/regenerate`（强制重生成）；`POST /api/quarter-insight/{quarter}/regenerate`（季度洞察重生成）
+- 流水线：`POST /api/pipeline/run`（季度对账）；`POST /api/pipeline/run-daily`；`GET /api/pipeline/run/stream` 与 `GET /api/pipeline/run-daily/stream`（SSE 实时进度）；`GET /api/pipeline/status`、`GET /api/pipeline/run-daily/status`
 - 设置：`GET/PUT /api/settings`；`GET/POST/DELETE /api/settings/llm-models` + `POST .../llm-models/test` + `PUT .../llm-models/{model_id}/default`；`GET/PUT /api/settings/sources` + 自定义源 `POST/PUT/DELETE .../sources/custom[/{name}]` + `POST .../sources/test`
 - 信号由流水线写入 `signals` / `signal_runs` 表（WAL 模式），日报缓存于 `daily_reports` 表；仪表盘信号页走 API 不再解析 HTML
 
