@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>季度报告 — GS-Tracker 高盛动向情报系统</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=Noto+Serif+SC:ital,wght@0,400;0,600;0,700;1,400;1,600&family=Noto+Sans+SC:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+:root{--paper:#f7f5f0;--paper-dark:#efeae2;--surface:#ffffff;--ink:#1c1c1c;--ink-muted:#6b6560;--rule:#d9d3c8;--accent:#e05a45;--accent-soft:#f7e3df;--serif:'Noto Serif SC',serif;--sans:'Inter Tight','Noto Sans SC',sans-serif;--mono:'JetBrains Mono',monospace}
+*{margin:0;padding:0;box-sizing:border-box}
+html{background:#e5e0d6}
+body{font-family:var(--sans);background:var(--paper);color:var(--ink);max-width:1280px;margin:0 auto;min-height:100vh;line-height:1.6}
+.topbar{border-bottom:1px solid var(--rule);padding:10px 40px;font-size:.68rem;letter-spacing:.08em;color:var(--ink-muted);display:flex;justify-content:space-between;text-transform:uppercase}
+.masthead{padding:34px 40px 26px;text-align:center;border-bottom:1px solid var(--rule);background:linear-gradient(180deg,var(--paper) 0%,var(--paper-dark) 100%)}
+.masthead .mark{font-size:1.4rem;margin-bottom:8px;opacity:.7}
+.masthead .title{font-family:var(--serif);font-size:2.8rem;font-weight:600;letter-spacing:.06em;line-height:1}
+.masthead .sub{font-size:.82rem;color:var(--ink-muted);margin-top:10px;letter-spacing:.04em}
+.masthead .date{font-size:.72rem;color:var(--ink-muted);margin-top:14px;letter-spacing:.1em}
+.nav-strip{display:flex;justify-content:center;gap:36px;padding:16px 0;border-bottom:1px dotted var(--rule);background:var(--paper)}
+.nav-strip a{font-size:.78rem;font-weight:600;letter-spacing:.04em;color:var(--ink-muted);text-decoration:none;padding-bottom:2px;border-bottom:1px solid transparent}
+.nav-strip a.active{color:var(--ink);border-bottom-color:var(--accent)}
+.content{padding:40px;min-width:0}
+.page-header{display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:28px;padding-bottom:16px;border-bottom:1px solid var(--rule);flex-wrap:wrap;gap:16px}
+.page-header h1{font-family:var(--serif);font-size:2rem;font-weight:600;line-height:1.2}
+.page-header .meta{font-size:.8rem;color:var(--ink-muted);text-align:right}
+.quarter-select{display:flex;align-items:center;gap:10px}
+.quarter-select select{padding:8px 14px;border:1px solid var(--rule);border-radius:4px;font-size:.85rem;background:#fff;color:var(--ink);font-family:var(--sans)}
+.quarter-select label{font-size:.72rem;color:var(--ink-muted);letter-spacing:.04em;text-transform:uppercase}
+.tabs{display:flex;border-bottom:1px solid var(--rule);margin-bottom:28px;gap:4px}
+.tab{padding:10px 18px;font-size:.78rem;font-weight:600;color:var(--ink-muted);cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1px;background:transparent}
+.tab.active{color:var(--ink);border-bottom-color:var(--accent);background:#fff}
+.stats-row{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:28px}
+.stat-card{background:var(--surface);border:1px solid var(--rule);border-radius:4px;padding:20px;text-align:center;box-shadow:0 2px 8px rgba(0,0,0,.03)}
+.stat-card .num{font-family:var(--serif);font-size:1.9rem;font-weight:600}
+.stat-card .label{font-size:.7rem;color:var(--ink-muted);letter-spacing:.06em;text-transform:uppercase;margin-top:6px}
+.section-header{display:flex;align-items:center;gap:14px;margin:32px 0 20px}
+.section-header h2{font-family:var(--serif);font-size:1.25rem;font-weight:600}
+.section-header .line{flex:1;height:1px;background:repeating-linear-gradient(to right,var(--rule) 0,var(--rule) 4px,transparent 4px,transparent 8px)}
+.card{background:var(--surface);border:1px solid var(--rule);border-radius:4px;padding:24px;margin-bottom:20px;box-shadow:0 2px 8px rgba(0,0,0,.03)}
+.card h3{font-family:var(--serif);font-size:1.1rem;margin-bottom:14px}
+.card p{font-size:.86rem;color:var(--ink-muted);line-height:1.7;margin-bottom:8px}
+.sentiment{display:inline-flex;align-items:center;gap:8px;font-family:var(--serif);font-size:1.4rem;font-weight:600;color:var(--ink)}
+.confidence-bar{width:80px;height:4px;background:var(--rule);border-radius:2px;overflow:hidden}
+.confidence-bar .fill{height:100%;background:var(--accent)}
+.ticker-list{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
+.ticker{background:var(--paper);border:1px solid var(--rule);padding:5px 12px;border-radius:20px;font-size:.8rem;font-weight:600}
+.signal-card{background:var(--surface);border:1px solid var(--rule);border-radius:4px;padding:18px;margin-bottom:12px;display:grid;grid-template-columns:1fr auto;gap:14px;align-items:start}
+.signal-card .badge{display:inline-block;font-size:.65rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;padding:3px 8px;border-radius:3px;margin-bottom:6px}
+.signal-card .badge.high{background:var(--accent-soft);color:var(--accent)}
+.signal-card h4{font-family:var(--serif);font-size:1rem;font-weight:600;margin-bottom:6px}
+.signal-card p{font-size:.82rem;color:var(--ink-muted);line-height:1.6}
+.signal-card .date{font-size:.72rem;color:var(--ink-muted);white-space:nowrap}
+.change-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:16px;margin-bottom:24px}
+.change-card{background:var(--surface);border:1px solid var(--rule);border-radius:4px;padding:18px;box-shadow:0 2px 8px rgba(0,0,0,.03)}
+.change-card h4{font-family:var(--serif);font-size:1rem;margin-bottom:10px;display:flex;justify-content:space-between;align-items:center}
+.change-card .count{font-family:var(--mono);font-size:.8rem;background:var(--paper);padding:2px 8px;border-radius:12px;border:1px solid var(--rule)}
+.change-card ul{list-style:none;font-size:.82rem;line-height:2}
+.change-card li{display:flex;justify-content:space-between;border-bottom:1px dashed var(--rule)}
+.change-card li:last-child{border-bottom:none}
+.change-card .val{font-family:var(--mono);color:var(--ink-muted)}
+.table-wrap{overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:.84rem}
+th,td{text-align:left;padding:10px 12px;border-bottom:1px solid var(--rule)}
+th{font-size:.7rem;font-weight:600;color:var(--ink-muted);text-transform:uppercase;letter-spacing:.03em;background:var(--paper)}
+td{font-family:var(--mono)}
+tr:hover td{background:var(--paper)}
+.ai-report{background:linear-gradient(180deg,var(--surface) 0%,var(--paper) 100%);border:1px solid var(--rule);border-radius:4px;padding:28px;box-shadow:0 2px 12px rgba(0,0,0,.03)}
+.ai-report h3{font-family:var(--serif);font-size:1.25rem;margin-bottom:16px}
+.ai-report h4{font-family:var(--serif);font-size:1rem;margin:18px 0 8px;color:var(--accent)}
+.ai-report p{font-size:.88rem;color:var(--ink-muted);line-height:1.75;margin-bottom:8px}
+@media(max-width:900px){.stats-row{grid-template-columns:repeat(2,1fr)}.change-grid{grid-template-columns:1fr}.page-header{flex-direction:column;align-items:flex-start}}
+</style>
+</head>
+<body>
+<div class="topbar">
+  <span>Vol. 026 · Issue 07</span>
+  <span>2026 · 北京</span>
+  <span>仅供学习参考 · 不构成投资建议</span>
+</div>
+<header class="masthead">
+  <div class="mark">◉</div>
+  <div class="title">GS-Tracker</div>
+  <div class="sub">高盛动向情报系统 · Goldman Sachs Intelligence</div>
+  <div class="date">2026年7月29日 · 星期三 · 第 026 期</div>
+</header>
+<nav class="nav-strip">
+  <a href="#">每日情报</a>
+  <a href="#" class="active">季度报告</a>
+  <a href="#">使用指南</a>
+  <a href="#">设置</a>
+</nav>
+
+<main class="content">
+  <div class="page-header">
+    <div>
+      <h1>2026-Q2 季度报告</h1>
+      <div style="font-size:.8rem;color:var(--ink-muted);margin-top:6px">报告生成时间：2026-07-28 22:15 · 数据来源 SEC EDGAR</div>
+    </div>
+    <div class="quarter-select">
+      <label>选择季度</label>
+      <select>
+        <option>2026-Q2（最新）</option>
+        <option>2026-Q1</option>
+        <option>2025-Q4</option>
+        <option>2025-Q3</option>
+      </select>
+    </div>
+  </div>
+
+  <div class="tabs">
+    <div class="tab active">概览</div>
+    <div class="tab">AI 分析</div>
+    <div class="tab">持仓变化</div>
+    <div class="tab">多源信号</div>
+    <div class="tab">持仓明细</div>
+  </div>
+
+  <section id="overview" data-od-id="quarter-overview">
+    <div class="stats-row" data-od-id="quarter-stats">
+      <div class="stat-card"><div class="num">6</div><div class="label">重点标的</div></div>
+      <div class="stat-card"><div class="num">18</div><div class="label">多源信号</div></div>
+      <div class="stat-card"><div class="num">3</div><div class="label">高优先级</div></div>
+      <div class="stat-card">
+        <div class="sentiment">中性 <div class="confidence-bar"><div class="fill" style="width:78%"></div></div></div>
+        <div class="label">AI 情绪 · 78%</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>重点标的</h3>
+      <div class="ticker-list">
+        <span class="ticker">AAPL</span>
+        <span class="ticker">MSFT</span>
+        <span class="ticker">NVDA</span>
+        <span class="ticker">JPM</span>
+        <span class="ticker">LLY</span>
+        <span class="ticker">GOOGL</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>最新高优先级信号</h3>
+      <div class="signal-card">
+        <div class="content">
+          <span class="badge high">High · 13F</span>
+          <h4>高盛 2026-Q2 13F 披露：科技股集中度升至 41%</h4>
+          <p>前十大重仓股中科技股占比提升，AAPL / MSFT / NVDA 仍列前三。</p>
+        </div>
+        <div class="date">07.28</div>
+      </div>
+    </div>
+  </section>
+
+  <div class="section-header">
+    <h2>AI 季度洞察</h2>
+    <div class="line"></div>
+  </div>
+
+  <article class="ai-report" data-od-id="quarter-ai-insight">
+    <h3>2026-Q2 持仓解读</h3>
+    <h4>总体摘要</h4>
+    <p>2026 年第二季度，高盛整体持仓延续科技龙头的集中配置，前十大重仓股占披露总市值的 41%，较上季度提升 2.3 个百分点。医疗保健板块出现明显增持，能源与原材料配置比例下降。</p>
+    <h4>集中度分析</h4>
+    <p>HHI 指数从 0.0876 上升至 0.0899，显示持仓进一步向头部标的集中。科技板块内部，苹果与微软合计占比超过 15%，仍是绝对核心。</p>
+    <h4>交易信号</h4>
+    <p>本季度新建仓 3 只、增持 7 只、减持 5 只、清仓 2 只。新增仓位集中在医疗保健与人工智能产业链，减持方向以传统金融与能源为主。</p>
+    <h4>散户可借鉴思路</h4>
+    <p>关注高盛连续两季增持且市值排名上升的标的；对新建仓标的需结合基本面独立判断，避免盲目跟随。</p>
+  </article>
+
+  <div class="section-header">
+    <h2>持仓变化（2026-Q2 vs 2026-Q1）</h2>
+    <div class="line"></div>
+  </div>
+
+  <div class="change-grid">
+    <div class="change-card">
+      <h4>新建仓 <span class="count">3</span></h4>
+      <ul>
+        <li><span>Eli Lilly</span><span class="val">$1.2B</span></li>
+        <li><span>Palantir</span><span class="val">$420M</span></li>
+        <li><span>Costco</span><span class="val">$310M</span></li>
+      </ul>
+    </div>
+    <div class="change-card">
+      <h4>增持 <span class="count">7</span></h4>
+      <ul>
+        <li><span>Apple</span><span class="val">+12%</span></li>
+        <li><span>Microsoft</span><span class="val">+8%</span></li>
+        <li><span>UnitedHealth</span><span class="val">+22%</span></li>
+      </ul>
+    </div>
+    <div class="change-card">
+      <h4>减持 <span class="count">5</span></h4>
+      <ul>
+        <li><span>JPMorgan</span><span class="val">-15%</span></li>
+        <li><span>ExxonMobil</span><span class="val">-28%</span></li>
+        <li><span>Chevron</span><span class="val">-19%</span></li>
+      </ul>
+    </div>
+    <div class="change-card">
+      <h4>清仓 <span class="count">2</span></h4>
+      <ul>
+        <li><span>Ford Motor</span><span class="val">$0</span></li>
+        <li><span>Pfizer</span><span class="val">$0</span></li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="section-header">
+    <h2>持仓明细</h2>
+    <div class="line"></div>
+  </div>
+
+  <div class="card" style="padding:0;overflow:hidden">
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>排名</th><th>公司名称</th><th style="text-align:right">持仓价值（美元）</th><th style="text-align:right">占披露总市值</th></tr></thead>
+        <tbody>
+          <tr><td>1</td><td>Apple Inc.</td><td style="text-align:right">12,450,000,000</td><td style="text-align:right">8.2%</td></tr>
+          <tr><td>2</td><td>Microsoft Corp.</td><td style="text-align:right">10,280,000,000</td><td style="text-align:right">6.8%</td></tr>
+          <tr><td>3</td><td>NVIDIA Corp.</td><td style="text-align:right">8,910,000,000</td><td style="text-align:right">5.9%</td></tr>
+          <tr><td>4</td><td>Amazon.com Inc.</td><td style="text-align:right">6,540,000,000</td><td style="text-align:right">4.3%</td></tr>
+          <tr><td>5</td><td>Alphabet Inc.</td><td style="text-align:right">5,770,000,000</td><td style="text-align:right">3.8%</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</main>
+</body>
+</html>

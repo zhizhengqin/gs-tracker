@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GS-Tracker 风格参考 · 极简编辑</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Inter:wght@400;500;600;700&family=Noto+Sans+SC:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#ffffff;
+  --surface:#fafafa;
+  --ink:#0a0a0a;
+  --muted:#6a6a6a;
+  --border:#e0e0e0;
+  --accent:#0066ff;
+  --accent-warn:#ff4d00;
+  --mono:'JetBrains Mono',monospace;
+  --sans:'Inter','Noto Sans SC',sans-serif;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+html{background:#f0f0f0}
+body{font-family:var(--sans);background:var(--bg);color:var(--ink);max-width:1440px;margin:0 auto;min-height:100vh;font-size:13px;line-height:1.5}
+.topbar{border-bottom:1px solid var(--border);padding:0 32px;height:44px;display:flex;align-items:center;justify-content:space-between;font-size:11px;letter-spacing:.04em;color:var(--muted);text-transform:uppercase}
+.topbar .brand{display:flex;align-items:center;gap:12px;font-weight:700;color:var(--ink);font-size:12px}
+.topbar .status{display:flex;gap:20px}
+.status-dot{display:inline-block;width:5px;height:5px;background:#00c853;border-radius:50%;margin-right:4px;vertical-align:middle}
+.main{display:grid;grid-template-columns:220px 1fr;min-height:calc(100vh - 45px)}
+.sidebar{border-right:1px solid var(--border);padding:24px 0;background:var(--surface)}
+.sidebar-section{padding:0 20px;margin-bottom:28px}
+.sidebar h3{font-size:10px;font-weight:700;letter-spacing:.08em;color:var(--muted);text-transform:uppercase;margin-bottom:12px}
+.sidebar ul{list-style:none;font-size:12px;line-height:2.2}
+.sidebar li{padding:0 12px;margin-bottom:2px;cursor:pointer;color:var(--muted);border-radius:2px}
+.sidebar li.active{background:#fff;color:var(--ink);font-weight:600;box-shadow:0 0 0 1px var(--border)}
+.sidebar label{display:flex;align-items:center;gap:8px;font-size:12px;padding:5px 0;cursor:pointer;color:var(--muted)}
+.sidebar input{accent-color:var(--accent)}
+.run-btn{width:100%;padding:8px 0;border:1px solid var(--ink);background:var(--ink);color:#fff;font-size:11px;font-weight:600;letter-spacing:.02em;cursor:pointer;margin-bottom:6px;border-radius:2px}
+.run-btn.secondary{background:#fff;color:var(--ink)}
+.content{padding:28px 32px;min-width:0}
+.page-header{display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:24px;padding-bottom:16px;border-bottom:1px solid var(--border)}
+.page-header h1{font-size:22px;font-weight:700;letter-spacing:-.01em}
+.page-header .meta{font-size:11px;color:var(--muted);text-align:right;line-height:1.7}
+.toolbar{display:flex;gap:8px;margin-bottom:20px;align-items:center}
+.toolbar select,.toolbar button{padding:6px 10px;border:1px solid var(--border);background:#fff;font-size:11px;font-family:var(--sans);color:var(--ink);border-radius:2px}
+.toolbar button{cursor:pointer;font-weight:500}
+.toolbar button.active{background:var(--ink);color:#fff;border-color:var(--ink)}
+.kpi-row{display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:var(--border);border:1px solid var(--border);margin-bottom:24px}
+.kpi-cell{background:#fff;padding:16px}
+.kpi-cell .value{font-family:var(--mono);font-size:26px;font-weight:500;color:var(--ink);line-height:1}
+.kpi-cell .label{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-top:8px}
+.kpi-cell .change{font-family:var(--mono);font-size:11px;color:var(--accent);margin-top:6px}
+.panel{border:1px solid var(--border);margin-bottom:24px;background:#fff}
+.panel-header{display:flex;justify-content:space-between;align-items:center;padding:12px 16px;border-bottom:1px solid var(--border);background:var(--surface)}
+.panel-header h2{font-size:12px;font-weight:700;letter-spacing:.02em;text-transform:uppercase}
+.panel-header .tag{font-family:var(--mono);font-size:10px;color:var(--muted)}
+.panel-body{padding:16px}
+.report-text{font-size:13px;line-height:1.7;color:var(--ink)}
+.report-text p{margin-bottom:10px}
+.report-text strong{font-weight:600}
+.report-meta{display:flex;gap:16px;margin-top:14px;font-size:11px;color:var(--muted);font-family:var(--mono)}
+.table-wrap{overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:12px}
+th,td{text-align:left;padding:8px 12px;border-bottom:1px solid var(--border)}
+th{font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.03em;background:var(--surface)}
+td{font-family:var(--mono)}
+tr:hover td{background:var(--surface)}
+.signal-row{display:grid;grid-template-columns:90px 1fr 70px 60px;border-bottom:1px solid var(--border);padding:12px 16px;align-items:center;gap:16px}
+.signal-row:last-child{border-bottom:none}
+.signal-row .src{font-family:var(--mono);font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase}
+.signal-row .title{font-weight:600;font-size:13px;margin-bottom:3px}
+.signal-row .summary{font-size:11px;color:var(--muted);line-height:1.5}
+.signal-row .date{font-family:var(--mono);font-size:10px;color:var(--muted);text-align:right}
+.priority{font-family:var(--mono);font-size:9px;font-weight:700;padding:2px 6px;border-radius:2px;text-transform:uppercase;text-align:center}
+.priority.high{background:#ff4d00;color:#fff}
+.priority.medium{background:#ff9100;color:#fff}
+.priority.low{background:#bdbdbd;color:#fff}
+.tabs{display:flex;border-bottom:1px solid var(--border);margin-bottom:16px}
+.tab{padding:8px 14px;font-size:11px;font-weight:600;color:var(--muted);cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1px}
+.tab.active{color:var(--ink);border-bottom-color:var(--accent)}
+.two-col{display:grid;grid-template-columns:1fr 1fr;gap:24px}
+.sparkline{height:24px;width:80px;background:linear-gradient(90deg,var(--accent) 0%,var(--accent) 60%,transparent 60%);opacity:.3}
+@media(max-width:1000px){.main{grid-template-columns:1fr}.sidebar{display:none}.two-col{grid-template-columns:1fr}.kpi-row{grid-template-columns:repeat(2,1fr)}}
+</style>
+</head>
+<body>
+<header class="topbar">
+  <div class="brand">GS-TRACKER · 高盛动向情报系统</div>
+  <div class="status">
+    <span><span class="status-dot"></span>数据源正常</span>
+    <span>版本 v1.0.26</span>
+    <span>2026-07-29 09:42 CST</span>
+  </div>
+</header>
+<div class="main">
+  <aside class="sidebar">
+    <div class="sidebar-section">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="active">每日情报</li>
+        <li>季度报告</li>
+        <li>使用指南</li>
+        <li>设置</li>
+      </ul>
+    </div>
+    <div class="sidebar-section">
+      <h3>Sources</h3>
+      <label><input type="checkbox" checked> 13F 持仓</label>
+      <label><input type="checkbox" checked> SEC 8-K</label>
+      <label><input type="checkbox" checked> 13D/13G</label>
+      <label><input type="checkbox" checked> 高盛研究</label>
+      <label><input type="checkbox" checked> 新闻</label>
+      <label><input type="checkbox" checked> 宏观指标</label>
+    </div>
+    <div class="sidebar-section">
+      <h3>Priority</h3>
+      <label><input type="checkbox" checked> 高</label>
+      <label><input type="checkbox" checked> 中</label>
+      <label><input type="checkbox" checked> 低</label>
+    </div>
+    <div class="sidebar-section">
+      <button class="run-btn">运行每日情报</button>
+      <button class="run-btn secondary">运行季度对账</button>
+    </div>
+  </aside>
+
+  <main class="content">
+    <div class="page-header">
+      <div>
+        <h1>每日情报 · DAILY INTELLIGENCE</h1>
+      </div>
+      <div class="meta">
+        数据更新于 2026-07-29 09:30 CST<br>
+        23 信号 · 4 高优先级 · 置信度 78%
+      </div>
+    </div>
+
+    <div class="toolbar">
+      <span style="color:var(--muted);font-size:11px">日期：</span>
+      <input type="date" value="2026-07-29">
+      <button class="active">今日</button>
+      <button>近 7 天</button>
+      <button>近 30 天</button>
+    </div>
+
+    <div class="kpi-row">
+      <div class="kpi-cell">
+        <div class="value">23</div>
+        <div class="label">信号总数</div>
+      </div>
+      <div class="kpi-cell">
+        <div class="value">4</div>
+        <div class="label">高优先级</div>
+        <div class="change">+1 vs 昨日</div>
+      </div>
+      <div class="kpi-cell">
+        <div class="value">6</div>
+        <div class="label">重点标的</div>
+      </div>
+      <div class="kpi-cell">
+        <div class="value">NEUT</div>
+        <div class="label">AI 情绪</div>
+        <div class="change">conf 78%</div>
+      </div>
+    </div>
+
+    <div class="two-col">
+      <div class="panel">
+        <div class="panel-header">
+          <h2>AI 日报</h2>
+          <span class="tag">2026-07-29 · AUTO-GEN</span>
+        </div>
+        <div class="panel-body">
+          <div class="report-text">
+            <p><strong>总体摘要：</strong>今日高盛相关信号以持仓披露与宏观研究为主。13F 季度数据显示前十大重仓股集中度环比提升 2.3%，科技板块仍占主导。</p>
+            <p><strong>行业偏好：</strong>信息技术、医疗保健、金融板块位列前三；能源与原材料配置比例下降。</p>
+            <p><strong>交易信号：</strong>新建仓 3 只，增持 7 只，减持 5 只，清仓 2 只。</p>
+          </div>
+          <div class="report-meta">
+            <span>MODEL: claude-sonnet-5</span>
+            <span>CACHED: YES</span>
+            <span>TOKENS: 2,847</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-header">
+          <h2>重点标的</h2>
+          <span class="tag">TOP 6</span>
+        </div>
+        <div class="panel-body" style="padding:0">
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>TICKER</th><th>方向</th><th>信号强度</th></tr></thead>
+              <tbody>
+                <tr><td>AAPL</td><td>增持</td><td><div class="sparkline"></div></td></tr>
+                <tr><td>MSFT</td><td>增持</td><td><div class="sparkline"></div></td></tr>
+                <tr><td>NVDA</td><td>持平</td><td><div class="sparkline" style="background:linear-gradient(90deg,#bdbdbd 0%,#bdbdbd 50%,transparent 50%)"></div></td></tr>
+                <tr><td>JPM</td><td>减持</td><td><div class="sparkline" style="background:linear-gradient(90deg,var(--accent-warn) 0%,var(--accent-warn) 30%,transparent 30%)"></div></td></tr>
+                <tr><td>LLY</td><td>新建仓</td><td><div class="sparkline"></div></td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-header">
+        <h2>信号流</h2>
+        <span class="tag">SORT: TIME DESC · FILTER: ALL</span>
+      </div>
+      <div class="panel-body" style="padding:0">
+        <div class="signal-row">
+          <div class="src">13F</div>
+          <div>
+            <div class="title">高盛 2026-Q2 13F 披露：科技股集中度升至 41%</div>
+            <div class="summary">SEC EDGAR 最新文件显示前十大重仓中科技股占比提升，AAPL / MSFT / NVDA 仍列前三 · HHI +2.3%</div>
+          </div>
+          <div class="date">07.28</div>
+          <div><span class="priority high">HIGH</span></div>
+        </div>
+        <div class="signal-row">
+          <div class="src">MACRO</div>
+          <div>
+            <div class="title">高盛宏观团队下调 Q3 美国 GDP 预期至 1.8%</div>
+            <div class="summary">基于消费与制造业数据，预期从 2.1% 下调；维持年内降息两次判断</div>
+          </div>
+          <div class="date">07.28</div>
+          <div><span class="priority high">HIGH</span></div>
+        </div>
+        <div class="signal-row">
+          <div class="src">RESEARCH</div>
+          <div>
+            <div class="title">医疗保健板块防御属性凸显</div>
+            <div class="summary">报告认为在宏观不确定性上升背景下，医疗保健板块具备相对收益吸引力</div>
+          </div>
+          <div class="date">07.27</div>
+          <div><span class="priority medium">MED</span></div>
+        </div>
+        <div class="signal-row">
+          <div class="src">NEWS</div>
+          <div>
+            <div class="title">高盛参与某科技公司 IPO 承销</div>
+            <div class="summary">消息人士称高盛将担任下周某人工智能公司赴美上市联席承销商</div>
+          </div>
+          <div class="date">07.27</div>
+          <div><span class="priority medium">MED</span></div>
+        </div>
+      </div>
+    </div>
+  </main>
+</div>
+</body>
+</html>

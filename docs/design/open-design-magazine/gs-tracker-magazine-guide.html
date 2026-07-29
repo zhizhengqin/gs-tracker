@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>使用指南 — GS-Tracker 高盛动向情报系统</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=Noto+Serif+SC:ital,wght@0,400;0,600;0,700;1,400;1,600&family=Noto+Sans+SC:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+:root{--paper:#f7f5f0;--paper-dark:#efeae2;--surface:#ffffff;--ink:#1c1c1c;--ink-muted:#6b6560;--rule:#d9d3c8;--accent:#e05a45;--accent-soft:#f7e3df;--serif:'Noto Serif SC',serif;--sans:'Inter Tight','Noto Sans SC',sans-serif;--mono:'JetBrains Mono',monospace}
+*{margin:0;padding:0;box-sizing:border-box}
+html{background:#e5e0d6}
+body{font-family:var(--sans);background:var(--paper);color:var(--ink);max-width:1280px;margin:0 auto;min-height:100vh;line-height:1.7}
+.topbar{border-bottom:1px solid var(--rule);padding:10px 40px;font-size:.68rem;letter-spacing:.08em;color:var(--ink-muted);display:flex;justify-content:space-between;text-transform:uppercase}
+.masthead{padding:34px 40px 26px;text-align:center;border-bottom:1px solid var(--rule);background:linear-gradient(180deg,var(--paper) 0%,var(--paper-dark) 100%)}
+.masthead .mark{font-size:1.4rem;margin-bottom:8px;opacity:.7}
+.masthead .title{font-family:var(--serif);font-size:2.8rem;font-weight:600;letter-spacing:.06em;line-height:1}
+.masthead .sub{font-size:.82rem;color:var(--ink-muted);margin-top:10px;letter-spacing:.04em}
+.masthead .date{font-size:.72rem;color:var(--ink-muted);margin-top:14px;letter-spacing:.1em}
+.nav-strip{display:flex;justify-content:center;gap:36px;padding:16px 0;border-bottom:1px dotted var(--rule);background:var(--paper)}
+.nav-strip a{font-size:.78rem;font-weight:600;letter-spacing:.04em;color:var(--ink-muted);text-decoration:none;padding-bottom:2px;border-bottom:1px solid transparent}
+.nav-strip a.active{color:var(--ink);border-bottom-color:var(--accent)}
+.content{padding:40px;display:grid;grid-template-columns:220px 1fr;gap:40px}
+.toc{position:sticky;top:24px;align-self:start}
+.toc h3{font-family:var(--serif);font-size:.85rem;color:var(--ink-muted);letter-spacing:.08em;margin-bottom:16px}
+.toc ul{list-style:none;font-size:.82rem;line-height:2.2}
+.toc a{color:var(--ink-muted);text-decoration:none;display:block;padding-left:0;border-left:2px solid transparent}
+.toc a:hover{color:var(--ink);border-left-color:var(--accent);padding-left:8px}
+.guide{min-width:0}
+.guide-hero{margin-bottom:36px;padding-bottom:24px;border-bottom:1px solid var(--rule)}
+.guide-hero h1{font-family:var(--serif);font-size:2.2rem;font-weight:600;line-height:1.2;margin-bottom:12px}
+.guide-hero h1 em{font-style:italic;color:var(--ink-muted);font-weight:400}
+.guide-hero .lead{font-family:var(--serif);font-size:1.05rem;color:var(--ink-muted);max-width:680px}
+.guide h2{font-family:var(--serif);font-size:1.35rem;margin:36px 0 16px;padding-bottom:8px;border-bottom:1px solid var(--rule)}
+.guide h3{font-family:var(--serif);font-size:1.05rem;margin:24px 0 10px;color:var(--ink)}
+.guide p{font-size:.9rem;color:var(--ink-muted);margin-bottom:12px}
+.guide ul,.guide ol{padding-left:24px;margin-bottom:16px;font-size:.9rem;color:var(--ink-muted)}
+.guide li{margin-bottom:6px}
+.guide strong{color:var(--ink)}
+.card{background:var(--surface);border:1px solid var(--rule);border-radius:4px;padding:24px;margin:20px 0;box-shadow:0 2px 8px rgba(0,0,0,.03)}
+.card h4{font-family:var(--serif);font-size:1rem;margin-bottom:10px}
+.tip{background:var(--paper);border-left:3px solid var(--accent);padding:14px 18px;border-radius:0 4px 4px 0;margin:16px 0}
+.tip p{margin:0;font-size:.85rem;color:var(--ink-muted)}
+.warn{background:#fff8e6;border-left:3px solid #e65100;padding:14px 18px;border-radius:0 4px 4px 0;margin:16px 0}
+.warn p{margin:0;font-size:.85rem;color:#6b5b1e}
+.src-tag{display:inline-block;font-size:.68rem;font-weight:700;padding:2px 8px;border-radius:3px;margin-right:6px;vertical-align:2px;text-transform:uppercase}
+table{width:100%;border-collapse:collapse;font-size:.84rem;margin:14px 0;background:var(--surface)}
+th,td{text-align:left;padding:10px 12px;border:1px solid var(--rule)}
+th{font-size:.7rem;font-weight:600;color:var(--ink-muted);text-transform:uppercase;letter-spacing:.03em;background:var(--paper)}
+@media(max-width:900px){.content{grid-template-columns:1fr;padding:24px}.toc{display:none}}
+</style>
+</head>
+<body>
+<div class="topbar">
+  <span>Vol. 026 · Issue 07</span>
+  <span>2026 · 北京</span>
+  <span>仅供学习参考 · 不构成投资建议</span>
+</div>
+<header class="masthead">
+  <div class="mark">◉</div>
+  <div class="title">GS-Tracker</div>
+  <div class="sub">高盛动向情报系统 · Goldman Sachs Intelligence</div>
+  <div class="date">2026年7月29日 · 星期三 · 第 026 期</div>
+</header>
+<nav class="nav-strip">
+  <a href="#">每日情报</a>
+  <a href="#">季度报告</a>
+  <a href="#" class="active">使用指南</a>
+  <a href="#">设置</a>
+</nav>
+
+<div class="content">
+  <aside class="toc" data-od-id="guide-toc">
+    <h3>目录</h3>
+    <ul>
+      <li><a href="#what">系统是什么</a></li>
+      <li><a href="#start">三分钟上手</a></li>
+      <li><a href="#sources">信号源科普</a></li>
+      <li><a href="#priority">优先级</a></li>
+      <li><a href="#pages">页面说明</a></li>
+      <li><a href="#faq">常见问题</a></li>
+    </ul>
+  </aside>
+
+  <article class="guide" data-od-id="guide-content">
+    <div class="guide-hero">
+      <h1>系统使用指南：<em>如何读懂高盛动向</em></h1>
+      <p class="lead">写给完全不懂金融和编程的你：看完这一页，就能独立使用 GS-Tracker。</p>
+    </div>
+
+    <h2 id="what">一、这个系统是干什么的？</h2>
+    <p><strong>一句话：自动盯着高盛（Goldman Sachs）在公开市场上的各种动作，每天汇总成一份中文情报送到你眼前。</strong></p>
+    <p>美国证监会（SEC）要求像高盛这样的大机构定期公开披露大量信息，比如买了哪些股票、公司发生了什么大事。这些信息虽然公开，但分散在不同网站、全是英文、格式晦涩。本系统会自动把它们抓回来，由 AI 筛选出重要内容并翻译成中文，整理成你每天花几分钟就能看完的情报日报。</p>
+    <div class="warn">
+      <p>⚠️ 所有信息都来自公开渠道，且存在不同程度的滞后；本系统仅供学习参考，<strong>不构成任何投资建议</strong>。</p>
+    </div>
+
+    <h2 id="start">二、三分钟快速上手</h2>
+    <ol>
+      <li><strong>打开网页</strong>，默认就是「每日情报」页：最上面是 AI 自动生成的今日日报，下面是一条一条的原始信号。</li>
+      <li>今天还没有情报？点左侧边栏的 <strong>「运行每日情报」</strong>，等一两分钟，页面会自动刷新出结果。</li>
+      <li>对某条信号感兴趣，点卡片上的 <strong>「AI 解读」</strong>，AI 会用中文解释这条消息意味着什么。</li>
+      <li>想看高盛上个季度到底买了什么股票？点 <strong>「季度报告」</strong>。</li>
+      <li>手机上也能用：点左上角菜单展开同样的导航，功能完全一致。</li>
+    </ol>
+
+    <h2 id="sources">三、信号源科普</h2>
+    <p>系统的情报来自多个「信号源」，左侧边栏的「信号筛选」里可以按来源勾选/取消。下面逐一解释每个来源是什么意思。</p>
+
+    <div class="card">
+      <h4><span class="src-tag" style="background:#e3f2fd;color:#1565c0">13F</span>13F 持仓 —— 高盛每个季度买了什么股票</h4>
+      <p><strong>是什么：</strong>SEC 规定，凡是管理资产超过 1 亿美元的投资机构，每个季度结束后都必须提交一份叫「13F」的表格，如实列出自己持有的全部美股。</p>
+      <p><strong>有什么用：</strong>这是唯一能直接看到「高盛买了什么」的官方渠道。对比前后两个季度的 13F，就能看出它在加仓什么、抛售什么。</p>
+    </div>
+
+    <div class="card">
+      <h4><span class="src-tag" style="background:#e8f5e9;color:#2e7d32">8-K</span>SEC 8-K —— 公司突发大事的「官方快讯」</h4>
+      <p><strong>是什么：</strong>上市公司一旦发生重大事件，必须在 <strong>4 个工作日</strong> 内向 SEC 提交一份「8-K」临时报告。</p>
+      <p><strong>有什么用：</strong>8-K 相当于公司突发新闻的「官方版本」，比媒体报道更权威、更及时。</p>
+    </div>
+
+    <div class="card">
+      <h4><span class="src-tag" style="background:#ede7f6;color:#6a1b9a">13D/13G</span>13D / 13G —— 大股东「举牌」公告</h4>
+      <p><strong>是什么：</strong>任何投资者买入某家上市公司超过 <strong>5%</strong> 的股份，都必须向 SEC 公开申报。</p>
+      <p><strong>有什么用：</strong>当高盛对某家公司的持股突破 5% 时，13D/13G 能比 13F 更早暴露它的重仓动作。</p>
+    </div>
+
+    <h3>三个 SEC 信号源对比</h3>
+    <table>
+      <tr><th>信号源</th><th>回答的问题</th><th>披露频率</th><th>时效性</th></tr>
+      <tr><td><strong>13F</strong></td><td>高盛整体持仓长什么样？</td><td>每季度一次</td><td>滞后最长 45 天</td></tr>
+      <tr><td><strong>8-K</strong></td><td>公司出了什么突发大事？</td><td>事件后 4 个工作日内</td><td>很及时</td></tr>
+      <tr><td><strong>13D/13G</strong></td><td>谁在重仓某公司？</td><td>突破 5% 后申报</td><td>较及时</td></tr>
+    </table>
+
+    <h2 id="priority">四、信号优先级怎么看？</h2>
+    <p>每条信号都会被自动评一个优先级，左侧筛选区可以按优先级过滤：</p>
+    <ul>
+      <li><strong>高优先级</strong>：值得当天就看，比如大额持仓变动、高管变动、官方重大公告。</li>
+      <li><strong>中优先级</strong>：有一定参考价值，扫一眼标题即可。</li>
+      <li><strong>低优先级</strong>：背景信息，知道有这回事就行。</li>
+    </ul>
+    <div class="tip">
+      <p>💡 日常用法：只看「高优先级」加顶部 AI 日报，一分钟掌握全局；有空再展开中低优先级。</p>
+    </div>
+
+    <h2 id="pages">五、各个页面怎么用</h2>
+    <h3>每日情报（默认页）</h3>
+    <ul>
+      <li><strong>顶部 AI 日报</strong>：当天所有信号的 AI 中文汇总，先读它。</li>
+      <li><strong>今日情报列表</strong>：一条条原始信号，点「AI 解读」可看单条详解。</li>
+      <li><strong>查看日期</strong>：页面顶部可选择任意历史日期回溯当天的情报。</li>
+    </ul>
+
+    <h3>季度报告</h3>
+    <ul>
+      <li>页面顶部下拉框选择季度。</li>
+      <li>标签栏可切换：概览 / AI 分析 / 持仓变化 / 多源信号 / 持仓明细。</li>
+      <li>AI 季度洞察同样可以点「重新生成」刷新内容。</li>
+    </ul>
+
+    <h2 id="faq">六、常见问题</h2>
+    <p><strong>Q：为什么 13F 持仓数据是一两个月前的？</strong><br>A：这是 SEC 规则决定的，所有机构都一样，最长滞后 45 天。</p>
+    <p><strong>Q：AI 解读和日报会重复消耗额度吗？</strong><br>A：不会。单条解读和每日日报都有缓存，同一天同一内容只调用一次 AI。</p>
+    <p><strong>Q：手机上功能完整吗？</strong><br>A：完整。点击左上角菜单即可展开导航。</p>
+
+    <div class="warn">
+      <p>⚠️ 再次提醒：本系统所有内容仅供学习参考，不构成投资建议。投资有风险，决策需谨慎。</p>
+    </div>
+  </article>
+</div>
+</body>
+</html>

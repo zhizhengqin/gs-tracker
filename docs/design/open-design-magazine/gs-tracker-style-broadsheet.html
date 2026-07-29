@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GS-Tracker 风格参考 · 经典大报</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600;700;900&family=Noto+Sans+SC:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --paper:#f8f6f1;
+  --ink:#0d0d0d;
+  --ink-muted:#4a4a4a;
+  --rule:#b8b3a8;
+  --accent:#8b1e1e;
+  --accent-2:#1a237e;
+  --column-gap:28px;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+html{background:#e8e4db}
+body{font-family:'Noto Sans SC',sans-serif;background:var(--paper);color:var(--ink);max-width:1400px;margin:0 auto;min-height:100vh;line-height:1.55}
+.masthead{border-bottom:3px solid var(--ink);padding:18px 24px 10px}
+.masthead-top{display:flex;justify-content:space-between;align-items:flex-end}
+.masthead .title{font-family:'Noto Serif SC',serif;font-size:3.2rem;font-weight:900;letter-spacing:.04em;line-height:1}
+.masthead .sub{font-family:'Noto Serif SC',serif;font-size:.82rem;color:var(--ink-muted);letter-spacing:.12em;margin-top:6px;text-transform:uppercase}
+.masthead .meta{font-size:.72rem;color:var(--ink-muted);text-align:right;line-height:1.6}
+.nav-strip{border-bottom:1px solid var(--rule);display:flex;gap:2px;padding:0 24px;background:#fff}
+.nav-strip a{flex:1;text-align:center;padding:10px 0;font-size:.78rem;font-weight:700;letter-spacing:.06em;color:var(--ink);text-decoration:none;border-right:1px solid var(--rule)}
+.nav-strip a:last-child{border-right:none}
+.nav-strip a.active{background:var(--ink);color:#fff}
+.paper-body{display:grid;grid-template-columns:220px 1fr 260px;gap:var(--column-gap);padding:24px}
+.left-rail{border-right:1px solid var(--rule);padding-right:var(--column-gap)}
+.left-rail h3{font-family:'Noto Serif SC',serif;font-size:.8rem;border-bottom:2px solid var(--ink);padding-bottom:4px;margin-bottom:10px;letter-spacing:.05em}
+.left-rail ul{list-style:none;font-size:.78rem;line-height:1.7;color:var(--ink-muted)}
+.left-rail li{padding:3px 0;cursor:pointer}
+.left-rail li.active{font-weight:700;color:var(--ink)}
+.filter-group{margin-bottom:22px}
+.filter-group label{display:flex;align-items:center;gap:6px;font-size:.72rem;padding:3px 0;cursor:pointer}
+.btn{width:100%;padding:8px 0;border:1px solid var(--ink);background:#fff;font-family:'Noto Serif SC',serif;font-size:.72rem;font-weight:700;cursor:pointer;margin-bottom:6px}
+.btn.primary{background:var(--ink);color:#fff}
+.main-col{min-width:0}
+.dateline{display:flex;justify-content:space-between;font-size:.7rem;color:var(--ink-muted);text-transform:uppercase;letter-spacing:.08em;border-bottom:1px solid var(--rule);padding-bottom:6px;margin-bottom:14px}
+.headline{font-family:'Noto Serif SC',serif;font-size:2.1rem;font-weight:700;line-height:1.18;margin-bottom:10px;letter-spacing:.01em}
+.deck{font-family:'Noto Serif SC',serif;font-size:1.05rem;color:var(--ink-muted);line-height:1.5;margin-bottom:16px;padding-bottom:14px;border-bottom:1px solid var(--rule)}
+.daily-report{background:#fff;border:1px solid var(--rule);padding:18px;margin-bottom:22px}
+.daily-report .kicker{font-size:.7rem;font-weight:700;letter-spacing:.1em;color:var(--accent);text-transform:uppercase;margin-bottom:6px}
+.daily-report h2{font-family:'Noto Serif SC',serif;font-size:1.35rem;margin-bottom:10px}
+.daily-report p{font-size:.88rem;line-height:1.7;color:var(--ink-muted);margin-bottom:8px}
+.section-title{font-family:'Noto Serif SC',serif;font-size:1.1rem;border-bottom:2px solid var(--ink);padding-bottom:5px;margin:22px 0 14px;display:flex;justify-content:space-between;align-items:center}
+.signal{border-bottom:1px solid var(--rule);padding:14px 0;display:grid;grid-template-columns:90px 1fr 120px;gap:14px}
+.signal:last-child{border-bottom:none}
+.signal .source{font-size:.65rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--accent-2);border:1px solid var(--rule);padding:2px 6px;display:inline-block;text-align:center}
+.signal .title{font-family:'Noto Serif SC',serif;font-size:1rem;font-weight:600;margin-bottom:6px}
+.signal .summary{font-size:.82rem;color:var(--ink-muted);line-height:1.55}
+.signal .meta{font-size:.72rem;color:var(--ink-muted);margin-top:6px}
+.signal .date{font-size:.72rem;color:var(--ink-muted);text-align:right}
+.priority{font-size:.6rem;font-weight:700;padding:1px 5px;border:1px solid var(--accent);color:var(--accent);display:inline-block;margin-left:6px}
+.right-rail{border-left:1px solid var(--rule);padding-left:var(--column-gap)}
+.right-rail h3{font-family:'Noto Serif SC',serif;font-size:.85rem;border-bottom:2px solid var(--ink);padding-bottom:4px;margin-bottom:12px}
+.stat-box{border:1px solid var(--rule);padding:12px;margin-bottom:14px;background:#fff}
+.stat-box .num{font-family:'Noto Serif SC',serif;font-size:1.9rem;font-weight:700}
+.stat-box .label{font-size:.72rem;color:var(--ink-muted);text-transform:uppercase;letter-spacing:.05em}
+.mini-table{width:100%;border-collapse:collapse;font-size:.75rem}
+.mini-table th,.mini-table td{text-align:left;padding:5px 0;border-bottom:1px solid var(--rule)}
+.mini-table th{color:var(--ink-muted);font-weight:500}
+.sentiment{font-family:'Noto Serif SC',serif;font-size:1.2rem;font-weight:700;color:var(--accent-2)}
+@media(max-width:1100px){.paper-body{grid-template-columns:1fr}.left-rail,.right-rail{border:none;padding:0}.signal{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<header class="masthead">
+  <div class="masthead-top">
+    <div>
+      <div class="title">GS-Tracker</div>
+      <div class="sub">高盛动向情报系统 · Goldman Sachs Intelligence</div>
+    </div>
+    <div class="meta">第 026 期<br>2026年7月29日 星期三<br>北京时间 09:42</div>
+  </div>
+</header>
+<nav class="nav-strip">
+  <a href="#" class="active">每日情报</a>
+  <a href="#">季度报告</a>
+  <a href="#">使用指南</a>
+  <a href="#">设置</a>
+</nav>
+<div class="paper-body">
+  <aside class="left-rail">
+    <div class="filter-group">
+      <h3>导航</h3>
+      <ul>
+        <li class="active">今日视图</li>
+        <li>历史回溯</li>
+        <li>季度档案</li>
+        <li>信号源设置</li>
+      </ul>
+    </div>
+    <div class="filter-group">
+      <h3>信号筛选</h3>
+      <label><input type="checkbox" checked> 13F 持仓</label>
+      <label><input type="checkbox" checked> SEC 8-K</label>
+      <label><input type="checkbox" checked> 13D/13G</label>
+      <label><input type="checkbox" checked> 高盛研究</label>
+      <label><input type="checkbox" checked> 新闻</label>
+      <label><input type="checkbox" checked> 宏观指标</label>
+    </div>
+    <div class="filter-group">
+      <h3>优先级</h3>
+      <label><input type="checkbox" checked> 高优先级</label>
+      <label><input type="checkbox" checked> 中优先级</label>
+      <label><input type="checkbox" checked> 低优先级</label>
+    </div>
+    <button class="btn primary">运行每日情报</button>
+    <button class="btn">运行季度对账</button>
+  </aside>
+
+  <main class="main-col">
+    <div class="dateline">
+      <span>每日情报 · DAILY BRIEFING</span>
+      <span>数据更新于 09:30</span>
+    </div>
+    <h1 class="headline">高盛最新动向：科技股持仓集中度上升，宏观信号偏谨慎</h1>
+    <p class="deck">本日共抓取 23 条多源信号，其中高优先级 4 条。AI 综合判断情绪偏中性，建议关注季度持仓披露窗口与 8-K 突发公告。</p>
+
+    <article class="daily-report">
+      <div class="kicker">AI 日报 · 2026-07-29</div>
+      <h2>市场概览与重点线索</h2>
+      <p><strong>总体摘要：</strong>今日高盛相关信号以持仓披露与宏观研究为主。13F 季度数据显示前十大重仓股集中度环比提升 2.3%，科技板块仍占主导。8-K 方面无重大公司事件。</p>
+      <p><strong>行业偏好：</strong>信息技术、医疗保健、金融板块位列前三；能源与原材料配置比例下降。</p>
+      <p><strong>交易信号：</strong>新建仓标的 3 只，增持 7 只，减持 5 只，清仓 2 只。散户可借鉴思路：关注持仓稳定性较高的长期标的，避免追高短期热门股。</p>
+    </article>
+
+    <h3 class="section-title">高优先级信号 <span style="font-family:sans-serif;font-size:.65rem;font-weight:400;color:var(--ink-muted)">4 条</span></h3>
+
+    <div class="signal">
+      <div><span class="source">13F 持仓</span><div class="date">2026-07-28</div></div>
+      <div>
+        <div class="title">高盛 2026-Q2 13F 披露：科技股集中度升至 41%<span class="priority">HIGH</span></div>
+        <div class="summary">SEC EDGAR 最新 13F 文件显示，高盛前十大重仓股中科技股占比进一步提升，苹果、微软、英伟达仍列前三。集中度指标 HHI 环比上升 2.3%。</div>
+        <div class="meta">相关公司：AAPL, MSFT, NVDA · <a href="#" style="color:var(--accent-2)">查看原文 →</a></div>
+      </div>
+      <div class="date">交叉信号</div>
+    </div>
+
+    <div class="signal">
+      <div><span class="source">宏观指标</span><div class="date">2026-07-28</div></div>
+      <div>
+        <div class="title">高盛宏观团队下调 Q3 美国 GDP 预期至 1.8%<span class="priority">HIGH</span></div>
+        <div class="summary">基于最新消费与制造业数据，高盛经济学家将第三季度 GDP 增速预期从 2.1% 下调至 1.8%，并维持美联储年内降息两次的判断。</div>
+        <div class="meta">来源：高盛全球宏观研究</div>
+      </div>
+      <div class="date">—</div>
+    </div>
+
+    <h3 class="section-title">中优先级信号 <span style="font-family:sans-serif;font-size:.65rem;font-weight:400;color:var(--ink-muted)">8 条</span></h3>
+
+    <div class="signal">
+      <div><span class="source">高盛研究</span><div class="date">2026-07-27</div></div>
+      <div>
+        <div class="title">高盛策略师：医疗保健板块防御属性凸显</div>
+        <div class="summary">报告认为在宏观不确定性上升背景下，医疗保健板块具备相对收益吸引力，建议关注大型制药与医疗器械龙头。</div>
+      </div>
+      <div class="date">—</div>
+    </div>
+  </main>
+
+  <aside class="right-rail">
+    <h3>市场情绪</h3>
+    <div class="stat-box">
+      <div class="sentiment">中性</div>
+      <div class="label">AI 情绪判断 · 置信度 78%</div>
+    </div>
+
+    <h3>今日统计</h3>
+    <div class="stat-box">
+      <div class="num">23</div>
+      <div class="label">信号总数</div>
+    </div>
+    <div class="stat-box">
+      <div class="num">4</div>
+      <div class="label">高优先级</div>
+    </div>
+    <div class="stat-box">
+      <div class="num">6</div>
+      <div class="label">重点标的</div>
+    </div>
+
+    <h3>重点标的</h3>
+    <table class="mini-table">
+      <tr><th>标的</th><th>仓位方向</th></tr>
+      <tr><td>AAPL</td><td>增持</td></tr>
+      <tr><td>MSFT</td><td>增持</td></tr>
+      <tr><td>NVDA</td><td>持平</td></tr>
+      <tr><td>JPM</td><td>减持</td></tr>
+      <tr><td>LLY</td><td>新建仓</td></tr>
+    </table>
+  </aside>
+</div>
+</body>
+</html>

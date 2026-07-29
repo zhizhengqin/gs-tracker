@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>设置 — GS-Tracker 高盛动向情报系统</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=Noto+Serif+SC:ital,wght@0,400;0,600;0,700;1,400;1,600&family=Noto+Sans+SC:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+:root{--paper:#f7f5f0;--paper-dark:#efeae2;--surface:#ffffff;--ink:#1c1c1c;--ink-muted:#6b6560;--rule:#d9d3c8;--accent:#e05a45;--accent-soft:#f7e3df;--serif:'Noto Serif SC',serif;--sans:'Inter Tight','Noto Sans SC',sans-serif;--mono:'JetBrains Mono',monospace}
+*{margin:0;padding:0;box-sizing:border-box}
+html{background:#e5e0d6}
+body{font-family:var(--sans);background:var(--paper);color:var(--ink);max-width:1280px;margin:0 auto;min-height:100vh;line-height:1.6}
+.topbar{border-bottom:1px solid var(--rule);padding:10px 40px;font-size:.68rem;letter-spacing:.08em;color:var(--ink-muted);display:flex;justify-content:space-between;text-transform:uppercase}
+.masthead{padding:34px 40px 26px;text-align:center;border-bottom:1px solid var(--rule);background:linear-gradient(180deg,var(--paper) 0%,var(--paper-dark) 100%)}
+.masthead .mark{font-size:1.4rem;margin-bottom:8px;opacity:.7}
+.masthead .title{font-family:var(--serif);font-size:2.8rem;font-weight:600;letter-spacing:.06em;line-height:1}
+.masthead .sub{font-size:.82rem;color:var(--ink-muted);margin-top:10px;letter-spacing:.04em}
+.masthead .date{font-size:.72rem;color:var(--ink-muted);margin-top:14px;letter-spacing:.1em}
+.nav-strip{display:flex;justify-content:center;gap:36px;padding:16px 0;border-bottom:1px dotted var(--rule);background:var(--paper)}
+.nav-strip a{font-size:.78rem;font-weight:600;letter-spacing:.04em;color:var(--ink-muted);text-decoration:none;padding-bottom:2px;border-bottom:1px solid transparent}
+.nav-strip a.active{color:var(--ink);border-bottom-color:var(--accent)}
+.content{padding:40px;min-width:0}
+.page-header{margin-bottom:28px;padding-bottom:16px;border-bottom:1px solid var(--rule)}
+.page-header h1{font-family:var(--serif);font-size:2rem;font-weight:600;line-height:1.2}
+.page-header p{font-size:.85rem;color:var(--ink-muted);margin-top:6px}
+.settings-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:24px}
+.card{background:var(--surface);border:1px solid var(--rule);border-radius:4px;padding:28px;box-shadow:0 2px 8px rgba(0,0,0,.03)}
+.card.full{grid-column:1/-1}
+.card h2{font-family:var(--serif);font-size:1.2rem;margin-bottom:6px}
+.card .subtitle{font-size:.8rem;color:var(--ink-muted);margin-bottom:20px}
+.model-row{display:flex;align-items:center;justify-content:space-between;padding:14px 0;border-bottom:1px solid var(--rule)}
+.model-row:last-child{border-bottom:none}
+.model-row .info{flex:1}
+.model-row .name{font-weight:600;font-size:.88rem}
+.model-row .detail{font-size:.75rem;color:var(--ink-muted);margin-top:2px;font-family:var(--mono)}
+.badge-default{background:var(--accent);color:#fff;font-size:.62rem;font-weight:700;padding:2px 6px;border-radius:3px;margin-left:6px;text-transform:uppercase}
+.btn-sm{padding:6px 12px;border:1px solid var(--rule);background:#fff;font-size:.72rem;font-weight:600;cursor:pointer;border-radius:4px;color:var(--ink);margin-left:6px}
+.btn-sm:hover{border-color:var(--accent);color:var(--accent)}
+.btn-sm.primary{border-color:var(--accent);color:var(--accent)}
+.source-row{display:flex;align-items:center;justify-content:space-between;padding:12px 0;border-bottom:1px solid var(--rule)}
+.source-row:last-child{border-bottom:none}
+.source-row .name{font-weight:600;font-size:.85rem}
+.source-row .desc{font-size:.75rem;color:var(--ink-muted);margin-top:2px}
+.toggle-wrap{min-width:44px;min-height:44px;display:flex;align-items:center;justify-content:flex-end;cursor:pointer}
+.toggle{width:48px;height:26px;background:var(--rule);border-radius:13px;position:relative;transition:background .15s}
+.toggle.on{background:var(--accent)}
+.toggle::after{content:'';position:absolute;top:2px;left:2px;width:22px;height:22px;background:#fff;border-radius:50%;transition:left .15s}
+.toggle.on::after{left:24px}
+.add-form{display:grid;grid-template-columns:1fr 1fr auto;gap:10px;margin-top:16px;padding:16px;background:var(--paper);border-radius:4px;border:1px solid var(--rule)}
+.add-form input{padding:9px 12px;border:1px solid var(--rule);border-radius:4px;font-size:.8rem;font-family:var(--sans);background:#fff}
+.add-form button{padding:9px 16px;border:none;background:var(--ink);color:#fff;font-size:.75rem;font-weight:600;cursor:pointer;border-radius:4px}
+.field{margin-bottom:16px}
+.field label{display:block;font-size:.72rem;font-weight:600;color:var(--ink-muted);letter-spacing:.04em;text-transform:uppercase;margin-bottom:6px}
+.field input,.field select{width:100%;padding:10px 12px;border:1px solid var(--rule);border-radius:4px;font-size:.85rem;font-family:var(--sans);background:#fff;color:var(--ink)}
+.field input:focus,.field select:focus{outline:none;border-color:var(--accent)}
+.test-result{font-size:.78rem;padding:8px 12px;border-radius:4px;margin-top:10px}
+.test-result.ok{background:#e8f5e9;color:#2e7d32}
+.test-result.err{background:var(--accent-soft);color:var(--accent)}
+@media(max-width:900px){.settings-grid{grid-template-columns:1fr}.add-form{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div class="topbar">
+  <span>Vol. 026 · Issue 07</span>
+  <span>2026 · 北京</span>
+  <span>仅供学习参考 · 不构成投资建议</span>
+</div>
+<header class="masthead">
+  <div class="mark">◉</div>
+  <div class="title">GS-Tracker</div>
+  <div class="sub">高盛动向情报系统 · Goldman Sachs Intelligence</div>
+  <div class="date">2026年7月29日 · 星期三 · 第 026 期</div>
+</header>
+<nav class="nav-strip">
+  <a href="#">每日情报</a>
+  <a href="#">季度报告</a>
+  <a href="#">使用指南</a>
+  <a href="#" class="active">设置</a>
+</nav>
+
+<main class="content">
+  <div class="page-header">
+    <h1>系统设置</h1>
+    <p>管理大模型、信号源开关与自定义数据源。</p>
+  </div>
+
+  <div class="settings-grid" data-od-id="settings-grid">
+    <div class="card">
+      <h2>大模型管理</h2>
+      <p class="subtitle">配置 AI 分析接口，支持 Anthropic 兼容协议。</p>
+
+      <div class="model-row">
+        <div class="info">
+          <div class="name">Kimi-Pro <span class="badge-default">默认</span></div>
+          <div class="detail">Base: https://api.moonshot.cn · Model: claude-sonnet-5</div>
+        </div>
+        <div>
+          <button class="btn-sm">测试</button>
+          <button class="btn-sm">编辑</button>
+        </div>
+      </div>
+
+      <div class="model-row">
+        <div class="info">
+          <div class="name">Anthropic Claude</div>
+          <div class="detail">Base: https://api.anthropic.com · Model: claude-opus-5</div>
+        </div>
+        <div>
+          <button class="btn-sm">测试</button>
+          <button class="btn-sm">编辑</button>
+          <button class="btn-sm primary">设默认</button>
+        </div>
+      </div>
+
+      <button class="btn-sm primary" style="margin-top:16px">+ 添加模型</button>
+    </div>
+
+    <div class="card">
+      <h2>信号源开关</h2>
+      <p class="subtitle">关闭的信号源将被流水线跳过。</p>
+
+      <div class="source-row">
+        <div>
+          <div class="name">13F 持仓</div>
+          <div class="desc">SEC EDGAR 季度持仓披露</div>
+        </div>
+        <label class="toggle-wrap"><div class="toggle on"></div></label>
+      </div>
+
+      <div class="source-row">
+        <div>
+          <div class="name">SEC 8-K</div>
+          <div class="desc">公司重大事件临时报告</div>
+        </div>
+        <label class="toggle-wrap"><div class="toggle on"></div></label>
+      </div>
+
+      <div class="source-row">
+        <div>
+          <div class="name">13D/13G</div>
+          <div class="desc">大股东举牌公告</div>
+        </div>
+        <label class="toggle-wrap"><div class="toggle on"></div></label>
+      </div>
+
+      <div class="source-row">
+        <div>
+          <div class="name">高盛研究</div>
+          <div class="desc">官方研究观点与市场展望</div>
+        </div>
+        <label class="toggle-wrap"><div class="toggle on"></div></label>
+      </div>
+
+      <div class="source-row">
+        <div>
+          <div class="name">新闻</div>
+          <div class="desc">RSS 财经新闻聚合</div>
+        </div>
+        <label class="toggle-wrap"><div class="toggle on"></div></label>
+      </div>
+
+      <div class="source-row">
+        <div>
+          <div class="name">宏观指标</div>
+          <div class="desc">FRED 经济数据与高盛宏观</div>
+        </div>
+        <label class="toggle-wrap"><div class="toggle on"></div></label>
+      </div>
+    </div>
+
+    <div class="card full">
+      <h2>自定义数据源</h2>
+      <p class="subtitle">添加网页源或主题订阅，由 AI 预筛相关内容。</p>
+
+      <div class="source-row">
+        <div>
+          <div class="name">美联储官网</div>
+          <div class="desc">https://www.federalreserve.gov · 主题：利率、货币政策</div>
+        </div>
+        <div>
+          <button class="btn-sm">测试</button>
+          <button class="btn-sm">编辑</button>
+          <button class="btn-sm">删除</button>
+        </div>
+      </div>
+
+      <div class="source-row">
+        <div>
+          <div class="name">AI 产业链主题</div>
+          <div class="desc">关键词：artificial intelligence, semiconductor, data center</div>
+        </div>
+        <div>
+          <button class="btn-sm">测试</button>
+          <button class="btn-sm">编辑</button>
+          <button class="btn-sm">删除</button>
+        </div>
+      </div>
+
+      <div class="add-form">
+        <input type="text" placeholder="来源名称">
+        <input type="text" placeholder="URL 或主题关键词">
+        <button>添加</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>通用设置</h2>
+      <p class="subtitle">系统运行参数。</p>
+
+      <div class="field">
+        <label>每日情报运行时间</label>
+        <input type="time" value="08:00">
+      </div>
+
+      <div class="field">
+        <label>语言</label>
+        <select>
+          <option>简体中文</option>
+          <option>English</option>
+        </select>
+      </div>
+
+      <button class="btn-sm primary" style="margin-top:8px">保存设置</button>
+    </div>
+  </div>
+</main>
+</body>
+</html>
