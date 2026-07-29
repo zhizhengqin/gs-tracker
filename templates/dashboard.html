@@ -1172,6 +1172,7 @@ function renderSignalCard(s) {
             </div>
             <h4>${esc(s.title)}</h4>
             <p class="sig-summary">${esc(s.summary)}</p>
+            <button type="button" class="sig-expand-btn" style="display:none" onclick="toggleSummary(this)">展开全文 ▾</button>
             <div class="sig-meta">
                 ${companies.length ? `<span>${companies.map(esc).join(', ')}</span>` : ''}
                 ${hasCrossRefs ? '<span class="cross-badge">交叉信号</span>' : ''}
@@ -1927,6 +1928,50 @@ async function loadDailyReport(dateStr, force) {
         }
     } catch(e) { container.innerHTML = '<p class="muted">日报加载失败</p>'; }
 }
+
+// Expand/collapse for long summaries (clamped to 3 lines by CSS).
+function toggleSummary(btn) {
+    const card = btn.closest('.signal-card');
+    const summary = card && card.querySelector('.sig-summary');
+    if (!summary) return;
+    const expanded = summary.classList.toggle('expanded');
+    summary.classList.toggle('clamped', !expanded);
+    btn.textContent = expanded ? '收起 ▴' : '展开全文 ▾';
+}
+
+// Show the expand button only when the summary actually overflows 3 lines.
+function updateSummaryToggle(card) {
+    const summary = card.querySelector('.sig-summary');
+    const btn = card.querySelector('.sig-expand-btn');
+    if (!summary || !btn || summary.classList.contains('expanded')) return;
+    // line-clamp hides overflow without growing scrollHeight, so unclamp
+    // briefly to measure the full height (sync — no paint in between).
+    const clampedH = summary.clientHeight;
+    summary.classList.add('measuring');
+    const fullH = summary.scrollHeight;
+    summary.classList.remove('measuring');
+    const overflows = fullH > clampedH + 2;
+    btn.style.display = overflows ? '' : 'none';
+    summary.classList.toggle('clamped', overflows);
+    // Let a click on the truncated summary itself expand it (once per card).
+    if (overflows && !summary.dataset.clickBound) {
+        summary.dataset.clickBound = '1';
+        summary.addEventListener('click', () => {
+            if (!summary.classList.contains('expanded')) toggleSummary(btn);
+        });
+    }
+}
+
+// Signal cards are injected via innerHTML on many paths; watch the DOM once
+// so every view (today / earlier / date / quarterly) gets measured buttons.
+const summaryToggleObserver = new MutationObserver(muts => {
+    muts.forEach(m => m.addedNodes.forEach(node => {
+        if (node.nodeType !== 1) return;
+        if (node.matches && node.matches('.signal-card')) updateSummaryToggle(node);
+        if (node.querySelectorAll) node.querySelectorAll('.signal-card').forEach(updateSummaryToggle);
+    }));
+});
+summaryToggleObserver.observe(document.body, { childList: true, subtree: true });
 
 // Add AI-analysis toggles to every signal card under a root element.
 function addAiToggles(rootEl) {

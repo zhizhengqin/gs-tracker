@@ -277,7 +277,31 @@ body {
 .signal-card.low .sig-source { background: #f5f5f5; color: #999; }
 .signal-card .sig-date { font-size: 0.72rem; color: var(--ink-muted); white-space: nowrap; font-family: var(--mono); }
 .signal-card h4 { font-family: var(--serif); font-size: 1.05rem; font-weight: 600; margin-bottom: 8px; line-height: 1.35; }
-.signal-card .sig-summary { font-size: 0.84rem; color: var(--ink-muted); line-height: 1.65; }
+.signal-card .sig-summary {
+    font-size: 0.84rem; color: var(--ink-muted); line-height: 1.65;
+    display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical;
+    overflow: hidden;
+    position: relative;
+}
+/* Fade-out at the clamp edge so users can tell there is more text. */
+.signal-card .sig-summary.clamped { cursor: pointer; }
+.signal-card .sig-summary.clamped::after {
+    content: ''; position: absolute; right: 0; bottom: 0;
+    width: 45%; height: 1.65em; pointer-events: none;
+    background: linear-gradient(90deg, rgba(255, 255, 255, 0), var(--surface) 80%);
+}
+.signal-card .sig-summary.expanded {
+    display: block; -webkit-line-clamp: unset; overflow: visible;
+}
+.signal-card .sig-summary.measuring {
+    display: block; -webkit-line-clamp: unset; overflow: visible;
+}
+.sig-expand-btn {
+    margin-top: 6px; padding: 3px 12px; border: none; border-radius: 12px;
+    background: var(--accent-soft); color: var(--accent);
+    font-size: 0.78rem; font-weight: 600; cursor: pointer; transition: background 0.15s;
+}
+.sig-expand-btn:hover { background: #f2d2cb; }
 .signal-card .sig-meta {
     margin-top: 10px; display: flex; gap: 12px; flex-wrap: wrap;
     align-items: center; font-size: 0.74rem; color: var(--ink-muted);
