@@ -19,6 +19,7 @@ RUN pip install --no-cache-dir -i ${PIP_INDEX_URL} -r requirements.txt
 
 COPY src/ ./src/
 COPY templates/ ./templates/
+COPY static/ ./static/
 
 RUN groupadd -r appuser && useradd -r -g appuser appuser \
     && mkdir -p /app/data /app/output \

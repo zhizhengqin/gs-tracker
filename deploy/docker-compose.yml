@@ -13,6 +13,7 @@ services:
       - ../data:/app/data
       - ../output:/app/output
       - ../templates:/app/templates
+      - ../static:/app/static
     networks:
       - gs-tracker
     # Single worker on purpose: pipeline job state and SSE progress live in
@@ -50,6 +51,7 @@ services:
       - ../data:/app/data
       - ../output:/app/output
       - ../templates:/app/templates
+      - ../static:/app/static
     networks:
       - gs-tracker
     command: python -m src.scheduler --run-now
