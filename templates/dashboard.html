@@ -179,8 +179,8 @@
         </ul>
         <h4>📅 季度报告</h4>
         <ul>
-            <li>页面顶部下拉框选择季度，下方标签栏可切换：<strong>全部</strong>（一屏到底的长页面）、<strong>概览</strong>（关键数据）、<strong>AI 分析</strong>（含 AI 季度洞察：调仓解读、A 股题材映射、宏观看点）、<strong>持仓变化</strong>（与上一季度对比：新建仓/增持/减持/清仓）、<strong>多源信号</strong>（当季相关情报）、<strong>持仓明细</strong>（默认按公司汇总，可切换"原始明细"）。</li>
-            <li><strong>AI 季度洞察</strong>同样可以点「🔄 重新生成」刷新内容。</li>
+            <li>页面顶部下拉框选择季度，下方标签栏可切换：<strong>全部</strong>（一屏到底的长页面，依次为：AI 季度洞察 → 重点标的分析 → 持仓变化 → 高优先级信号 → 前十大持仓）、<strong>概览</strong>（关键数据）、<strong>AI 分析</strong>（含 AI 季度洞察：调仓解读、A 股题材映射、宏观看点）、<strong>持仓变化</strong>（与上一季度对比：新建仓/增持/减持/清仓）、<strong>多源信号</strong>（当季相关情报）、<strong>持仓明细</strong>（默认按公司汇总，可切换"原始明细"）。</li>
+            <li><strong>AI 季度洞察</strong>和<strong>重点标的分析</strong>都可以点「🔄 重新生成」刷新内容。</li>
         </ul>
         <h4>⚙️ 设置</h4>
         <ul>
@@ -786,7 +786,7 @@ function renderQuarterPanel() {
     if (!el || !reportData) return;
     const d = reportData;
     const filterSection = document.getElementById('signalFilterSection');
-    const showFilter = currentQuarterTab === 'signals' || currentQuarterTab === 'all';
+    const showFilter = currentQuarterTab === 'signals';
     if (filterSection && currentView === 'quarter') filterSection.style.display = showFilter ? 'block' : 'none';
 
     switch (currentQuarterTab) {
@@ -810,14 +810,14 @@ function renderQuarterPanel() {
             break;
         case 'all':
         default:
-            el.innerHTML = renderOverview(d)
-                + '<div id="insightSlot"><div class="loading">🤖 AI 季度洞察生成中...</div></div>'
+            el.innerHTML = '<div id="insightSlot"><div class="loading">🤖 AI 季度洞察生成中...</div></div>'
+                + '<div id="tickerSlot"><div class="loading">🤖 重点标的分析生成中...</div></div>'
                 + '<div id="changesSlot"><div class="loading">加载中...</div></div>'
-                + renderSignalsPanel(d)
-                + renderHoldingsPanel(d);
+                + renderHighSignalsCard(d)
+                + renderTopHoldingsCard(d);
             loadQuarterInsight(d);
+            loadTickerProfiles(d);
             loadQuarterChanges(d, document.getElementById('changesSlot'));
-            renderSignals();
             break;
     }
 }
@@ -846,6 +846,106 @@ async function loadQuarterInsight(d, force = false) {
     } catch (e) {
         slot.innerHTML = '<p class="muted">AI 季度洞察加载失败</p>';
     }
+}
+
+// ====== Key ticker profiles (AI-generated basic intro per top holding) ======
+async function loadTickerProfiles(d, force = false) {
+    const slot = document.getElementById('tickerSlot');
+    if (!slot) return;
+    if (force) slot.innerHTML = '<div class="loading">🤖 重点标的分析重新生成中...</div>';
+    try {
+        const resp = force
+            ? await fetch(`/api/ticker-profiles/${d.quarter}/regenerate`, { method: 'POST' })
+            : await fetch(`/api/ticker-profiles/${d.quarter}`);
+        const r = await resp.json();
+        const profiles = Array.isArray(r.profiles) ? r.profiles : [];
+        if (r.message || profiles.length === 0) {
+            slot.innerHTML = '';
+            return;
+        }
+        slot.innerHTML = renderTickerProfiles(d.quarter, profiles, r.error);
+    } catch (e) {
+        slot.innerHTML = '<p class="muted">重点标的分析加载失败</p>';
+    }
+}
+
+function renderTickerProfiles(quarter, profiles, error) {
+    const cards = profiles.map((p, i) => {
+        const themes = Array.isArray(p.themes) ? p.themes : [];
+        return `
+        <div class="ticker-profile">
+            <div class="tp-rank">${i + 1}</div>
+            <div class="tp-main">
+                <div class="tp-head">
+                    <span class="tp-name">${esc(p.ticker)}</span>
+                    ${p.cn_name ? `<span class="tp-cn">${esc(p.cn_name)}</span>` : ''}
+                    ${p.sector ? `<span class="tp-sector">${esc(p.sector)}</span>` : ''}
+                </div>
+                ${themes.length ? `<div class="tp-themes">${themes.map(t => `<span class="tp-theme">${esc(t)}</span>`).join('')}</div>` : ''}
+                ${p.intro ? `<p class="tp-intro">${esc(p.intro)}</p>` : ''}
+            </div>
+            <div class="tp-nums">
+                <div class="tp-val mono">${fmtYi(p.value)}</div>
+                <div class="tp-pct">${Number(p.pct).toFixed(2)}%</div>
+            </div>
+        </div>`;
+    }).join('');
+    const note = error === 'no_llm_configured'
+        ? '<p class="muted">尚未配置大模型，仅展示持仓数据；在「设置」页添加大模型后可生成标的解析。</p>'
+        : (error ? '<p class="muted">AI 标的解析暂不可用，仅展示持仓数据。</p>' : '');
+    return `
+        <div class="page-header">
+            <h2>🎯 重点标的分析</h2>
+            <span class="meta">${quarter} · 前十大重仓</span>
+        </div>
+        <div class="card">
+            ${cards}
+            ${note}
+            <div class="mt-10"><button class="btn-sm" onclick="loadTickerProfiles(reportData, true)">🔄 重新生成</button></div>
+        </div>
+    `;
+}
+
+// ====== High-priority signals only (for the stacked "all" view) ======
+function renderHighSignalsCard(d) {
+    const high = d.signals.filter(s => s.strength === 'high');
+    return `
+        <div class="page-header">
+            <h2>🔴 高优先级信号</h2>
+            <span class="meta">共 ${high.length} 条 · ${d.quarter}</span>
+        </div>
+        <div class="card">
+            ${high.length ? high.map(s => renderSignalCard(s)).join('') : '<p class="muted">本季度无高优先级信号</p>'}
+        </div>
+    `;
+}
+
+// ====== Top-10 holdings with portfolio share (for the stacked "all" view) ======
+function renderTopHoldingsCard(d) {
+    const companies = aggregateHoldingsByName(d.holdings);
+    const total = companies.reduce((sum, c) => sum + c.value, 0) || 1;
+    const rows = companies.slice(0, 10).map((c, i) => `
+        <tr>
+            <td class="c-muted">${i + 1}</td>
+            <td><strong>${esc(c.name)}</strong></td>
+            <td class="ta-r mono">${formatHoldingsValue(c.value)}</td>
+            <td class="ta-r mono">${(c.value / total * 100).toFixed(2)}%</td>
+        </tr>
+    `).join('');
+    return `
+        <div class="page-header">
+            <h2>📋 前十大持仓</h2>
+            <span class="meta">${d.quarter} · 占比为占全部披露持仓市值比例</span>
+        </div>
+        <div class="card">
+            <div class="table-wrap"><div class="table-scroll">
+            <table>
+                <thead><tr><th class="w-40">#</th><th>公司名称</th><th class="ta-r">持仓价值（美元）</th><th class="ta-r">占比</th></tr></thead>
+                <tbody>${rows || '<tr><td colspan="4" class="ta-c muted">暂无持仓数据</td></tr>'}</tbody>
+            </table>
+            </div></div>
+        </div>
+    `;
 }
 
 function fmtYi(v) {

@@ -526,7 +526,23 @@ tr:hover td { background: var(--paper); }
 .src-status { padding: 6px 14px; border-radius: 8px; font-size: 0.9em; }
 .src-status.ok { background: #e8f5e9; color: #2e7d32; }
 .src-status.warn { background: #fff3e0; color: #e65100; }
-.ticker-chip { background: #e3f2fd; color: #1565c0; padding: 6px 14px; border-radius: 20px; font-size: 0.9em; font-weight: 600; }
+.ticker-chip { background: var(--paper-dark); color: var(--ink); padding: 6px 14px; border-radius: 20px; font-size: 0.9em; font-weight: 600; }
+
+/* Key ticker profiles (quarterly report "all" view) */
+.ticker-profile { display: flex; gap: 14px; padding: 14px 0; border-bottom: 1px solid var(--rule); align-items: flex-start; }
+.ticker-profile:last-of-type { border-bottom: none; }
+.tp-rank { font-family: var(--serif); font-size: 1.05rem; color: var(--ink-muted); width: 22px; flex: none; text-align: right; }
+.tp-main { flex: 1; min-width: 0; }
+.tp-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.tp-name { font-weight: 700; color: var(--ink); font-size: 0.98rem; }
+.tp-cn { color: var(--ink); font-weight: 600; }
+.tp-sector { background: var(--paper-dark); color: var(--ink-muted); padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; }
+.tp-themes { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px; }
+.tp-theme { background: var(--accent-soft); color: var(--accent); padding: 2px 8px; border-radius: 4px; font-size: 0.72rem; }
+.tp-intro { margin: 6px 0 0; color: var(--ink-muted); font-size: 0.88rem; line-height: 1.7; }
+.tp-nums { text-align: right; flex: none; }
+.tp-val { font-weight: 600; }
+.tp-pct { color: var(--accent); font-weight: 700; }
 .analysis-text { line-height: 1.8; color: #555; }
 .analysis-text.danger { color: var(--danger); }
 .card-note { font-size: 0.85em; color: #888; margin: 6px 0 0; }

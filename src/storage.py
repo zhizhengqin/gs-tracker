@@ -235,6 +235,12 @@ def init_db() -> None:
                 generated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
 
+            CREATE TABLE IF NOT EXISTS ticker_profiles (
+                quarter TEXT PRIMARY KEY,
+                profiles_json TEXT NOT NULL,
+                generated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+
             CREATE TABLE IF NOT EXISTS users (
                 username TEXT PRIMARY KEY,
                 password_hash TEXT NOT NULL,
@@ -1093,6 +1099,33 @@ def save_quarter_insight(quarter: str, report_text: str) -> None:
             "ON CONFLICT(quarter) DO UPDATE SET "
             "report_text=excluded.report_text, generated_at=CURRENT_TIMESTAMP",
             (quarter, report_text),
+        )
+        conn.commit()
+
+
+# ====== Ticker profiles ======
+
+
+def get_ticker_profiles(quarter: str) -> Optional[dict]:
+    """Return cached AI ticker profiles for a quarter, or None."""
+    with get_connection() as conn:
+        row = conn.execute(
+            "SELECT quarter, profiles_json, generated_at "
+            "FROM ticker_profiles WHERE quarter = ?",
+            (quarter,),
+        ).fetchone()
+        return dict(row) if row else None
+
+
+def save_ticker_profiles(quarter: str, profiles_json: str) -> None:
+    """Cache AI ticker profiles for a quarter (idempotent upsert)."""
+    with get_connection() as conn:
+        conn.execute(
+            "INSERT INTO ticker_profiles (quarter, profiles_json, generated_at) "
+            "VALUES (?, ?, CURRENT_TIMESTAMP) "
+            "ON CONFLICT(quarter) DO UPDATE SET "
+            "profiles_json=excluded.profiles_json, generated_at=CURRENT_TIMESTAMP",
+            (quarter, profiles_json),
         )
         conn.commit()
 

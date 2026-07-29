@@ -796,6 +796,31 @@ def test_quarter_insight_regenerate(monkeypatch):
     assert resp.json()["report"] == "重新生成的洞察"
 
 
+def test_ticker_profiles_endpoint_delegates(monkeypatch):
+    async def _fake(quarter, force=False):
+        return {"quarter": quarter, "profiles": [{"ticker": "NVIDIA CORP"}], "cached": True}
+
+    monkeypatch.setattr("src.ticker_profiles.generate_ticker_profiles", _fake)
+    resp = client.get("/api/ticker-profiles/2026-Q1")
+    assert resp.status_code == 200
+    assert resp.json()["profiles"][0]["ticker"] == "NVIDIA CORP"
+
+
+def test_ticker_profiles_endpoint_bad_quarter():
+    resp = client.get("/api/ticker-profiles/2026-Q5")
+    assert resp.status_code == 422
+
+
+def test_ticker_profiles_regenerate(monkeypatch):
+    async def _fake(quarter, force=False):
+        assert force is True
+        return {"quarter": quarter, "profiles": [], "cached": False}
+
+    monkeypatch.setattr("src.ticker_profiles.generate_ticker_profiles", _fake)
+    resp = client.post("/api/ticker-profiles/2026-Q1/regenerate")
+    assert resp.status_code == 200
+
+
 def test_dashboard_quarter_view_layout(tmp_path, monkeypatch):
     """Quarter reports live in the main content area like the daily view:
     a quarter selector replaces the sidebar quarter list, and in-content

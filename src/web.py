@@ -1196,6 +1196,24 @@ async def api_regenerate_quarter_insight(quarter: str, previous: str = "") -> di
     return await generate_quarter_insight(quarter, previous or None, force=True)
 
 
+@app.get("/api/ticker-profiles/{quarter}")
+async def api_get_ticker_profiles(quarter: str) -> dict:
+    """Return (or generate) AI profiles for the quarter's top-10 holdings."""
+    from src.ticker_profiles import generate_ticker_profiles
+
+    _validate_quarter_format(quarter)
+    return await generate_ticker_profiles(quarter)
+
+
+@app.post("/api/ticker-profiles/{quarter}/regenerate")
+async def api_regenerate_ticker_profiles(quarter: str) -> dict:
+    """Force-regenerate ticker profiles, bypassing the cache."""
+    from src.ticker_profiles import generate_ticker_profiles
+
+    _validate_quarter_format(quarter)
+    return await generate_ticker_profiles(quarter, force=True)
+
+
 @app.get("/api/quarters/comparison")
 async def api_quarters_comparison(current: str = "", previous: str = "") -> dict:
     """Return quarter-over-quarter comparison data."""

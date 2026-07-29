@@ -740,3 +740,12 @@ class TestSignalsByDateBeijingGrouping:
         assert storage.get_daily_report("2026-07-27") is not None
         storage.delete_daily_report("2026-07-27")
         assert storage.get_daily_report("2026-07-27") is None
+
+    def test_ticker_profiles_roundtrip(self, fresh_db):
+        assert storage.get_ticker_profiles("2026-Q1") is None
+        storage.save_ticker_profiles("2026-Q1", '[{"ticker": "A"}]')
+        row = storage.get_ticker_profiles("2026-Q1")
+        assert row["profiles_json"] == '[{"ticker": "A"}]'
+        # upsert overwrites
+        storage.save_ticker_profiles("2026-Q1", '[{"ticker": "B"}]')
+        assert storage.get_ticker_profiles("2026-Q1")["profiles_json"] == '[{"ticker": "B"}]'
