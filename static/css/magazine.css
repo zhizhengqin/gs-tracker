@@ -396,6 +396,10 @@ body {
     padding: 1px 8px; font-size: 0.72rem; font-weight: 700; margin-left: 6px;
     font-family: var(--mono); background: var(--paper); border: 1px solid var(--rule); color: var(--ink-muted);
 }
+.change-count.new { background: #e8f5e9; color: #2e7d32; border-color: transparent; }
+.change-count.inc { background: #e3f2fd; color: #1565c0; border-color: transparent; }
+.change-count.dec { background: #fff3e0; color: #e65100; border-color: transparent; }
+.change-count.sold { background: #fce4ec; color: #c2185b; border-color: transparent; }
 
 /* ====== 表格 ====== */
 table { width: 100%; border-collapse: collapse; font-size: 0.84rem; }

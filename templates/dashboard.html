@@ -853,12 +853,12 @@ function fmtYi(v) {
     return Number.isFinite(n) ? (n / 1e8).toLocaleString('zh-CN', { maximumFractionDigits: 1 }) + ' 亿' : '-';
 }
 
-function renderChangeGroup(title, items, valueFn, badgeColor) {
+function renderChangeGroup(title, items, valueFn, badgeClass) {
     const rows = (items || []).slice(0, 10).map(it =>
         `<li><span>${esc(it.name_of_issuer || '')}</span><span class="val">${valueFn(it)}</span></li>`
     ).join('') || '<li class="muted">无</li>';
     return `<div class="card change-group">
-        <h3>${title}<span class="change-count" style="background:${badgeColor};">${(items || []).length}</span></h3>
+        <h3>${title}<span class="change-count ${badgeClass}">${(items || []).length}</span></h3>
         <ul>${rows}</ul>
     </div>`;
 }
@@ -880,10 +880,10 @@ function renderChangesCard(quarter, previous, r) {
             <p class="card-note">金额单位：美元 · 增减持阈值为市值变动 ±20% · 集中度变化：${hhiText}</p>
         </div>
         <div class="change-grid">
-            ${renderChangeGroup('🆕 新建仓', r.new_positions, it => fmtYi(it.value), '#e8f5e9;color:#2e7d32;')}
-            ${renderChangeGroup('📈 增持', r.increased_positions, pct, '#e3f2fd;color:#1565c0;')}
-            ${renderChangeGroup('📉 减持', r.decreased_positions, pct, '#fff3e0;color:#e65100;')}
-            ${renderChangeGroup('🗑️ 清仓', r.sold_positions, it => fmtYi(it.value), '#fce4ec;color:#c2185b;')}
+            ${renderChangeGroup('🆕 新建仓', r.new_positions, it => fmtYi(it.value), 'new')}
+            ${renderChangeGroup('📈 增持', r.increased_positions, pct, 'inc')}
+            ${renderChangeGroup('📉 减持', r.decreased_positions, pct, 'dec')}
+            ${renderChangeGroup('🗑️ 清仓', r.sold_positions, it => fmtYi(it.value), 'sold')}
         </div>`;
 }
 

@@ -50,6 +50,9 @@
         .cross-badge { background: var(--paper-dark); border: 1px solid var(--rule); color: var(--ink-muted); padding: 2px 8px; border-radius: 3px; font-weight: 600; }
         .sig-foot a { color: var(--accent); text-decoration: none; font-weight: 600; }
         .footer { text-align: center; padding: 20px; font-size: 0.68rem; color: var(--ink-muted); letter-spacing: 0.04em; border-top: 1px solid var(--rule); }
+        .mb-12 { margin-bottom: 12px; }
+        .mb-16 { margin-bottom: 16px; }
+        .ta-r { text-align: right; }
         @media (max-width: 600px) {
             .masthead .title { font-size: 1.6rem; }
             .card { padding: 16px; }
@@ -95,7 +98,7 @@
         <div class="card">
             <h2>多源信号面板</h2>
 
-            <div style="margin-bottom: 12px;">
+            <div class="mb-12">
                 {% for src, status in source_status.items() %}
                 <span class="src-status {% if status == 'ok' %}ok{% else %}warn{% endif %}">
                     {{ src }}: {% if status == 'ok' %}✅{% else %}⚠️ 暂不可用{% endif %}
@@ -129,7 +132,7 @@
 
                 {% for level, group in [('high', ns.high), ('medium', ns.medium), ('low', ns.low)] %}
                 {% if group %}
-                <div style="margin-bottom: 16px;">
+                <div class="mb-16">
                     <h3>
                         {% if level == 'high' %}🔴 高优先级信号
                         {% elif level == 'medium' %}🟡 中优先级信号
@@ -172,7 +175,7 @@
                 <thead>
                     <tr>
                         <th>公司名称</th>
-                        <th style="text-align:right;">持仓价值（美元）</th>
+                        <th class="ta-r">持仓价值（美元）</th>
                     </tr>
                 </thead>
                 <tbody>
