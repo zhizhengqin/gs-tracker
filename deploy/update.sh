@@ -20,10 +20,11 @@ fi
 echo "==> Rebuilding and restarting containers"
 docker compose -f deploy/docker-compose.yml up -d --build
 
-echo "==> Reloading nginx (pick up bind-mounted config, refresh upstream)"
-# nginx keeps running with the config it loaded at startup; reload so it
-# re-reads nginx.conf (dynamic upstream resolution) without downtime.
-docker compose -f deploy/docker-compose.yml exec -T nginx nginx -s reload
+echo "==> Recreating nginx (pick up bind-mounted config)"
+# `git reset --hard` replaces nginx.conf with a new inode, but bind mounts
+# pin the inode from container creation — `nginx -s reload` would keep
+# reading the OLD file. Only a recreate re-mounts the current config.
+docker compose -f deploy/docker-compose.yml up -d --force-recreate nginx
 
 echo "==> Pruning old images"
 docker image prune -f >/dev/null
