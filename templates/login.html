@@ -4,108 +4,129 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>登录 — GS-Tracker 高盛动向情报系统</title>
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=Noto+Serif+SC:ital,wght@0,400;0,600;0,700;1,400;1,600&family=Noto+Sans+SC:wght@400;500;700&family=JetBrains+Mono:wght@500&display=swap" media="print" onload="this.media='all'">
+    <link rel="stylesheet" href="/static/css/magazine.css">
     <style>
-        :root {
-            --primary: #1a237e;
-            --accent: #ff9800;
-            --bg: #f0f2f5;
-            --sidebar-bg: #121858;
-            --danger: #d32f2f;
-        }
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-            background: var(--bg); color: #333;
-            display: flex; align-items: center; justify-content: center;
-            min-height: 100vh; padding: 20px;
-        }
+        /* 登录页专属布局（共享组件见 magazine.css） */
+        body { display: flex; flex-direction: column; align-items: center; }
+        .login-wrap { flex: 1; display: flex; align-items: center; justify-content: center; padding: 40px 20px; width: 100%; }
         .login-card {
-            background: #fff; border-radius: 8px; width: 100%; max-width: 380px;
-            box-shadow: 0 4px 24px rgba(18, 24, 88, 0.12); overflow: hidden;
+            background: var(--surface); border: 1px solid var(--rule); border-radius: 4px;
+            box-shadow: 0 4px 24px rgba(0, 0, 0, 0.05); width: 100%; max-width: 420px; padding: 40px;
         }
-        .login-header {
-            background: var(--sidebar-bg); color: #fff; padding: 28px 28px 22px;
-        }
-        .login-header h1 { font-size: 1.25em; font-weight: 700; }
-        .login-header .sub { font-size: 0.82em; color: #8890b5; margin-top: 6px; }
-        .login-body { padding: 26px 28px 30px; }
+        .card-kicker { font-size: 0.7rem; font-weight: 600; letter-spacing: 0.12em; color: var(--accent); text-transform: uppercase; margin-bottom: 12px; }
+        .login-card h1 { font-family: var(--serif); font-size: 1.6rem; font-weight: 600; margin-bottom: 8px; line-height: 1.2; }
+        .login-card .lead { font-size: 0.9rem; color: var(--ink-muted); margin-bottom: 28px; }
         .field { margin-bottom: 18px; }
-        .field label { display: block; font-size: 0.85em; font-weight: 600; color: #555; margin-bottom: 6px; }
+        .field label { display: block; font-size: 0.72rem; font-weight: 600; color: var(--ink-muted); letter-spacing: 0.04em; text-transform: uppercase; margin-bottom: 6px; }
         .field input {
-            width: 100%; padding: 11px 12px; border: 1px solid #d5d9e0; border-radius: 6px;
-            font-size: 0.95em; outline: none; transition: border-color 0.15s;
+            width: 100%; padding: 11px 14px; border: 1px solid var(--rule); border-radius: 4px;
+            font-size: 0.9rem; font-family: var(--sans); color: var(--ink); background: #fff;
+            outline: none; transition: border-color 0.15s;
         }
-        .field input:focus { border-color: var(--primary); }
+        .field input:focus { border-color: var(--accent); }
         .error-msg {
-            display: none; background: #fdecea; color: var(--danger);
-            border: 1px solid #f5c6c0; border-radius: 6px;
-            padding: 9px 12px; font-size: 0.85em; margin-bottom: 16px;
+            display: none; background: var(--accent-soft); color: var(--accent);
+            border: 1px solid var(--accent); border-radius: 4px;
+            padding: 10px 12px; font-size: 0.82rem; margin-bottom: 16px;
         }
         .error-msg.show { display: block; }
         .login-btn {
-            width: 100%; padding: 12px; border: none; border-radius: 6px;
-            background: var(--accent); color: #fff; font-size: 1em; font-weight: 700;
-            cursor: pointer; transition: opacity 0.15s;
+            width: 100%; padding: 13px 0; border: none; border-radius: 24px;
+            background: var(--accent); color: #fff; font-size: 0.85rem; font-weight: 600;
+            letter-spacing: 0.04em; cursor: pointer; transition: opacity 0.15s; font-family: var(--sans);
         }
         .login-btn:hover { opacity: 0.9; }
         .login-btn:disabled { opacity: 0.55; cursor: not-allowed; }
+        .divider { display: flex; align-items: center; gap: 12px; margin: 24px 0; color: var(--ink-muted); font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.06em; }
+        .divider::before, .divider::after { content: ''; flex: 1; height: 1px; background: var(--dotted-line); }
+        .hint { font-size: 0.78rem; color: var(--ink-muted); line-height: 1.7; text-align: center; }
+        .footer { width: 100%; text-align: center; padding: 20px; font-size: 0.68rem; color: var(--ink-muted); letter-spacing: 0.04em; border-top: 1px solid var(--rule); }
+        @media (max-width: 600px) {
+            .login-card { padding: 28px; }
+        }
     </style>
 </head>
 <body>
+<div class="topbar">
+    <span id="issueTag">GS-Tracker 情报专刊</span>
+    <span>仅供学习参考 · 不构成投资建议</span>
+</div>
+<header class="masthead">
+    <div class="mark">◉</div>
+    <div class="title">GS-Tracker</div>
+    <div class="sub">高盛动向情报系统 · Goldman Sachs Intelligence</div>
+    <div class="date" id="mastheadDate"></div>
+</header>
+<div class="login-wrap">
     <div class="login-card">
-        <div class="login-header">
-            <h1>GS-Tracker 高盛动向情报系统</h1>
-            <div class="sub">请登录后使用</div>
-        </div>
-        <div class="login-body">
-            <div id="error" class="error-msg"></div>
-            <form id="login-form">
-                <div class="field">
-                    <label for="username">用户名</label>
-                    <input id="username" name="username" type="text" autocomplete="username" required autofocus>
-                </div>
-                <div class="field">
-                    <label for="password">密码</label>
-                    <input id="password" name="password" type="password" autocomplete="current-password" required>
-                </div>
-                <button id="login-btn" class="login-btn" type="submit">登 录</button>
-            </form>
-        </div>
+        <div class="card-kicker">Member Access</div>
+        <h1>登录你的情报账户</h1>
+        <p class="lead">请输入用户名和密码，进入每日情报与季度报告。</p>
+        <div id="error" class="error-msg"></div>
+        <form id="login-form">
+            <div class="field">
+                <label for="username">用户名</label>
+                <input id="username" name="username" type="text" autocomplete="username" required autofocus>
+            </div>
+            <div class="field">
+                <label for="password">密码</label>
+                <input id="password" name="password" type="password" autocomplete="current-password" required>
+            </div>
+            <button id="login-btn" class="login-btn" type="submit">登 录</button>
+        </form>
+        <div class="divider">Note</div>
+        <p class="hint">本系统仅用于学习和信息参考，不构成任何投资建议。<br>投资有风险，决策需谨慎。</p>
     </div>
-    <script>
-        const form = document.getElementById('login-form');
-        const errorBox = document.getElementById('error');
-        const btn = document.getElementById('login-btn');
+</div>
+<footer class="footer">
+    GS-Tracker v1.0 · 数据来源 SEC EDGAR / RSS · 本内容仅供学习参考
+</footer>
+<script>
+    // 报头日期：今天 + 星期 + 年内第 N 期（每年 1 月 1 日为第 1 期）
+    (function () {
+        const now = new Date();
+        const weekDays = ['星期日', '星期一', '星期二', '星期三', '星期四', '星期五', '星期六'];
+        const start = new Date(now.getFullYear(), 0, 1);
+        const issue = Math.floor((now - start) / 86400000) + 1;
+        document.getElementById('mastheadDate').textContent =
+            `${now.getFullYear()}年${now.getMonth() + 1}月${now.getDate()}日 · ${weekDays[now.getDay()]} · 第 ${String(issue).padStart(3, '0')} 期`;
+    })();
 
-        form.addEventListener('submit', async (e) => {
-            e.preventDefault();
-            errorBox.classList.remove('show');
-            btn.disabled = true;
-            btn.textContent = '登录中…';
-            try {
-                const resp = await fetch('/api/auth/login', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        username: document.getElementById('username').value.trim(),
-                        password: document.getElementById('password').value,
-                    }),
-                });
-                if (resp.ok) {
-                    window.location.href = '/';
-                    return;
-                }
-                const data = await resp.json().catch(() => ({}));
-                errorBox.textContent = data.detail || '登录失败，请稍后重试';
-                errorBox.classList.add('show');
-            } catch (err) {
-                errorBox.textContent = '网络错误，请检查连接后重试';
-                errorBox.classList.add('show');
-            } finally {
-                btn.disabled = false;
-                btn.textContent = '登 录';
+    const form = document.getElementById('login-form');
+    const errorBox = document.getElementById('error');
+    const btn = document.getElementById('login-btn');
+
+    form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        errorBox.classList.remove('show');
+        btn.disabled = true;
+        btn.textContent = '登录中…';
+        try {
+            const resp = await fetch('/api/auth/login', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    username: document.getElementById('username').value.trim(),
+                    password: document.getElementById('password').value,
+                }),
+            });
+            if (resp.ok) {
+                window.location.href = '/';
+                return;
             }
-        });
-    </script>
+            const data = await resp.json().catch(() => ({}));
+            errorBox.textContent = data.detail || '登录失败，请稍后重试';
+            errorBox.classList.add('show');
+        } catch (err) {
+            errorBox.textContent = '网络错误，请检查连接后重试';
+            errorBox.classList.add('show');
+        } finally {
+            btn.disabled = false;
+            btn.textContent = '登 录';
+        }
+    });
+</script>
 </body>
 </html>

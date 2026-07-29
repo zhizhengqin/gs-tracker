@@ -10,6 +10,7 @@ from typing import Any, Dict, List, Optional
 
 from fastapi import Body, FastAPI, HTTPException, Path as PathParam, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, StreamingResponse
+from fastapi.staticfiles import StaticFiles
 
 from src.auth import (
     SESSION_COOKIE,
@@ -126,6 +127,7 @@ def _llm_client_kwargs(db_model: Optional[dict]) -> dict:
 
 
 app = FastAPI(title="GS-Tracker", version="0.2.0", lifespan=lifespan)
+app.mount("/static", StaticFiles(directory=PROJECT_ROOT / "static"), name="static")
 
 DASHBOARD_TEMPLATE = PROJECT_ROOT / "templates" / "dashboard.html"
 LOGIN_TEMPLATE = PROJECT_ROOT / "templates" / "login.html"

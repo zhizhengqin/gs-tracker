@@ -37,7 +37,7 @@ process.on('unhandledRejection', e => {
     await loginIfNeeded(pg);
     await pg.waitForTimeout(800);
     const noX = () => pg.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth);
-    const drawerOpen = () => pg.evaluate(() => document.querySelector('.sidebar').classList.contains('open'));
+    const drawerOpen = () => pg.evaluate(() => document.getElementById('leftRail').classList.contains('open'));
 
     check('daily: no horizontal overflow', await noX());
 
@@ -48,13 +48,12 @@ process.on('unhandledRejection', e => {
     await pg.click('.mobile-mask'); await pg.waitForTimeout(400);
     check('mask closes drawer', !(await drawerOpen()));
 
-    await pg.click('.mobile-topbar .menu-btn'); await pg.waitForTimeout(400);
+    // Magazine layout: nav lives in the top nav-strip, outside the drawer,
+    // so views can be switched directly without opening it.
     await pg.click('li[data-view="settings"]'); await pg.waitForTimeout(1200);
-    check('drawer auto-closes after nav', !(await drawerOpen()));
     check('settings: no horizontal overflow', await noX());
     await pg.screenshot({ path: path.join(OUT, 'settings.png'), fullPage: true });
 
-    await pg.click('.mobile-topbar .menu-btn'); await pg.waitForTimeout(400);
     await pg.click('li[data-view="quarter"]'); await pg.waitForTimeout(1200);
     check('quarter: no horizontal overflow', await noX());
     await pg.screenshot({ path: path.join(OUT, 'quarter.png'), fullPage: true });

@@ -4,334 +4,9 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>GS-Tracker 高盛动向情报系统</title>
-    <style>
-        :root {
-            --sidebar-w: 260px;
-            --primary: #1a237e;
-            --accent: #ff9800;
-            --bg: #f0f2f5;
-            --sidebar-bg: #121858;
-            --sidebar-text: #c4c9e0;
-            --sidebar-active: #fff;
-            --card: #fff;
-            --danger: #d32f2f;
-            --success: #2e7d32;
-            --warn: #e65100;
-        }
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: var(--bg); color: #333; display: flex; min-height: 100vh; }
-
-        /* ====== Sidebar ====== */
-        .sidebar {
-            width: var(--sidebar-w); background: var(--sidebar-bg); color: var(--sidebar-text);
-            display: flex; flex-direction: column; position: fixed; top: 0; left: 0; bottom: 0; z-index: 100;
-            overflow-y: auto;
-        }
-        .sidebar-header {
-            padding: 24px 20px; border-bottom: 1px solid rgba(255,255,255,0.1);
-        }
-        .sidebar-header h1 { font-size: 1.15em; color: #fff; font-weight: 700; }
-        .sidebar-header .sub { font-size: 0.8em; color: #8890b5; margin-top: 4px; }
-
-        .sidebar-section { padding: 16px 20px; border-bottom: 1px solid rgba(255,255,255,0.06); }
-        .sidebar-section h3 { font-size: 0.7em; text-transform: uppercase; letter-spacing: 1.5px; color: #6670a0; margin-bottom: 10px; }
-
-        .quarter-list { list-style: none; }
-        .quarter-list li {
-            padding: 10px 14px; border-radius: 8px; cursor: pointer; font-size: 0.9em;
-            margin-bottom: 4px; transition: all 0.15s; display: flex; justify-content: space-between; align-items: center;
-        }
-        .quarter-list li:hover { background: rgba(255,255,255,0.08); color: #fff; }
-        .quarter-list li.active { background: var(--accent); color: #fff; font-weight: 600; }
-        .quarter-list li .badge { font-size: 0.7em; background: rgba(255,255,255,0.2); padding: 2px 8px; border-radius: 10px; }
-        .quarter-list li.active .badge { background: rgba(255,255,255,0.3); }
-
-        .nav-tabs { list-style: none; }
-        .nav-tabs li {
-            padding: 9px 14px; border-radius: 8px; cursor: pointer; font-size: 0.88em;
-            margin-bottom: 2px; transition: all 0.15s;
-        }
-        .nav-tabs li:hover { background: rgba(255,255,255,0.08); color: #fff; }
-        .nav-tabs li.active { background: rgba(255,255,255,0.12); color: #fff; font-weight: 600; border-left: 3px solid var(--accent); padding-left: 11px; }
-
-        .signal-filter { margin-top: 8px; }
-        .signal-filter label { display: flex; align-items: center; gap: 8px; font-size: 0.82em; padding: 4px 0; cursor: pointer; }
-        .signal-filter input[type=checkbox] { accent-color: var(--accent); }
-
-        .sidebar-footer {
-            margin-top: auto; padding: 16px 20px; font-size: 0.7em; color: #6670a0;
-            border-top: 1px solid rgba(255,255,255,0.06);
-        }
-
-        .user-bar {
-            padding: 12px 20px; border-top: 1px solid rgba(255,255,255,0.06);
-            display: flex; align-items: center; justify-content: space-between; gap: 8px;
-        }
-        .user-bar .who { font-size: 0.8em; color: var(--sidebar-text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-        .user-bar .who .role-tag { font-size: 0.75em; background: rgba(255,255,255,0.12); border-radius: 8px; padding: 1px 7px; margin-left: 5px; }
-        .user-bar .logout-btn {
-            background: none; border: 1px solid rgba(255,255,255,0.25); color: var(--sidebar-text);
-            border-radius: 6px; padding: 4px 10px; font-size: 0.75em; cursor: pointer; flex-shrink: 0;
-        }
-        .user-bar .logout-btn:hover { background: rgba(255,255,255,0.1); color: #fff; }
-
-        .run-btn {
-            width: 100%; padding: 10px 14px; border: none; border-radius: 8px;
-            background: var(--accent); color: #fff; font-size: 0.9em; font-weight: 600;
-            cursor: pointer; transition: opacity 0.2s;
-        }
-        .run-btn:hover:not(:disabled) { opacity: 0.85; }
-        .run-btn:disabled { opacity: 0.5; cursor: not-allowed; }
-        .run-msg { margin-top: 8px; font-size: 0.78em; line-height: 1.4; min-height: 1em; }
-        .run-msg.ok { color: #7be3a8; }
-        .run-msg.err { color: #ff9a9a; }
-        .holdings-toggle { display: inline-flex; gap: 0; margin-bottom: 12px; border: 1px solid #ddd; border-radius: 8px; overflow: hidden; }
-        .holdings-toggle button { padding: 7px 18px; border: none; background: #fff; color: #666; font-size: 0.85em; font-weight: 600; cursor: pointer; }
-        .holdings-toggle button.active { background: var(--accent); color: #fff; }
-        .quarter-tabs { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; }
-        .quarter-tab { padding: 7px 16px; border-radius: 20px; border: 1px solid #ddd; background: #fff; color: #666; font-size: 0.85em; font-weight: 600; cursor: pointer; }
-        .quarter-tab.active { background: var(--accent); color: #fff; border-color: var(--accent); }
-        #quarterSelect { padding: 6px 10px; border: 1px solid #ddd; border-radius: 6px; font-size: 0.9em; background: #fff; }
-        .change-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 14px; }
-        .change-group ul { list-style: none; margin: 8px 0 0; padding: 0; }
-        .change-group li { display: flex; justify-content: space-between; gap: 10px; padding: 6px 0; border-bottom: 1px solid #f0f0f0; font-size: 0.85em; }
-        .change-group li:last-child { border-bottom: none; }
-        .change-group .val { font-family: monospace; white-space: nowrap; }
-        .change-count { display: inline-block; min-width: 22px; text-align: center; border-radius: 10px; padding: 1px 8px; font-size: 0.78em; font-weight: 700; margin-left: 6px; }
-        .run-msg.info { color: #c4c9e0; }
-
-        /* ====== Main Content ====== */
-        .main {
-            margin-left: var(--sidebar-w); flex: 1; padding: 28px 32px; min-height: 100vh;
-        }
-
-        .tab-content { display: none; }
-        .tab-content.active { display: block; }
-
-        .page-header {
-            display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;
-        }
-        .page-header h2 { font-size: 1.5em; color: var(--primary); }
-        .page-header .meta { font-size: 0.85em; color: #888; }
-
-        .card {
-            background: var(--card); border-radius: 12px; padding: 24px; margin-bottom: 20px;
-            box-shadow: 0 1px 4px rgba(0,0,0,0.06); border: 1px solid #e8eaed;
-        }
-        .card h3 { font-size: 1.05em; color: var(--primary); margin-bottom: 14px; padding-bottom: 8px; border-bottom: 2px solid var(--accent); display: inline-block; }
-
-        /* Stats row */
-        .stats-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 24px; }
-        .stat-card {
-            background: var(--card); border-radius: 12px; padding: 20px; text-align: center;
-            box-shadow: 0 1px 4px rgba(0,0,0,0.06); border: 1px solid #e8eaed;
-        }
-        .stat-card .num { font-size: 1.8em; font-weight: 700; color: var(--primary); }
-        .stat-card .label { font-size: 0.8em; color: #888; margin-top: 4px; }
-
-        /* Signals */
-        .signal-card {
-            border: 1px solid #e8eaed; border-radius: 10px; padding: 14px 18px; margin-bottom: 10px;
-            transition: box-shadow 0.15s; cursor: default;
-        }
-        .signal-card:hover { box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
-        .signal-card.high { border-left: 4px solid var(--danger); }
-        .signal-card.medium { border-left: 4px solid var(--warn); }
-        .signal-card.low { border-left: 4px solid #9e9e9e; }
-        .signal-card .sig-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
-        .signal-card .sig-source {
-            font-size: 0.75em; font-weight: 700; padding: 2px 8px; border-radius: 4px;
-            text-transform: uppercase;
-        }
-        .sig-source.src-13F { background: #e3f2fd; color: #1565c0; }
-        .sig-source.src-news { background: #fce4ec; color: #c62828; }
-        .sig-source.src-custom { background: #ede7f6; color: #5e35b1; }
-        .sig-source.src-8-K { background: #e8f5e9; color: #2e7d32; }
-        .sig-source.src-13D\/13G { background: #ede7f6; color: #6a1b9a; }
-        .sig-source.src-research_view { background: #fff3e0; color: #e65100; }
-        .sig-source.src-macro_view { background: #f5f5f5; color: #616161; }
-        .signal-card .sig-date { font-size: 0.8em; color: #999; }
-        .signal-card h4 { font-size: 0.95em; margin-bottom: 6px; }
-        .signal-card .sig-summary { font-size: 0.85em; color: #666; line-height: 1.5; }
-        .signal-card .sig-meta { margin-top: 8px; display: flex; gap: 10px; flex-wrap: wrap; align-items: center; font-size: 0.82em; }
-        .cross-badge { background: #ede7f6; color: #4527a0; padding: 2px 8px; border-radius: 4px; font-weight: 600; }
-        .sig-link { color: var(--accent); text-decoration: none; font-weight: 600; }
-        .sig-link:hover { text-decoration: underline; }
-
-        /* Holdings table */
-        table { width: 100%; border-collapse: collapse; }
-        th, td { text-align: left; padding: 10px 14px; border-bottom: 1px solid #eee; }
-        th { background: #f5f6f8; font-size: 0.8em; text-transform: uppercase; letter-spacing: 0.5px; color: #666; }
-        td { font-size: 0.9em; }
-        tr:hover td { background: #fafbfc; }
-
-        .sentiment-tag {
-            display: inline-block; padding: 4px 12px; border-radius: 20px; font-size: 0.85em; font-weight: 600;
-        }
-        .sentiment-tag.bullish { background: #e8f5e9; color: #2e7d32; }
-        .sentiment-tag.bearish { background: #fce4ec; color: #c62828; }
-        .sentiment-tag.neutral { background: #f5f5f5; color: #666; }
-
-        .confidence-bar { display: inline-block; width: 80px; height: 6px; background: #e0e0e0; border-radius: 3px; vertical-align: middle; margin-left: 8px; }
-        .confidence-bar .fill { height: 100%; border-radius: 3px; background: var(--accent); }
-
-        .empty-state { text-align: center; padding: 60px 20px; color: #999; }
-        .empty-state .icon { font-size: 3em; margin-bottom: 12px; }
-        .loading { text-align: center; padding: 40px; color: #999; }
-
-        /* User guide view */
-        .guide-doc { max-width: 920px; }
-        .guide-hero { margin-bottom: 20px; }
-        .guide-hero h2 { font-size: 1.5em; color: var(--primary); margin-bottom: 6px; }
-        .guide-hero p { color: #888; font-size: 0.9em; }
-        .guide-toc { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
-        .guide-toc a {
-            font-size: 0.82em; color: var(--accent); text-decoration: none;
-            background: #f4f6ff; padding: 5px 12px; border-radius: 16px; transition: all 0.15s;
-        }
-        .guide-toc a:hover { background: var(--accent); color: #fff; }
-        .guide-doc h4 { font-size: 0.98em; color: var(--primary); margin: 18px 0 8px; }
-        .guide-doc p, .guide-doc li { font-size: 0.9em; color: #444; line-height: 1.7; }
-        .guide-doc p { margin: 8px 0; }
-        .guide-doc ul, .guide-doc ol { padding-left: 22px; margin: 6px 0 10px; }
-        .guide-doc .tip {
-            background: #f4f6ff; border-left: 4px solid var(--accent); padding: 10px 14px;
-            border-radius: 6px; font-size: 0.87em; color: #555; margin: 12px 0;
-        }
-        .guide-doc .warn {
-            background: #fff8e6; border-left: 4px solid var(--warn); padding: 10px 14px;
-            border-radius: 6px; font-size: 0.87em; color: #6b5b1e; margin: 12px 0;
-        }
-        .guide-doc table { margin: 10px 0; background: #fff; border: 1px solid #eee; }
-        .guide-doc .src-tag {
-            display: inline-block; font-size: 0.75em; font-weight: 700;
-            padding: 2px 8px; border-radius: 4px; margin-right: 6px; vertical-align: 2px;
-        }
-
-        /* Daily intel view */
-        .daily-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; flex-wrap: wrap; gap: 12px; }
-        .day-selector { display: flex; gap: 6px; }
-        .day-btn { padding: 6px 16px; border: 1px solid #ddd; border-radius: 20px; background: #fff; cursor: pointer; font-size: 0.85em; transition: all 0.15s; }
-        .day-btn:hover { border-color: var(--accent); color: var(--accent); }
-        .day-btn.active { background: var(--accent); color: #fff; border-color: var(--accent); font-weight: 600; }
-        .daily-stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 24px; }
-        .daily-stats .stat-card { cursor: default; }
-        .daily-stats .stat-card .num { font-size: 1.8em; font-weight: 700; color: var(--primary); }
-        .daily-stats .stat-card .label { font-size: 0.8em; color: #888; margin-top: 4px; }
-        .daily-feed { margin-top: 8px; }
-        .daily-feed .day-divider { font-size: 0.85em; color: #999; margin: 20px 0 10px; padding-bottom: 6px; border-bottom: 1px solid #eee; font-weight: 600; }
-        .main-nav { list-style: none; }
-        .main-nav li { padding: 9px 14px; border-radius: 8px; cursor: pointer; font-size: 0.9em; margin-bottom: 2px; transition: all 0.15s; }
-        .main-nav li:hover { background: rgba(255,255,255,0.08); color: #fff; }
-        .main-nav li.active { background: var(--accent); color: #fff; font-weight: 600; }
-
-
-        /* Settings page */
-        .settings-section { margin-bottom: 28px; }
-        .settings-section h3 { font-size: 1.05em; color: var(--primary); margin-bottom: 14px; }
-        .source-row, .model-row { display:flex; align-items:center; justify-content:space-between; padding:12px 16px; border:1px solid #e8eaed; border-radius:8px; margin-bottom:8px; background:#fafbfc; }
-        .source-row .info, .model-row .info { flex:1; }
-        .source-row .name { font-weight:600; }
-        .source-row .desc { font-size:0.82em; color:#888; margin-top:2px; }
-        .model-row .model-name { font-weight:600; }
-        .model-row .model-detail { font-size:0.8em; color:#888; margin-top:2px; }
-        .toggle-btn { padding:6px 18px; border-radius:20px; border:none; cursor:pointer; font-size:0.85em; font-weight:600; transition:all 0.15s; }
-        .toggle-btn.on { background:#e8f5e9; color:#2e7d32; }
-        .toggle-btn.off { background:#f5f5f5; color:#999; }
-        .btn-sm { padding:6px 14px; border-radius:6px; border:1px solid #ddd; cursor:pointer; font-size:0.82em; background:#fff; margin-left:6px; }
-        .btn-sm.danger { border-color:#ffcdd2; color:#d32f2f; }
-        .btn-sm.primary { border-color:var(--accent); color:var(--accent); }
-        .btn-sm:hover { opacity:0.75; }
-        .add-form { display:flex; gap:8px; flex-wrap:wrap; margin-top:12px; padding:14px; background:#f5f6f8; border-radius:8px; }
-        .add-form input { padding:8px 12px; border:1px solid #ddd; border-radius:6px; font-size:0.85em; flex:1; min-width:120px; }
-        .badge-default { background:var(--accent); color:#fff; padding:2px 8px; border-radius:4px; font-size:0.7em; margin-left:6px; }
-        .test-result { margin-top:6px; font-size:0.82em; padding:6px 10px; border-radius:4px; }
-        .test-result.ok { background:#e8f5e9; color:#2e7d32; }
-        .test-result.err { background:#fce4ec; color:#c62828; }
-
-        /* AI analysis */
-        .ai-toggle { font-size:0.82em; color:var(--accent); cursor:pointer; font-weight:600; margin-top:6px; display:inline-block; }
-        .ai-toggle:hover { text-decoration:underline; }
-        .ai-panel { margin-top:8px; padding:10px 14px; background:#fff8e1; border-radius:6px; font-size:0.85em; line-height:1.6; color:#555; display:none; border-left:3px solid var(--accent); }
-        .ai-panel.open { display:block; }
-        .daily-report-card { background:linear-gradient(135deg,#1a237e,#283593); color:#fff; border-radius:12px; padding:20px 24px; margin-top:20px; }
-        .daily-report-card h3 { color:#fff; border:none; margin-bottom:12px; }
-        .daily-report-card h4 { color:#ffcc80; font-size:0.95em; margin:12px 0 4px; }
-        .daily-report-card p { font-size:0.9em; line-height:1.7; opacity:0.92; }
-        .date-picker-row { display:flex; align-items:center; gap:10px; }
-        .today-title { font-size: 1.0em; color: var(--primary); margin: 18px 0 10px; }
-        .earlier-section { margin-top: 20px; }
-        .earlier-toggle {
-            width: 100%; padding: 12px; border: 1px dashed #c9ced6; border-radius: 10px;
-            background: #fafbfc; color: #667; font-size: 0.9em; cursor: pointer; transition: all .15s;
-        }
-        .earlier-toggle:hover { border-color: var(--accent); color: var(--accent); }
-        .date-picker-row input[type=date] { padding:8px 12px; border:1px solid #ddd; border-radius:8px; font-size:0.9em; }
-
-        /* ====== Mobile (<=768px) ====== */
-        .mobile-topbar, .mobile-mask { display: none; }
-
-        @media (max-width: 768px) {
-            /* --- Topbar + drawer navigation --- */
-            .mobile-topbar {
-                display: flex; align-items: center; gap: 8px;
-                position: fixed; top: 0; left: 0; right: 0; height: 52px;
-                background: var(--sidebar-bg); color: #fff; padding: 0 12px; z-index: 150;
-            }
-            .mobile-topbar .menu-btn {
-                background: none; border: none; color: #fff; font-size: 1.3em;
-                cursor: pointer; min-width: 44px; min-height: 44px;
-            }
-            .mobile-topbar .page-title { font-weight: 600; font-size: 0.95em; }
-            .mobile-mask {
-                display: block; position: fixed; top: 0; bottom: 0; right: 0;
-                left: min(78vw, 300px); /* only the area beside the drawer — keeps the box's center clickable */
-                background: rgba(0,0,0,.45);
-                opacity: 0; pointer-events: none; transition: opacity .25s; z-index: 180;
-            }
-            .mobile-mask.open { opacity: 1; pointer-events: auto; }
-            .sidebar {
-                width: min(78vw, 300px);
-                transform: translateX(-105%); transition: transform .25s ease; z-index: 200;
-            }
-            .sidebar.open { transform: none; box-shadow: 4px 0 24px rgba(0,0,0,.35); }
-            .main { margin-left: 0; padding: 68px 16px 16px; }
-
-            /* --- Daily intel --- */
-            .daily-header { gap: 8px; }
-            .daily-header h2 { font-size: 1.25em; }
-            .daily-stats { grid-template-columns: repeat(2, 1fr); gap: 10px; }
-            .stat-card { padding: 14px; }
-            .date-picker-row { flex-wrap: wrap; width: 100%; }
-            .date-picker-row input[type=date] { flex: 1 1 160px; min-width: 160px; font-size: 16px; }
-            .signal-card { padding: 12px 14px; }
-            .signal-card h4, .signal-card .sig-summary, .signal-card .sig-meta { overflow-wrap: anywhere; }
-            /* --- Settings --- */
-            .source-row, .model-row { flex-direction: column; align-items: stretch; gap: 10px; }
-            .source-row > div:not(.info), .model-row > div:not(.info) { display: flex; gap: 6px; flex-wrap: wrap; }
-            .add-form input, .add-form select { flex: 1 1 100% !important; min-width: 0 !important; width: 100%; font-size: 16px; }
-            .add-form label { display: flex; align-items: center; gap: 6px; min-height: 44px; }
-            /* --- Quarter + tables --- */
-            .stats-row { grid-template-columns: repeat(2, 1fr); gap: 10px; }
-            .page-header { flex-wrap: wrap; }
-            .card { padding: 16px; }
-            .table-wrap { position: relative; }
-            .table-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
-            .table-wrap::after {
-                content: ''; position: absolute; top: 0; right: 0; bottom: 0; width: 24px;
-                background: linear-gradient(to right, rgba(255,255,255,0), rgba(26,35,126,.08));
-                pointer-events: none;
-            }
-            .main img { max-width: 100%; height: auto; }
-            /* --- Touch targets --- */
-            .run-btn, .toggle-btn, .btn-sm, .day-btn { min-height: 44px; }
-            .toggle-btn, .btn-sm { display: inline-flex; align-items: center; justify-content: center; }
-            .main-nav li, .nav-tabs li, .quarter-list li { padding-top: 12px; padding-bottom: 12px; }
-            .signal-filter label { min-height: 44px; }
-            /* --- Progress panel --- */
-            #progressPanel { min-width: 0 !important; max-width: 420px !important; width: calc(100vw - 32px); max-height: 85vh; overflow-y: auto; }
-        }
-    </style>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=Noto+Serif+SC:ital,wght@0,400;0,600;0,700;1,400;1,600&family=Noto+Sans+SC:wght@400;500;700&family=JetBrains+Mono:wght@500&display=swap" media="print" onload="this.media='all'">
+    <link rel="stylesheet" href="/static/css/magazine.css">
 </head>
 <body>
 
@@ -342,25 +17,34 @@
 </div>
 <div class="mobile-mask" id="mobileMask" onclick="toggleDrawer(false)"></div>
 
-<!-- ====== SIDEBAR ====== -->
-<aside class="sidebar">
-    <div class="sidebar-header">
-        <h1>🏦 GS-Tracker</h1>
-        <div class="sub">高盛动向情报系统</div>
-    </div>
+<!-- ====== TOP BAR ====== -->
+<div class="topbar">
+    <span>GS-Tracker 情报专刊</span>
+    <span class="topbar-mid">仅供学习参考 · 不构成投资建议</span>
+    <span class="user-chip"><span id="currentUser">…</span><button class="logout-btn" onclick="logout()">退出登录</button></span>
+</div>
 
-    <div class="sidebar-section">
-        <h3>📍 导航</h3>
-        <ul class="main-nav" id="mainNav">
-            <li class="active" data-view="daily">📡 每日情报</li>
-            <li data-view="quarter">📅 季度报告</li>
-            <li data-view="guide">📖 使用指南</li>
-            <li data-view="settings">⚙️ 设置</li>
-        </ul>
-    </div>
+<!-- ====== MASTHEAD ====== -->
+<header class="masthead">
+    <div class="mark">◉</div>
+    <div class="title">GS-Tracker</div>
+    <div class="sub">高盛动向情报系统 · Goldman Sachs Intelligence</div>
+    <div class="date" id="mastheadDate"></div>
+</header>
 
-    <div class="sidebar-section" id="signalFilterSection" style="display:none;">
-        <h3>🔍 信号筛选</h3>
+<!-- ====== NAV ====== -->
+<ul class="nav-strip" id="mainNav">
+    <li class="active" data-view="daily">每日情报</li>
+    <li data-view="quarter">季度报告</li>
+    <li data-view="guide">使用指南</li>
+    <li data-view="settings">设置</li>
+</ul>
+
+<div class="paper-body">
+<!-- ====== LEFT RAIL ====== -->
+<aside class="left-rail" id="leftRail">
+    <div class="rail-section" id="signalFilterSection" style="display:none;">
+        <h3>信号来源</h3>
         <div class="signal-filter">
             <span id="sourceFilterBox">
             <label><input type="checkbox" checked onchange="onFilterChange()" class="filter-source" value="13F"> 13F 持仓</label>
@@ -371,35 +55,34 @@
             <label><input type="checkbox" checked onchange="onFilterChange()" class="filter-source" value="macro_view"> 宏观指标</label>
             </span>
         </div>
-        <div class="signal-filter" style="margin-top: 8px;">
+        <h3 style="margin-top:24px;">优先级</h3>
+        <div class="signal-filter">
             <label><input type="checkbox" checked onchange="onFilterChange()" class="filter-strength" value="high"> 🔴 高优先级</label>
             <label><input type="checkbox" checked onchange="onFilterChange()" class="filter-strength" value="medium"> 🟡 中优先级</label>
             <label><input type="checkbox" checked onchange="onFilterChange()" class="filter-strength" value="low"> 🟢 低优先级</label>
         </div>
+    
     </div>
 
-    <div class="sidebar-section">
-        <h3>⚡ 操作</h3>
-        <button class="run-btn" id="runDailyBtn" onclick="runDailyIntel()">📡 手动运行每日情报</button>
+    <div class="rail-section">
+        <h3>操作</h3>
+        <button class="run-btn" id="runDailyBtn" onclick="runDailyIntel()">运行每日情报</button>
         <div class="run-msg" id="runDailyMsg"></div>
-        <button class="run-btn" id="runPipelineBtn" onclick="runPipeline()" style="margin-top:8px">▶️ 手动运行季度对账</button>
+        <button class="run-btn" id="runPipelineBtn" onclick="runPipeline()">运行季度对账</button>
         <div class="run-msg" id="runPipelineMsg"></div>
     </div>
 
-    <div class="user-bar">
-        <span class="who" id="currentUser">…</span>
-        <button class="logout-btn" onclick="logout()">退出登录</button>
-    </div>
-    <div class="sidebar-footer">
+    <div class="rail-note">
         GS-Tracker v1.0 · 数据来源 SEC EDGAR / RSS<br>
         本内容仅供学习参考，不构成投资建议
     </div>
 </aside>
 
 <!-- ====== MAIN CONTENT ====== -->
-<main class="main" id="mainContent">
+<main class="main-col" id="mainContent">
     <div class="loading">加载中...</div>
 </main>
+</div>
 
 <!-- ====== USER GUIDE (rendered into #mainContent on demand) ====== -->
 <template id="guideTpl">
@@ -492,7 +175,7 @@
             <li><strong>今日情报列表</strong>：一条条原始信号，点「🤖 AI 解读」可看单条详解（结果有缓存，不重复消耗 AI 额度）。</li>
             <li><strong>查看日期</strong>：页面顶部可选择任意历史日期回溯当天的情报。</li>
             <li><strong>更早的情报</strong>：页面底部折叠区，展开可看最近 30 天。</li>
-            <li><strong>🔄 重新生成日报</strong>：情报是全天陆续抓进来的，如果日报生成得早、后来又来了新情报，卡片上会出现橙色提醒（"生成时只有 N 条，现在已有 M 条"），点卡片右上角的「🔄 重新生成」即可让 AI 基于最新情报重写一份。</li>
+            <li><strong>🔄 重新生成日报</strong>：情报是全天陆续抓进来的，如果日报生成得早、后来又来了新情报，卡片上会出现橙色提醒（"生成时只有 N 条，现在已有 M 条"），点卡片底部的「🔄 重新生成」即可让 AI 基于最新情报重写一份。</li>
         </ul>
         <h4>📅 季度报告</h4>
         <ul>
@@ -563,6 +246,15 @@ async function logout() {
 
 // ====== Init ======
 async function init() {
+    // Masthead date: today + weekday + issue number (day of year)
+    const now = new Date();
+    const weekDays = ['星期日', '星期一', '星期二', '星期三', '星期四', '星期五', '星期六'];
+    const issue = Math.floor((now - new Date(now.getFullYear(), 0, 1)) / 86400000) + 1;
+    const dateEl = document.getElementById('mastheadDate');
+    if (dateEl) {
+        dateEl.textContent = `${now.getFullYear()}年${now.getMonth() + 1}月${now.getDate()}日 · ${weekDays[now.getDay()]} · 第 ${String(issue).padStart(3, '0')} 期`;
+    }
+
     // Who am I? (middleware already guarantees a session; this drives role-based UI)
     try {
         const me = await (await fetch('/api/auth/me')).json();
@@ -888,7 +580,7 @@ function showProgressPanel() {
 
     panel = document.createElement('div');
     panel.id = 'progressPanel';
-    panel.style.cssText = 'position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:#fff;border-radius:12px;box-shadow:0 4px 24px rgba(0,0,0,0.15);padding:24px;z-index:1000;min-width:340px;max-width:90vw;';
+    panel.style.cssText = 'position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:#fff;border:1px solid var(--rule);border-radius:4px;box-shadow:0 8px 32px rgba(0,0,0,0.12);padding:24px;z-index:1000;min-width:340px;max-width:90vw;';
     panel.innerHTML = '<div class="loading">⏳ 正在启动...</div>';
     document.body.appendChild(panel);
 }
@@ -1142,7 +834,7 @@ async function loadQuarterInsight(d, force = false) {
             : await fetch(`/api/quarter-insight/${d.quarter}${query}`);
         const r = await resp.json();
         if (r.report) {
-            const formatted = esc(r.report).replace(/\n/g, '<br>').replace(/## ([^<]+)/g, '<h4>$1</h4>');
+            const formatted = formatMd(r.report);
             slot.innerHTML = `<div class="daily-report-card">
                 <h3>🤖 ${d.quarter} AI 季度洞察</h3>
                 <div>${formatted}</div>
@@ -1347,6 +1039,17 @@ function esc(v) {
     return String(v ?? '').replace(/[&<>"']/g, c => (
         { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
     ));
+}
+
+// Render the small markdown subset LLM output uses: headings, bold, hr.
+function formatMd(text) {
+    return esc(text)
+        .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+        .replace(/^#### (.+)$/gm, '<h5>$1</h5>')
+        .replace(/^### (.+)$/gm, '<h4>$1</h4>')
+        .replace(/^## (.+)$/gm, '<h4>$1</h4>')
+        .replace(/^(?:---|\*\*\*)\s*$/gm, '<hr>')
+        .replace(/\n/g, '<br>');
 }
 
 function safeHttpUrl(u) {
@@ -2062,7 +1765,7 @@ async function analyzeSignal(signalId, title, summary, source) {
         const resp = await fetch(`/api/signals/${signalId}/analyze`, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({title,summary,source})});
         if (!resp.ok) { panel.innerHTML = '<span style="color:#d32f2f;">AI 分析失败</span>'; return; }
         const r = await resp.json();
-        panel.innerHTML = esc(r.analysis).replace(/\n/g, '<br>');
+        panel.innerHTML = formatMd(r.analysis);
         panel.dataset.loaded = 'true';
     } catch(e) { panel.innerHTML = '<span style="color:#d32f2f;">网络错误</span>'; }
 }
@@ -2079,17 +1782,15 @@ async function loadDailyReport(dateStr, force) {
             : await fetch(`/api/daily-report/${dateStr}`);
         const r = await resp.json();
         if (r.report) {
-            const formatted = esc(r.report).replace(/\n/g, '<br>').replace(/## ([^<]+)/g, '<h4>$1</h4>');
+            const formatted = formatMd(r.report);
             const staleHint = r.stale
                 ? `<div style="color:#b26a00;font-size:0.85em;margin-top:8px;">⚠️ 这份摘要生成时只有 ${r.signal_count} 条情报，现在已有 ${r.current_signal_count} 条，可点击「重新生成」更新。</div>`
                 : '';
             container.innerHTML = `<div class="daily-report-card">
-                <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;">
-                    <h3 style="margin:0;">📋 ${dateStr} 每日情报摘要</h3>
-                    <button class="btn-sm" onclick="loadDailyReport('${dateStr}', true)">🔄 重新生成</button>
-                </div>
+                <h3>📋 ${dateStr} 每日情报摘要</h3>
                 <div style="margin-top:8px;">${formatted}</div>
                 ${staleHint}
+                <div style="margin-top:10px;"><button class="btn-sm" onclick="loadDailyReport('${dateStr}', true)">🔄 重新生成</button></div>
             </div>`;
         } else {
             container.innerHTML = '';
@@ -2191,7 +1892,7 @@ switchMainView = async function(view) {
 
 // ====== Mobile drawer ======
 function toggleDrawer(force) {
-    const sb = document.querySelector('.sidebar');
+    const sb = document.getElementById('leftRail');
     const mask = document.getElementById('mobileMask');
     if (!sb || !mask) return;
     const open = typeof force === 'boolean' ? force : !sb.classList.contains('open');
@@ -2202,7 +1903,7 @@ function toggleDrawer(force) {
 // Delegated listener; the topbar title is synced by the switchMainView
 // wrapper above, so this only closes the drawer.
 (function bindMobileNav() {
-    const sb = document.querySelector('.sidebar');
+    const sb = document.getElementById('leftRail');
     if (!sb) return;
     sb.addEventListener('click', (e) => {
         const item = e.target.closest('#mainNav li');

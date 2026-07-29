@@ -5,26 +5,73 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>高盛动向情报板 — {{ quarter }}</title>
     <style>
-        :root { --primary: #1a237e; --accent: #ff9800; --bg: #f5f7fa; --card: #fff; }
-        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: var(--bg); color: #333; margin: 0; padding: 20px; }
-        .container { max-width: 1200px; margin: 0 auto; }
-        .card { background: var(--card); border-radius: 10px; padding: 20px; margin-bottom: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.08); }
-        h1 { color: var(--primary); }
-        h2 { color: var(--primary); border-bottom: 2px solid var(--accent); padding-bottom: 8px; }
-        table { width: 100%; border-collapse: collapse; margin-top: 12px; }
-        th, td { text-align: left; padding: 10px; border-bottom: 1px solid #e0e0e0; }
-        th { background: #f0f2f5; }
-        .label { font-weight: bold; color: var(--primary); }
-        .section { margin-bottom: 16px; }
+        /* 杂志风（内联自包含，与 static/css/magazine.css 同源） */
+        :root {
+            --paper: #f7f5f0; --paper-dark: #efeae2; --surface: #ffffff;
+            --ink: #1c1c1c; --ink-muted: #6b6560; --rule: #d9d3c8;
+            --accent: #e05a45; --accent-soft: #f7e3df;
+            --serif: 'Noto Serif SC', 'Songti SC', 'STSong', 'SimSun', serif;
+            --sans: 'Inter Tight', 'Noto Sans SC', -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif;
+            --mono: 'JetBrains Mono', 'SF Mono', Menlo, Consolas, monospace;
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: var(--sans); background: var(--paper); color: var(--ink); line-height: 1.6; }
+        .topbar { border-bottom: 1px solid var(--rule); padding: 10px 24px; font-size: 0.68rem; letter-spacing: 0.08em; color: var(--ink-muted); display: flex; justify-content: space-between; text-transform: uppercase; }
+        .masthead { padding: 30px 24px 24px; text-align: center; border-bottom: 1px solid var(--rule); background: linear-gradient(180deg, var(--paper) 0%, var(--paper-dark) 100%); }
+        .masthead .mark { font-size: 1.3rem; margin-bottom: 6px; opacity: 0.7; }
+        .masthead .title { font-family: var(--serif); font-size: 2.2rem; font-weight: 600; letter-spacing: 0.06em; line-height: 1.1; }
+        .masthead .sub { font-size: 0.8rem; color: var(--ink-muted); margin-top: 8px; letter-spacing: 0.04em; }
+        .container { max-width: 1100px; margin: 0 auto; padding: 32px 24px 48px; }
+        .card { background: var(--surface); border: 1px solid var(--rule); border-radius: 4px; padding: 24px; margin-bottom: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.03); }
+        .card h2 { font-family: var(--serif); font-size: 1.25rem; font-weight: 600; color: var(--ink); margin-bottom: 14px; padding-bottom: 10px; border-bottom: 1px dotted var(--rule); }
+        .card h3 { font-family: var(--serif); font-size: 1.05rem; font-weight: 600; margin: 16px 0 10px; }
+        .meta-line { font-size: 0.78rem; color: var(--ink-muted); margin-bottom: 6px; }
+        .label { font-weight: 600; color: var(--ink); }
+        .section { margin-bottom: 12px; font-size: 0.88rem; color: var(--ink-muted); line-height: 1.75; }
+        table { width: 100%; border-collapse: collapse; margin-top: 12px; font-size: 0.84rem; }
+        th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--rule); }
+        th { font-size: 0.7rem; font-weight: 600; color: var(--ink-muted); text-transform: uppercase; letter-spacing: 0.03em; background: var(--paper); }
+        tr:hover td { background: var(--paper); }
+        td.num { font-family: var(--mono); text-align: right; }
+        .src-status { display: inline-block; margin: 0 16px 8px 0; padding: 4px 10px; border-radius: 3px; font-size: 0.78rem; }
+        .src-status.ok { background: #e8f5e9; color: #2e7d32; }
+        .src-status.warn { background: #fff3e0; color: #b26a00; }
+        .error-box { background: #fff3e0; border: 1px solid #ecd9b8; padding: 10px 14px; border-radius: 4px; margin-bottom: 12px; font-size: 0.84rem; }
+        .error-box ul { margin: 4px 0 0 18px; }
+        .sig-card { border: 1px solid var(--rule); border-radius: 4px; padding: 16px 18px; margin-bottom: 10px; background: var(--surface); }
+        .sig-head { display: flex; justify-content: space-between; gap: 10px; font-size: 0.75rem; color: var(--ink-muted); margin-bottom: 6px; }
+        .sig-head .src { font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; padding: 2px 8px; border-radius: 3px; }
+        .sig-card.high .src { background: var(--accent-soft); color: var(--accent); }
+        .sig-card.medium .src { background: #f0ede7; color: var(--ink-muted); }
+        .sig-card.low .src { background: #f5f5f5; color: #999; }
+        .sig-card strong.title { font-family: var(--serif); font-size: 1rem; display: block; margin-bottom: 6px; }
+        .sig-card p { margin: 6px 0; color: var(--ink-muted); font-size: 0.84rem; line-height: 1.65; }
+        .sig-foot { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; font-size: 0.75rem; color: var(--ink-muted); }
+        .cross-badge { background: var(--paper-dark); border: 1px solid var(--rule); color: var(--ink-muted); padding: 2px 8px; border-radius: 3px; font-weight: 600; }
+        .sig-foot a { color: var(--accent); text-decoration: none; font-weight: 600; }
+        .footer { text-align: center; padding: 20px; font-size: 0.68rem; color: var(--ink-muted); letter-spacing: 0.04em; border-top: 1px solid var(--rule); }
+        @media (max-width: 600px) {
+            .masthead .title { font-size: 1.6rem; }
+            .card { padding: 16px; }
+            .container { padding: 20px 12px 32px; }
+        }
     </style>
 </head>
 <body>
+    <div class="topbar">
+        <span>GS-Tracker 季度特刊</span>
+        <span>仅供学习参考 · 不构成投资建议</span>
+    </div>
+    <header class="masthead">
+        <div class="mark">◉</div>
+        <div class="title">高盛动向情报板 — {{ quarter }}</div>
+        <div class="sub">报告生成时间：{{ generated_at }} · 数据来源 SEC EDGAR</div>
+    </header>
     <div class="container">
         <div class="card">
-            <h1>高盛动向情报板 — {{ quarter }}</h1>
-            <p>报告生成时间：{{ generated_at }}</p>
-            <p><span class="label">情绪信号：</span>{{ {'bullish': '偏多', 'bearish': '偏空', 'neutral': '中性'}.get(analysis.sentiment, analysis.sentiment) }}</p>
-            <p><span class="label">置信度：</span>{{ "%.0f"|format(analysis.confidence * 100) }}%</p>
+            <h2>季度概览</h2>
+            <p class="meta-line"><span class="label">情绪信号：</span>{{ {'bullish': '偏多', 'bearish': '偏空', 'neutral': '中性'}.get(analysis.sentiment, analysis.sentiment) }}</p>
+            <p class="meta-line"><span class="label">置信度：</span>{{ "%.0f"|format(analysis.confidence * 100) }}%</p>
         </div>
 
         <div class="card">
@@ -40,26 +87,26 @@
 
         <div class="card">
             <h2>重点标的</h2>
-            <p>{{ analysis.key_tickers | join(", ") }}</p>
+            <p class="section">{{ analysis.key_tickers | join(", ") }}</p>
         </div>
 
         <!-- 多源信号面板 -->
         {% if signals or signal_errors %}
         <div class="card">
-            <h2>📡 多源信号面板</h2>
+            <h2>多源信号面板</h2>
 
-            <div class="source-status" style="margin-bottom: 12px;">
+            <div style="margin-bottom: 12px;">
                 {% for src, status in source_status.items() %}
-                <span style="margin-right: 16px; padding: 4px 10px; border-radius: 4px; {% if status == 'ok' %}background: #e8f5e9; color: #2e7d32;{% else %}background: #fff3e0; color: #e65100;{% endif %}">
+                <span class="src-status {% if status == 'ok' %}ok{% else %}warn{% endif %}">
                     {{ src }}: {% if status == 'ok' %}✅{% else %}⚠️ 暂不可用{% endif %}
                 </span>
                 {% endfor %}
             </div>
 
             {% if signal_errors %}
-            <div style="background: #fff3e0; padding: 8px 12px; border-radius: 6px; margin-bottom: 12px;">
+            <div class="error-box">
                 <strong>⚠️ 部分信号源获取失败：</strong>
-                <ul style="margin: 4px 0 0 0;">
+                <ul>
                     {% for err in signal_errors %}
                     <li>{{ err }}</li>
                     {% endfor %}
@@ -83,30 +130,30 @@
                 {% for level, group in [('high', ns.high), ('medium', ns.medium), ('low', ns.low)] %}
                 {% if group %}
                 <div style="margin-bottom: 16px;">
-                    <h3 style="margin: 8px 0 12px 0;">
+                    <h3>
                         {% if level == 'high' %}🔴 高优先级信号
                         {% elif level == 'medium' %}🟡 中优先级信号
                         {% else %}🟢 低优先级信号
                         {% endif %}
-                        ({{ group|length }})
+                        （{{ group|length }}）
                     </h3>
                     {% for sig in group %}
-                    <div style="border: 1px solid #e0e0e0; border-radius: 8px; padding: 12px; margin-bottom: 8px;">
-                        <div style="display: flex; justify-content: space-between; color: #666; font-size: 0.9em; margin-bottom: 6px;">
-                            <span style="font-weight: bold; color: var(--primary);">{{ sig.source }}</span>
+                    <div class="sig-card {{ level }}">
+                        <div class="sig-head">
+                            <span class="src">{{ sig.source }}</span>
                             <span>{{ sig.published_at.strftime('%Y-%m-%d') }}</span>
                         </div>
-                        <strong>{{ sig.title }}</strong>
-                        <p style="margin: 8px 0; color: #555;">{{ sig.summary }}</p>
-                        <div style="display: flex; gap: 12px; flex-wrap: wrap; align-items: center;">
+                        <strong class="title">{{ sig.title }}</strong>
+                        <p>{{ sig.summary }}</p>
+                        <div class="sig-foot">
                             {% if sig.companies %}
-                            <span style="font-size: 0.9em; color: #666;">相关公司: {{ sig.companies|join(', ') }}</span>
+                            <span>相关公司: {{ sig.companies|join(', ') }}</span>
                             {% endif %}
                             {% if sig.cross_refs %}
-                            <span style="background: #e3f2fd; color: #1565c0; padding: 2px 8px; border-radius: 4px; font-size: 0.85em;">🔗 交叉信号</span>
+                            <span class="cross-badge">🔗 交叉信号</span>
                             {% endif %}
                             {% if sig.url %}
-                            <a href="{{ sig.url }}" target="_blank" rel="noopener" style="color: var(--accent);">查看原文 →</a>
+                            <a href="{{ sig.url }}" target="_blank" rel="noopener">查看原文 →</a>
                             {% endif %}
                         </div>
                     </div>
@@ -125,19 +172,20 @@
                 <thead>
                     <tr>
                         <th>公司名称</th>
-                        <th>持仓价值（美元）</th>
+                        <th style="text-align:right;">持仓价值（美元）</th>
                     </tr>
                 </thead>
                 <tbody>
                     {% for row in holdings %}
                     <tr>
                         <td>{{ row.name_of_issuer or "—" }}</td>
-                        <td>{{ "{:,.0f}".format(row.value) if row.value is not none else "—" }}</td>
+                        <td class="num">{{ "{:,.0f}".format(row.value) if row.value is not none else "—" }}</td>
                     </tr>
                     {% endfor %}
                 </tbody>
             </table>
         </div>
     </div>
+    <footer class="footer">GS-Tracker · 本内容仅供学习参考，不构成投资建议</footer>
 </body>
 </html>
