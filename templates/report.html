@@ -175,7 +175,10 @@
 
         <div class="card">
             <h2>持仓明细</h2>
-            <table>
+            {% if holdings_total > holdings|length %}
+            <p class="meta-line">按市值排序，仅展示前 {{ holdings|length }} 大持仓（共 {{ holdings_total }} 条记录）。完整明细请在仪表盘持仓面板点击「加载全部持仓」。</p>
+            {% endif %}
+            <table data-total-holdings="{{ holdings_total }}">
                 <thead>
                     <tr>
                         <th>公司名称</th>

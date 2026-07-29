@@ -356,6 +356,7 @@ async function loadQuarter(quarter) {
             sourceStatus: sourceStatus,
             signalsError: signalsError,
             holdings: extractHoldings(doc),
+            holdingsTotal: extractHoldingsTotal(doc),
         };
     } catch(e) {
         if (seq !== loadSeq) return;
@@ -723,6 +724,15 @@ function extractHoldings(doc) {
         }
     });
     return holdings;
+}
+
+// The static report embeds only the top positions and stamps the full count
+// on the table; 0 means "unknown / old report without the attribute".
+function extractHoldingsTotal(doc) {
+    const table = doc.querySelector('table[data-total-holdings]');
+    if (!table) return 0;
+    const n = Number(table.dataset.totalHoldings);
+    return Number.isFinite(n) ? n : 0;
 }
 
 // ====== Quarter view render (selector + in-content tabs + panels) ======
@@ -1186,6 +1196,13 @@ function renderHoldingsPanel(d) {
             <button class="${mode === 'raw' ? 'active' : ''}" onclick="setHoldingsView('raw')">原始明细</button>
         </div>
     `;
+    const partial = d.holdingsTotal && d.holdings.length < d.holdingsTotal;
+    const banner = partial ? `
+        <div class="holdings-partial">
+            <span>当前显示市值前 ${d.holdings.length} 条，共 ${d.holdingsTotal.toLocaleString('en-US')} 条记录</span>
+            <button id="loadAllHoldingsBtn" onclick="loadFullHoldings()">加载全部持仓</button>
+        </div>
+    ` : '';
 
     if (mode === 'aggregated') {
         const companies = aggregateHoldingsByName(d.holdings);
@@ -1200,10 +1217,11 @@ function renderHoldingsPanel(d) {
         return `
             <div class="page-header">
                 <h2>持仓明细</h2>
-                <span class="meta">${d.quarter} · ${companies.length} 家公司（由 ${d.holdings.length} 条记录汇总）</span>
+                <span class="meta">${d.quarter} · ${companies.length} 家公司（${partial ? '前 ' : '由 '}${d.holdings.length} 条记录${partial ? '的汇总' : '汇总'}）</span>
             </div>
             <div class="card">
                 ${toggle}
+                ${banner}
                 <div class="table-wrap"><div class="table-scroll">
                 <table>
                     <thead><tr><th class="w-40">#</th><th>公司名称</th><th class="ta-c">合并笔数</th><th class="ta-r">持仓价值合计（美元）</th></tr></thead>
@@ -1225,10 +1243,11 @@ function renderHoldingsPanel(d) {
     return `
         <div class="page-header">
             <h2>持仓明细</h2>
-            <span class="meta">${d.quarter} · ${d.holdings.length} 条记录</span>
+            <span class="meta">${d.quarter} · ${partial ? '前 ' : ''}${d.holdings.length} 条记录${partial ? `（共 ${d.holdingsTotal.toLocaleString('en-US')} 条）` : ''}</span>
         </div>
         <div class="card">
             ${toggle}
+            ${banner}
             <div class="table-wrap"><div class="table-scroll">
             <table>
                 <thead><tr><th class="w-40">#</th><th>公司名称</th><th class="ta-r">持仓价值（美元）</th></tr></thead>
@@ -1245,6 +1264,27 @@ let holdingsViewMode = 'aggregated';
 function setHoldingsView(mode) {
     holdingsViewMode = mode;
     renderQuarterPanel();
+}
+
+// Fetch the complete holdings list on demand; the static report only embeds
+// the top positions so quarter switching stays fast on a 5 Mbps uplink.
+async function loadFullHoldings() {
+    const btn = document.getElementById('loadAllHoldingsBtn');
+    if (!reportData) return;
+    if (btn) { btn.disabled = true; btn.textContent = '加载中…'; }
+    try {
+        const resp = await fetch(`/api/holdings/${reportData.quarter}`);
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+        const data = await resp.json();
+        reportData.holdings = (data.holdings || []).map(h => ({
+            name: h.name,
+            value: formatHoldingsValue(h.value),
+        }));
+        reportData.holdingsTotal = data.total || reportData.holdings.length;
+        renderQuarterPanel();
+    } catch (e) {
+        if (btn) { btn.disabled = false; btn.textContent = '加载失败，点击重试'; }
+    }
 }
 
 function parseHoldingsValue(text) {

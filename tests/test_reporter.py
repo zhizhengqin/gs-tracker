@@ -85,3 +85,44 @@ def test_real_template_splits_sentiment_and_confidence(tmp_path):
     assert '<span class="label">置信度：</span>85%</p>' in html
     # The old merged format must be gone
     assert "（置信度：" not in html.split("情绪信号")[1][:200]
+
+
+def test_real_template_embeds_only_top_holdings(tmp_path):
+    """The static report ships just the top positions (the full list is
+    served via /api/holdings) so quarter pages stay small on slow links."""
+    from src.reporter import HOLDINGS_PREVIEW_LIMIT
+
+    gen = ReportGenerator()  # real project template
+    n = HOLDINGS_PREVIEW_LIMIT + 50
+    holdings = pd.DataFrame(
+        {
+            "name_of_issuer": [f"Company {i:04d}" for i in range(n)],
+            # Deliberately unsorted: largest value sits in the middle
+            "value": [float((i * 7919) % n) for i in range(n)],
+        }
+    )
+    analysis = AnalysisResult(
+        summary="",
+        concentration_analysis="",
+        top_holdings_analysis="",
+        sector_preference="",
+        trading_signals="",
+        risk_warnings="",
+        retail_insights="",
+        key_tickers=[],
+        sentiment="neutral",
+        confidence=0.5,
+    )
+    path = gen.generate_report("2026-Q1", holdings, analysis, output_path=tmp_path / "r.html")
+    html = path.read_text(encoding="utf-8")
+
+    # Full count is stamped on the table for the dashboard to pick up
+    assert f'data-total-holdings="{n}"' in html
+    # Only the preview rows are rendered
+    tbody = html.split("<tbody>")[1].split("</tbody>")[0]
+    assert tbody.count("<tr>") == HOLDINGS_PREVIEW_LIMIT
+    # Truncation note is shown
+    assert f"共 {n} 条记录" in html
+    # Rows are sorted by value desc: the largest holding comes first
+    first_row = html.split("<tbody>")[1].split("<tr>")[1]
+    assert f"{float(n - 1):,.0f}" in first_row

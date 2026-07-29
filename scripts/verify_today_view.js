@@ -20,7 +20,9 @@ async function loginIfNeeded(pg) {
         await pg.fill('#username', process.env.GS_VERIFY_USER || 'gsadmin');
         await pg.fill('#password', process.env.GS_VERIFY_PASS || 'admin123');
         await pg.click('#login-btn');
-        await pg.waitForURL(u => !u.pathname.startsWith('/login'), { timeout: 10000 });
+        // Waiting for the nav beats waitForURL here: the dashboard's Google
+        // Fonts <link> can delay the window load event past the timeout.
+        await pg.waitForSelector('#mainNav', { timeout: 15000 });
         await pg.waitForLoadState('networkidle');
     }
 }

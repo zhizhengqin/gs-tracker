@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from fastapi import Body, FastAPI, HTTPException, Path as PathParam, Request
+from fastapi import Body, FastAPI, HTTPException, Path as PathParam, Request, Response
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -22,7 +22,7 @@ from src.auth import (
     ensure_default_admin,
     hash_password,
 )
-from src.config import PROJECT_ROOT, REPORT_OUTPUT_DIR
+from src.config import GOLDMAN_CIK, PROJECT_ROOT, REPORT_OUTPUT_DIR
 from src.daily_report import ensure_daily_report, generate_daily_report
 from src.llm_config import resolve_llm_config
 from src.quarter_insight import ensure_quarter_insight, generate_quarter_insight
@@ -39,6 +39,7 @@ from src.storage import (
     get_connection,
     get_daily_report,
     get_default_llm_model,
+    get_holdings,
     get_llm_models,
     get_recent_signals,
     get_setting,
@@ -303,12 +304,22 @@ async def dashboard() -> str:
 
 
 @app.get("/reports/{quarter}.html", response_class=HTMLResponse)
-async def get_report(quarter: str) -> str:
-    """Return a single quarter HTML report."""
+async def get_report(quarter: str, request: Request) -> Response:
+    """Return a single quarter HTML report.
+
+    Reports are immutable until the pipeline regenerates them, so validate
+    with an ETag derived from mtime+size: repeat views get a cheap 304
+    instead of re-downloading megabytes over the 5 Mbps uplink.
+    """
     report_path = REPORT_OUTPUT_DIR / f"{quarter}.html"
     if not report_path.exists():
         raise HTTPException(status_code=404, detail="未找到该季度报告")
-    return report_path.read_text(encoding="utf-8")
+    stat = report_path.stat()
+    etag = f'"{stat.st_mtime_ns:x}-{stat.st_size:x}"'
+    headers = {"Cache-Control": "no-cache", "ETag": etag}
+    if request.headers.get("if-none-match") == etag:
+        return Response(status_code=304, headers=headers)
+    return HTMLResponse(report_path.read_text(encoding="utf-8"), headers=headers)
 
 
 @app.get("/api/reports")
@@ -385,6 +396,29 @@ async def api_signals(
 async def health() -> dict:
     """Health check endpoint."""
     return {"status": "ok"}
+
+
+@app.get("/api/holdings/{quarter}")
+async def api_holdings(
+    quarter: str = PathParam(pattern=r"^\d{4}-Q[1-4]$"),
+) -> dict:
+    """Return the full holdings list for a quarter as JSON.
+
+    The static report only embeds the top positions; the dashboard fetches
+    the complete list from here on demand ("加载全部持仓").
+    """
+    holdings = await asyncio.to_thread(get_holdings, GOLDMAN_CIK, quarter)
+    if not holdings:
+        raise HTTPException(status_code=404, detail="该季度暂无持仓数据")
+    holdings.sort(key=lambda h: h.get("value") or 0, reverse=True)
+    return {
+        "quarter": quarter,
+        "total": len(holdings),
+        "holdings": [
+            {"name": h.get("name_of_issuer") or "—", "value": h.get("value") or 0}
+            for h in holdings
+        ],
+    }
 
 
 # ====== Manual pipeline trigger ======

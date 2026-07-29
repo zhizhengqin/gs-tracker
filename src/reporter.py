@@ -16,6 +16,10 @@ matplotlib.use("Agg")
 
 logger = logging.getLogger(__name__)
 
+# Only the largest positions are embedded in the static HTML report; the
+# full list (10k+ rows, multi-MB) is served on demand via /api/holdings.
+HOLDINGS_PREVIEW_LIMIT = 100
+
 
 class ReportGenerator:
     """Generate HTML intelligence board reports."""
@@ -43,9 +47,14 @@ class ReportGenerator:
         output_path.parent.mkdir(parents=True, exist_ok=True)
 
         template = self.env.get_template("report.html")
+        holdings_total = len(holdings_df)
+        preview_df = holdings_df.sort_values(
+            "value", ascending=False, na_position="last"
+        ).head(HOLDINGS_PREVIEW_LIMIT)
         rendered = template.render(
             quarter=quarter,
-            holdings=holdings_df.to_dict(orient="records"),
+            holdings=preview_df.to_dict(orient="records"),
+            holdings_total=holdings_total,
             analysis=analysis,
             generated_at=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             signals=signals or [],

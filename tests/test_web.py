@@ -1,6 +1,7 @@
 """Tests for src.web."""
 import asyncio
 import json
+import os
 import time
 from unittest.mock import AsyncMock
 
@@ -10,6 +11,7 @@ from fastapi.testclient import TestClient
 import src.web
 from src import storage
 from src.auth import ensure_default_admin
+from src.config import GOLDMAN_CIK
 from src.web import app
 
 
@@ -136,6 +138,64 @@ def test_get_report_success(tmp_path, monkeypatch):
     response = client.get("/reports/2026-Q1.html")
     assert response.status_code == 200
     assert "高盛 Q1 报告" in response.text
+
+
+def test_get_report_etag_caching(tmp_path, monkeypatch):
+    """Repeat report views revalidate via ETag: unchanged file => cheap 304."""
+    monkeypatch.setattr("src.web.REPORT_OUTPUT_DIR", tmp_path)
+    report = tmp_path / "2026-Q1.html"
+    report.write_text("<html>高盛 Q1 报告</html>", encoding="utf-8")
+
+    first = client.get("/reports/2026-Q1.html")
+    assert first.status_code == 200
+    assert first.headers["cache-control"] == "no-cache"
+    etag = first.headers["etag"]
+    assert etag
+
+    # Unchanged file: 304 with empty body, no re-download
+    second = client.get("/reports/2026-Q1.html", headers={"If-None-Match": etag})
+    assert second.status_code == 304
+    assert not second.content
+
+    # Regenerated report (mtime bumped) => new ETag, full 200 again
+    report.write_text("<html>高盛 Q1 报告 v2</html>", encoding="utf-8")
+    os.utime(report, (report.stat().st_atime, report.stat().st_mtime + 1))
+    third = client.get("/reports/2026-Q1.html", headers={"If-None-Match": etag})
+    assert third.status_code == 200
+    assert "v2" in third.text
+    assert third.headers["etag"] != etag
+
+
+def test_api_holdings_returns_full_list(signals_db):
+    storage.save_holdings(
+        GOLDMAN_CIK,
+        "2026-Q1",
+        [
+            {"cusip": "111", "name_of_issuer": "Small Co", "value": 100.0},
+            {"cusip": "222", "name_of_issuer": "Big Co", "value": 900.0},
+            {"cusip": "333", "name_of_issuer": "Mid Co", "value": 500.0},
+        ],
+    )
+
+    response = client.get("/api/holdings/2026-Q1")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["quarter"] == "2026-Q1"
+    assert data["total"] == 3
+    # Sorted by value desc, serialized as name/value pairs
+    assert [h["name"] for h in data["holdings"]] == ["Big Co", "Mid Co", "Small Co"]
+    assert data["holdings"][0]["value"] == 900.0
+
+
+def test_api_holdings_not_found(signals_db):
+    response = client.get("/api/holdings/2099-Q4")
+    assert response.status_code == 404
+    assert response.json()["detail"] == "该季度暂无持仓数据"
+
+
+def test_api_holdings_invalid_quarter_returns_422(signals_db):
+    response = client.get("/api/holdings/2026-Q5")
+    assert response.status_code == 422
 
 
 @pytest.fixture
