@@ -2,7 +2,47 @@
 from datetime import datetime, timezone
 
 
-from src.signals.base import Signal, SignalStrength
+from src.signals.base import Signal, SignalStrength, smart_truncate
+
+
+class TestSmartTruncate:
+    def test_short_text_unchanged(self):
+        text = "高盛增持 Apple，持仓市值上升。"
+        assert smart_truncate(text) == text
+
+    def test_empty_and_none(self):
+        assert smart_truncate("") == ""
+        assert smart_truncate(None) == ""
+
+    def test_long_text_cut_at_sentence_boundary(self):
+        # 300 chars of first sentence + second sentence that overflows.
+        first = "甲" * 298 + "。"
+        rest = "乙" * 300
+        out = smart_truncate(first + rest, max_len=400)
+        assert out == first + "…"
+
+    def test_boundary_too_early_falls_back_to_hard_cut(self):
+        # Sentence ends at char 10 (< max_len // 2), rest has no punctuation.
+        text = "短句。" + "长" * 500
+        out = smart_truncate(text, max_len=400)
+        assert out.endswith("…")
+        assert not out.endswith("。…")
+        assert len(out) == 401  # 400 chars + ellipsis
+
+    def test_no_punctuation_hard_cut(self):
+        text = "字" * 600
+        out = smart_truncate(text, max_len=400)
+        assert out == "字" * 400 + "…"
+
+    def test_english_sentence_boundary(self):
+        first = "word " * 69 + "end. "  # boundary lands in the back half
+        rest = "tail " * 100
+        out = smart_truncate(first + rest, max_len=400)
+        assert out == first.rstrip() + "…"
+
+    def test_exact_length_unchanged(self):
+        text = "字" * 400
+        assert smart_truncate(text, max_len=400) == text
 
 
 class TestSignal:

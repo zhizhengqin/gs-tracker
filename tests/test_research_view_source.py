@@ -123,6 +123,31 @@ class TestResearchViewSource:
         assert "Test Art" in signals[0].title  # URL-derived fallback
 
     @pytest.mark.asyncio
+    async def test_long_description_cut_at_sentence_with_ellipsis(self):
+        """Long article descriptions keep up to 400 chars and end cleanly."""
+        long_desc = "First sentence is here. " * 15 + "Tail goes on and on " * 30
+        article = f"""<!DOCTYPE html><html><head>
+<meta name="description" content="{long_desc}">
+<script type="application/ld+json">
+{{"headline":"Long Desc","datePublished":"2026-07-15T00:00:00"}}
+</script></head></html>"""
+        source = ResearchViewSource(max_items=1)
+        mock_get = AsyncMock()
+        mock_get.side_effect = [
+            _mock_httpx_response(200, SITEMAP_ONE),
+            _mock_httpx_response(200, article),
+        ]
+        source.client.get = mock_get
+
+        signals, _ = await source.fetch_since()
+        await source.close()
+
+        assert len(signals) == 1
+        summary = signals[0].summary
+        assert len(summary) > 200  # old hard limit raised
+        assert summary.endswith("…")
+
+    @pytest.mark.asyncio
     async def test_sitemap_error_returns_empty(self):
         source = ResearchViewSource()
         mock_get = AsyncMock()

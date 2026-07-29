@@ -1,7 +1,21 @@
 """Tests for src.signals.ai_triage."""
+import json
+
 import pytest
 
-from src.signals.ai_triage import AiTriage, TriageResult
+from src.signals.ai_triage import AiTriage, TriageResult, parse_items_json
+
+
+def test_parse_items_json_summary_cut_at_sentence_with_ellipsis():
+    """Item summaries keep up to 400 chars and end at a sentence boundary."""
+    long_summary = "高盛观点如下，" + "具体分析内容，" * 49 + "。" + "后续" * 200
+    text = json.dumps({"items": [{"title": "T", "summary": long_summary, "url": "https://a.com/x"}]})
+    items = parse_items_json(text, max_items=5)
+    assert len(items) == 1
+    summary = items[0]["summary"]
+    assert len(summary) > 300  # old hard limit raised
+    assert summary.endswith("…")
+    assert summary[:-1].endswith("。")  # cut at sentence boundary
 
 LLM_CFG = {"api_key": None, "auth_token": "tok", "base_url": "https://x.test", "model": "m"}
 NO_CFG = {"api_key": None, "auth_token": None, "base_url": None, "model": "m"}

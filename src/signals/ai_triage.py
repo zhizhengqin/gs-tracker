@@ -12,6 +12,8 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Callable, Optional
 
+from src.signals.base import smart_truncate
+
 logger = logging.getLogger(__name__)
 
 BATCH_SIZE = 20
@@ -200,7 +202,7 @@ def parse_items_json(text: str, max_items: int) -> Optional[list]:
             url = str(it.get("url") or "").strip()
             result.append({
                 "title": str(it["title"]).strip()[:120],
-                "summary": str(it.get("summary") or "").strip()[:300],
+                "summary": smart_truncate(str(it.get("summary") or "")),
                 "url": url if url.startswith(("http://", "https://")) else None,
             })
     return result

@@ -123,6 +123,29 @@ class TestNewsSource:
         await source.close()
 
     @pytest.mark.asyncio
+    async def test_long_summary_cut_at_sentence_not_mid_thought(self, httpx_mock: HTTPXMock):
+        """Long RSS summaries keep up to 400 chars and end at a sentence
+        boundary with an ellipsis instead of a silent mid-sentence cut."""
+        first = "高盛发布研报，" + "详细分析市场走势，" * 25  # ~233 chars, ends below
+        first = first.rstrip("，") + "。"
+        rest = "后续内容" * 100
+        rss = f"""<?xml version="1.0"?>
+        <rss version="2.0"><channel>
+          <item><title>高盛研报：市场展望</title><link>https://a.com/1</link>
+          <description>{first}{rest}</description>
+          <pubDate>Mon, 15 May 2026 10:00:00 GMT</pubDate></item>
+        </channel></rss>"""
+        httpx_mock.add_response(text=rss, status_code=200)
+        source = NewsSource(rss_urls=["https://example.com/rss"])
+        signals = await source.fetch("2026-Q2")
+        assert len(signals) == 1
+        summary = signals[0].summary
+        assert len(summary) > 200  # old hard limit raised
+        assert summary.endswith("…")
+        assert summary[:-1].endswith("。")  # cut at sentence boundary
+        await source.close()
+
+    @pytest.mark.asyncio
     async def test_custom_source_name_and_all_policy(self, httpx_mock: HTTPXMock):
         """filter_policy='all' keeps non-GS items as LOW, tagged with source_name."""
         rss = """<?xml version="1.0"?>

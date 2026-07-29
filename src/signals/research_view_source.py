@@ -20,7 +20,7 @@ from typing import List, Optional, Tuple
 
 import httpx
 
-from src.signals.base import Signal, SignalStrength
+from src.signals.base import Signal, SignalStrength, smart_truncate
 
 logger = logging.getLogger(__name__)
 
@@ -165,7 +165,7 @@ class ResearchViewSource:
                     title=f"高盛研究: {headline}",
                     source="research_view",
                     published_at=published_at,
-                    summary=description[:200] if description else headline,
+                    summary=smart_truncate(description) if description else headline,
                     companies=[],
                     strength=SignalStrength.HIGH,
                     url=url,

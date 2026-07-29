@@ -6,6 +6,28 @@ from enum import Enum
 from typing import List, Optional, Protocol, Tuple
 
 
+SUMMARY_MAX_LEN = 400
+
+_SENT_END_CHARS = "。！？!?；;."
+
+
+def smart_truncate(text: str, max_len: int = SUMMARY_MAX_LEN) -> str:
+    """Truncate text to ~max_len chars without cutting mid-sentence.
+
+    Prefers to end at the last sentence-ending punctuation in the back half
+    of the window; falls back to a hard cut when no usable boundary exists.
+    Appends '…' whenever content was dropped.
+    """
+    text = (text or "").strip()
+    if len(text) <= max_len:
+        return text
+    window = text[:max_len]
+    cut = max(window.rfind(ch) for ch in _SENT_END_CHARS)
+    if cut >= max_len // 2:
+        return window[: cut + 1].rstrip() + "…"
+    return window.rstrip() + "…"
+
+
 class SignalStrength(Enum):
     HIGH = "high"
     MEDIUM = "medium"

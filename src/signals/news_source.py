@@ -9,7 +9,7 @@ import feedparser
 import httpx
 
 from src.config import SIGNAL_LOOKBACK_DAYS, SEC_USER_AGENT
-from src.signals.base import Signal, SignalStrength
+from src.signals.base import Signal, SignalStrength, smart_truncate
 
 logger = logging.getLogger(__name__)
 
@@ -190,7 +190,7 @@ class NewsSource:
                 title=title,
                 source=self.source_name,
                 published_at=published_at,
-                summary=summary_text[:200] if summary_text else title,
+                summary=smart_truncate(summary_text) if summary_text else title,
                 companies=companies if companies else ["GS"],
                 strength=strength,
                 url=item.get("link") or None,
