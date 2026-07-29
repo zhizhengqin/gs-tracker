@@ -92,7 +92,7 @@ body {
     list-style: none;
 }
 .nav-strip li {
-    font-size: 0.78rem;
+    font-size: 0.95rem;
     font-weight: 600;
     letter-spacing: 0.04em;
     color: var(--ink-muted);
