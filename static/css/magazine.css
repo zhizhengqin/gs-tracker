@@ -420,8 +420,13 @@ tr:hover td { background: var(--paper); }
 .confidence-bar .fill { height: 100%; border-radius: 2px; background: var(--accent); }
 
 .empty-state { text-align: center; padding: 60px 20px; color: var(--ink-muted); }
-.empty-state .icon { font-size: 3em; margin-bottom: 12px; }
 .loading { text-align: center; padding: 40px; color: var(--ink-muted); }
+
+/* Inline status dots (replace emoji indicators) */
+.dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; }
+.dot-high { background: var(--accent); }
+.dot-medium { background: var(--warn); }
+.dot-low { background: var(--ok); }
 
 /* ====== 设置页 ====== */
 .settings-section { margin-bottom: 28px; }

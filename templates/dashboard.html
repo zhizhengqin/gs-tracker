@@ -13,7 +13,7 @@
 <!-- Mobile topbar + drawer mask (desktop: display:none) -->
 <div class="mobile-topbar">
     <button class="menu-btn" onclick="toggleDrawer()" aria-label="菜单">☰</button>
-    <span class="page-title" id="mobilePageTitle">📡 每日情报</span>
+    <span class="page-title" id="mobilePageTitle">每日情报</span>
 </div>
 <div class="mobile-mask" id="mobileMask" onclick="toggleDrawer(false)"></div>
 
@@ -57,9 +57,9 @@
         </div>
         <h3 class="mt-24">优先级</h3>
         <div class="signal-filter">
-            <label><input type="checkbox" checked onchange="onFilterChange()" class="filter-strength" value="high"> 🔴 高优先级</label>
-            <label><input type="checkbox" checked onchange="onFilterChange()" class="filter-strength" value="medium"> 🟡 中优先级</label>
-            <label><input type="checkbox" checked onchange="onFilterChange()" class="filter-strength" value="low"> 🟢 低优先级</label>
+            <label><input type="checkbox" checked onchange="onFilterChange()" class="filter-strength" value="high"> <span class="dot dot-high"></span>高优先级</label>
+            <label><input type="checkbox" checked onchange="onFilterChange()" class="filter-strength" value="medium"> <span class="dot dot-medium"></span>中优先级</label>
+            <label><input type="checkbox" checked onchange="onFilterChange()" class="filter-strength" value="low"> <span class="dot dot-low"></span>低优先级</label>
         </div>
     
     </div>
@@ -88,7 +88,7 @@
 <template id="guideTpl">
 <div class="guide-doc">
     <div class="guide-hero">
-        <h2>📖 系统使用指南</h2>
+        <h2>系统使用指南</h2>
         <p>写给完全不懂金融和编程的你：看完这一页，就能独立使用 GS-Tracker。</p>
         <div class="guide-toc">
             <a href="#g-what">系统是什么</a>
@@ -104,28 +104,28 @@
         <h3>一、这个系统是干什么的？</h3>
         <p>一句话：<strong>自动盯着高盛（Goldman Sachs）在公开市场上的各种动作，每天汇总成一份中文情报送到你眼前。</strong></p>
         <p>美国证监会（SEC）要求像高盛这样的大机构定期公开披露大量信息，比如买了哪些股票、公司发生了什么大事。这些信息虽然公开，但分散在不同网站、全是英文、格式晦涩。本系统会自动把它们抓回来，由 AI 筛选出重要内容并翻译成中文，整理成你每天花几分钟就能看完的情报日报。</p>
-        <div class="warn">⚠️ 所有信息都来自公开渠道，且存在不同程度的滞后；本系统仅供学习参考，<strong>不构成任何投资建议</strong>。</div>
+        <div class="warn">所有信息都来自公开渠道，且存在不同程度的滞后；本系统仅供学习参考，<strong>不构成任何投资建议</strong>。</div>
     </div>
 
     <div class="card" id="g-start">
         <h3>二、三分钟快速上手</h3>
         <ol>
-            <li><strong>打开网页</strong>，默认就是「📡 每日情报」页：最上面是 AI 自动生成的今日日报，下面是一条一条的原始信号。</li>
-            <li>今天还没有情报？点左侧边栏的 <strong>「📡 手动运行每日情报」</strong>，等一两分钟，页面会自动刷新出结果。</li>
-            <li>对某条信号感兴趣，点卡片上的 <strong>「🤖 AI 解读」</strong>，AI 会用中文解释这条消息意味着什么。</li>
-            <li>想看高盛上个季度到底买了什么股票？点左侧 <strong>「📅 季度报告」</strong>。</li>
+            <li><strong>打开网页</strong>，默认就是「每日情报」页：最上面是 AI 自动生成的今日日报，下面是一条一条的原始信号。</li>
+            <li>今天还没有情报？点左侧边栏的 <strong>「运行每日情报」</strong>，等一两分钟，页面会自动刷新出结果。</li>
+            <li>对某条信号感兴趣，点卡片上的 <strong>「AI 解读」</strong>，AI 会用中文解释这条消息意味着什么。</li>
+            <li>想看高盛上个季度到底买了什么股票？点左侧 <strong>「季度报告」</strong>。</li>
             <li>手机上也能用：点左上角 <strong>☰</strong> 展开同样的菜单，功能完全一致。</li>
         </ol>
     </div>
 
     <div class="card" id="g-sources">
         <h3>三、信号源科普（重点）</h3>
-        <p>系统的情报来自多个「信号源」，左侧边栏的「🔍 信号筛选」里可以按来源勾选/取消。下面逐一解释每个来源是什么意思。</p>
+        <p>系统的情报来自多个「信号源」，左侧边栏的「信号筛选」里可以按来源勾选/取消。下面逐一解释每个来源是什么意思。</p>
 
         <h4><span class="src-tag t13f">13F</span>13F 持仓 —— 高盛每个季度买了什么股票</h4>
         <p><strong>是什么：</strong>SEC 规定，凡是管理资产超过 1 亿美元的投资机构，每个季度结束后都必须提交一份叫「13F」的表格，如实列出自己持有的全部美股（哪些公司、多少股、值多少钱）。高盛也必须提交。</p>
         <p><strong>有什么用：</strong>这是唯一能直接看到「高盛买了什么」的官方渠道。对比前后两个季度的 13F，就能看出它在加仓什么、抛售什么。</p>
-        <div class="warn">⚠️ 两个重要局限：① <strong>滞后最长 45 天</strong>——比如一季度的持仓最晚 5 月 15 日才披露，你看到的是一两个月前的动作；② 13F 只包含<strong>美股多头持仓</strong>，看不到做空、债券、期权等操作。所以它适合观察中长期布局，不适合抄短线作业。</div>
+        <div class="warn">两个重要局限：① <strong>滞后最长 45 天</strong>——比如一季度的持仓最晚 5 月 15 日才披露，你看到的是一两个月前的动作；② 13F 只包含<strong>美股多头持仓</strong>，看不到做空、债券、期权等操作。所以它适合观察中长期布局，不适合抄短线作业。</div>
 
         <h4><span class="src-tag t8k">8-K</span>SEC 8-K —— 公司突发大事的「官方快讯」</h4>
         <p><strong>是什么：</strong>上市公司一旦发生重大事件，必须在 <strong>4 个工作日</strong>内向 SEC 提交一份「8-K」临时报告。所谓重大事件包括：高管辞职或上任、并购收购、财报发布、债务违约、退市风险等。</p>
@@ -152,7 +152,7 @@
             <li><strong>高盛研究</strong>：高盛官方发布的研究观点和市场展望。</li>
             <li><strong>新闻</strong>：主流财经媒体中与高盛相关的报道（系统会自动过滤和高盛无关的噪音）。</li>
             <li><strong>宏观指标</strong>：高盛经济学家对美联储利率、GDP 等宏观问题的最新判断。</li>
-            <li><strong>自定义网页 / 主题订阅</strong>：在「⚙️ 设置」里添加你关心的网页或关键词主题，系统会一并盯梢，由 AI 预筛出相关内容。</li>
+            <li><strong>自定义网页 / 主题订阅</strong>：在「设置」里添加你关心的网页或关键词主题，系统会一并盯梢，由 AI 预筛出相关内容。</li>
         </ul>
     </div>
 
@@ -160,29 +160,29 @@
         <h3>四、信号优先级怎么看？</h3>
         <p>每条信号都会被自动评一个优先级，左侧筛选区可以按优先级过滤：</p>
         <ul>
-            <li>🔴 <strong>高优先级</strong>：值得当天就看，比如大额持仓变动、高管变动、官方重大公告。</li>
-            <li>🟡 <strong>中优先级</strong>：有一定参考价值，扫一眼标题即可。</li>
-            <li>🟢 <strong>低优先级</strong>：背景信息，知道有这回事就行。</li>
+            <li><span class="dot dot-high"></span><strong>高优先级</strong>：值得当天就看，比如大额持仓变动、高管变动、官方重大公告。</li>
+            <li><span class="dot dot-medium"></span><strong>中优先级</strong>：有一定参考价值，扫一眼标题即可。</li>
+            <li><span class="dot dot-low"></span><strong>低优先级</strong>：背景信息，知道有这回事就行。</li>
         </ul>
-        <div class="tip">💡 日常用法：只看「🔴 高」加顶部 AI 日报，一分钟掌握全局；有空再展开中低优先级。</div>
+        <div class="tip">日常用法：只看「高优先级」加顶部 AI 日报，一分钟掌握全局；有空再展开中低优先级。</div>
     </div>
 
     <div class="card" id="g-pages">
         <h3>五、各个页面怎么用</h3>
-        <h4>📡 每日情报（默认页）</h4>
+        <h4>每日情报（默认页）</h4>
         <ul>
             <li><strong>顶部 AI 日报</strong>：当天所有信号的 AI 中文汇总，先读它。</li>
-            <li><strong>今日情报列表</strong>：一条条原始信号，点「🤖 AI 解读」可看单条详解（结果有缓存，不重复消耗 AI 额度）。</li>
+            <li><strong>今日情报列表</strong>：一条条原始信号，点「AI 解读」可看单条详解（结果有缓存，不重复消耗 AI 额度）。</li>
             <li><strong>查看日期</strong>：页面顶部可选择任意历史日期回溯当天的情报。</li>
             <li><strong>更早的情报</strong>：页面底部折叠区，展开可看最近 30 天。</li>
-            <li><strong>🔄 重新生成日报</strong>：情报是全天陆续抓进来的，如果日报生成得早、后来又来了新情报，卡片上会出现橙色提醒（"生成时只有 N 条，现在已有 M 条"），点卡片底部的「🔄 重新生成」即可让 AI 基于最新情报重写一份。</li>
+            <li><strong>重新生成日报</strong>：情报是全天陆续抓进来的，如果日报生成得早、后来又来了新情报，卡片上会出现橙色提醒（"生成时只有 N 条，现在已有 M 条"），点卡片底部的「重新生成」即可让 AI 基于最新情报重写一份。</li>
         </ul>
-        <h4>📅 季度报告</h4>
+        <h4>季度报告</h4>
         <ul>
             <li>页面顶部下拉框选择季度，下方标签栏可切换：<strong>全部</strong>（一屏到底的长页面，依次为：AI 季度洞察 → 重点标的分析 → 持仓变化 → 高优先级信号 → 前十大持仓）、<strong>概览</strong>（关键数据）、<strong>AI 分析</strong>（含 AI 季度洞察：调仓解读、A 股题材映射、宏观看点）、<strong>持仓变化</strong>（与上一季度对比：新建仓/增持/减持/清仓）、<strong>多源信号</strong>（当季相关情报）、<strong>持仓明细</strong>（默认按公司汇总，可切换"原始明细"）。</li>
-            <li><strong>AI 季度洞察</strong>和<strong>重点标的分析</strong>都可以点「🔄 重新生成」刷新内容。</li>
+            <li><strong>AI 季度洞察</strong>和<strong>重点标的分析</strong>都可以点「重新生成」刷新内容。</li>
         </ul>
-        <h4>⚙️ 设置</h4>
+        <h4>设置</h4>
         <ul>
             <li><strong>大模型管理</strong>：配置 AI 的 API Key（支持 Kimi 等 Anthropic 兼容接口），可添加多个模型并设置默认。</li>
             <li><strong>信号源开关</strong>：不想看的来源直接关掉，流水线会跳过它。</li>
@@ -190,10 +190,10 @@
         </ul>
         <h4>左侧两个按钮的区别</h4>
         <ul>
-            <li><strong>📡 手动运行每日情报</strong>：立刻抓取今天的多源信号并生成日报（平时系统每天自动跑，这个按钮用于你想「现在就要」的时刻）。</li>
-            <li><strong>▶️ 手动运行季度对账</strong>：抓取最新的 13F 持仓并生成季度报告（每季度跑一次即可，在 13F 披露截止日后使用）。</li>
+            <li><strong>运行每日情报</strong>：立刻抓取今天的多源信号并生成日报（平时系统每天自动跑，这个按钮用于你想「现在就要」的时刻）。</li>
+            <li><strong>运行季度对账</strong>：抓取最新的 13F 持仓并生成季度报告（每季度跑一次即可，在 13F 披露截止日后使用）。</li>
         </ul>
-        <p>两个按钮点击后都会出现<strong>实时进度面板</strong>：左侧显示流水线的四个步骤，右侧逐个信号源显示抓取状态（⏳ 进行中 → ✅ 成功 / ❌ 失败），让你清楚知道系统正在做什么。</p>
+        <p>两个按钮点击后都会出现<strong>实时进度面板</strong>：左侧显示流水线的四个步骤，右侧逐个信号源显示抓取状态（进行中 → 成功 / 失败），让你清楚知道系统正在做什么。</p>
     </div>
 
     <div class="card" id="g-faq">
@@ -203,14 +203,14 @@
         <p><strong>Q：为什么有些新闻看起来和高盛关系不大？</strong><br>
         A：系统默认只保留与高盛相关的新闻并会定期清理噪音；如有个别漏网之鱼，可在设置里关闭「新闻」源，或调整自定义主题。</p>
         <p><strong>Q：日报里写的条数和下面的实际情报数量对不上？</strong><br>
-        A：情报是全天陆续入库的，日报生成之后再抓到的新情报不会自动改摘要。这时卡片上会出现橙色提醒，点「🔄 重新生成」就能更新到最新内容。</p>
+        A：情报是全天陆续入库的，日报生成之后再抓到的新情报不会自动改摘要。这时卡片上会出现橙色提醒，点「重新生成」就能更新到最新内容。</p>
         <p><strong>Q：AI 解读和日报会重复消耗额度吗？</strong><br>
         A：不会。单条解读和每日日报都有缓存，同一天同一内容只调用一次 AI；只有你主动点「重新生成」才会再调用一次。</p>
         <p><strong>Q：我的 API Key 安全吗？</strong><br>
         A：Key 只保存在你自己服务器的本地数据库里，不会外传；代码中也没有硬编码任何密钥。</p>
         <p><strong>Q：手机上功能完整吗？</strong><br>
         A：完整。点左上角 ☰ 展开菜单，所有功能都能使用。</p>
-        <div class="warn">⚠️ 再次提醒：本系统所有内容仅供学习参考，不构成投资建议。投资有风险，决策需谨慎。</div>
+        <div class="warn">再次提醒：本系统所有内容仅供学习参考，不构成投资建议。投资有风险，决策需谨慎。</div>
     </div>
 </div>
 </template>
@@ -262,7 +262,7 @@ async function init() {
         const whoEl = document.getElementById('currentUser');
         if (whoEl) {
             const roleName = me.role === 'admin' ? '管理员' : '普通用户';
-            whoEl.innerHTML = `👤 ${esc(me.username)}<span class="role-tag">${roleName}</span>`;
+            whoEl.innerHTML = `${esc(me.username)}<span class="role-tag">${roleName}</span>`;
         }
         if (me.role !== 'admin') {
             const settingsNav = document.querySelector('#mainNav li[data-view="settings"]');
@@ -386,7 +386,7 @@ async function runPipeline() {
             btn.disabled = false;
             return;
         }
-        setRunMsg('⏳ 流水线运行中…（通常需要几分钟）', 'info');
+        setRunMsg('流水线运行中…（通常需要几分钟）', 'info');
         showProgressPanel();
         attachPipelineStream();
     } catch (e) {
@@ -422,9 +422,9 @@ function attachPipelineStream() {
                 btn.disabled = false;
                 const errCount = (data.errors || []).length;
                 if (errCount) {
-                    setRunMsg('⚠️ 部分完成：' + (data.signal_count || 0) + ' 条信号，' + errCount + ' 个源出错', 'err');
+                    setRunMsg('部分完成：' + (data.signal_count || 0) + ' 条信号，' + errCount + ' 个源出错', 'err');
                 } else {
-                    setRunMsg('✅ 数据已更新：' + (data.signal_count || 0) + ' 条信号', 'ok');
+                    setRunMsg('数据已更新：' + (data.signal_count || 0) + ' 条信号', 'ok');
                 }
                 updatePipelinePanel(sourceStates, steps, data);
                 refreshReports();
@@ -432,7 +432,7 @@ function attachPipelineStream() {
                 _pipelineEventSource.close();
                 _pipelineEventSource = null;
                 btn.disabled = false;
-                setRunMsg('❌ 运行失败：' + data.error, 'err');
+                setRunMsg('运行失败：' + data.error, 'err');
                 updatePipelinePanel(sourceStates, steps, {signal_count: 0, errors: [data.error]});
             }
         } catch(ex) { console.error('SSE parse error', ex); }
@@ -442,7 +442,7 @@ function attachPipelineStream() {
         // EventSource auto-reconnects; the server replays the job's event log,
         // so a proxy timeout mid-run just re-syncs the panel from the log.
         if (_pipelineEventSource) {
-            setRunMsg('⏳ 连接中断，正在重连…', 'info');
+            setRunMsg('连接中断，正在重连…', 'info');
         }
     };
 }
@@ -452,22 +452,19 @@ function updatePipelinePanel(sourceStates, steps, summary) {
     const panel = document.getElementById('progressPanel');
     if (!panel) return;
     const sourceLabels = {'13F': '13F 持仓', '8-K': 'SEC 8-K 重大事件', 'news': 'RSS 新闻', ..._sourceLabels};
-    const statusIcons = {'waiting': '⏳', 'ok': '✅', 'error': '❌'};
     const statusColors = {'waiting': '#999', 'ok': '#2e7d32', 'error': '#d32f2f'};
     const stepOrder = ['holdings', 'analysis', 'comparison', 'report'];
     const stepDefaults = {'holdings': '抓取 13F 持仓', 'analysis': 'AI 持仓分析', 'comparison': '季度持仓对比', 'report': '生成季度报告'};
-    const stepIcons = {'running': '⏳', 'done': '✅', 'error': '❌'};
 
-    let html = '<h3 class="prog-title">🔄 季度对账进度</h3>';
+    let html = '<h3 class="prog-title">季度对账进度</h3>';
 
     html += '<div class="prog-step">';
     stepOrder.forEach(key => {
         const st = steps[key];
-        const icon = st ? (stepIcons[st.status] || '⏳') : '⚪';
         const color = st && st.status === 'done' ? '#2e7d32' : st && st.status === 'error' ? '#d32f2f' : '#999';
         const label = st && st.label ? st.label : stepDefaults[key];
         html += `<div class="prog-row">
-            <span style="color:${color};">${icon} ${esc(label)}</span>
+            <span style="color:${color};"><span class="dot" style="background:${color};"></span>${esc(label)}</span>
             <span class="prog-detail">${st && st.detail ? esc(st.detail) : ''}</span>
         </div>`;
     });
@@ -476,11 +473,10 @@ function updatePipelinePanel(sourceStates, steps, summary) {
     if (Object.keys(sourceStates).length) {
         html += '<div class="prog-more">';
         for (const [name, state] of Object.entries(sourceStates)) {
-            const icon = statusIcons[state.status] || '⏳';
             const color = statusColors[state.status] || '#999';
             const label = sourceLabels[name] || name;
             html += `<div class="prog-row-lg">
-                <span class="prog-label">${icon} ${esc(label)}</span>
+                <span class="prog-label"><span class="dot" style="background:${color};"></span>${esc(label)}</span>
                 <span class="prog-status" style="color:${color};">
                     ${state.status === 'ok' ? state.count + ' 条信号' : state.status === 'error' ? esc(state.error).substring(0,50) : '等待中'}
                 </span>
@@ -492,11 +488,11 @@ function updatePipelinePanel(sourceStates, steps, summary) {
     if (summary) {
         const errCount = (summary.errors || []).length;
         html += `<div class="prog-summary">
-            <strong>📊 运行报告</strong><br>
+            <strong>运行报告</strong><br>
             <span class="prog-line">对账季度：${esc(summary.quarter || '')}</span><br>
             <span class="prog-line">信号总数：${summary.signal_count || 0} 条</span><br>
-            <span class="prog-line ${errCount ? 'err' : 'ok'}">${errCount ? '⚠️ ' + errCount + ' 个源出错' : '✅ 全部成功'}</span>
-            ${(summary.errors || []).map(e => `<div class="prog-err-line">🟡 ${esc(String(e)).substring(0, 120)}</div>`).join('')}
+            <span class="prog-line ${errCount ? 'err' : 'ok'}">${errCount ? errCount + ' 个源出错' : '全部成功'}</span>
+            ${(summary.errors || []).map(e => `<div class="prog-err-line">${esc(String(e)).substring(0, 120)}</div>`).join('')}
         </div>
         <button class="run-btn mt-12" onclick="document.getElementById('progressPanel').style.display='none'">关闭</button>`;
     }
@@ -516,7 +512,7 @@ let _dailyEventSource = null;
 async function runDailyIntel() {
     const btn = document.getElementById('runDailyBtn');
     btn.disabled = true;
-    setDailyMsg('⏳ 正在启动…', 'info');
+    setDailyMsg('正在启动…', 'info');
 
     // Show progress panel
     showProgressPanel();
@@ -549,9 +545,9 @@ async function runDailyIntel() {
                 const totalNew = data.new_signals || 0;
                 const hasErrors = (data.errors || []).length > 0;
                 if (hasErrors) {
-                    setDailyMsg('⚠️ 部分完成：' + totalNew + ' 条新信号，' + data.errors.length + ' 个源出错', 'err');
+                    setDailyMsg('部分完成：' + totalNew + ' 条新信号，' + data.errors.length + ' 个源出错', 'err');
                 } else {
-                    setDailyMsg('✅ 情报已更新：' + totalNew + ' 条新信号', 'ok');
+                    setDailyMsg('情报已更新：' + totalNew + ' 条新信号', 'ok');
                 }
                 updateProgressPanel(sourceStates, true, data);
                 // Reload the active daily view (today view by default)
@@ -569,19 +565,19 @@ async function runDailyIntel() {
             _dailyEventSource = null;
         }
         btn.disabled = false;
-        setDailyMsg('❌ SSE 连接中断，请手动刷新页面查看结果', 'err');
+        setDailyMsg('SSE 连接中断，请手动刷新页面查看结果', 'err');
         updateProgressPanel(sourceStates, true);
     };
 }
 
 function showProgressPanel() {
     let panel = document.getElementById('progressPanel');
-    if (panel) { panel.style.display = 'block'; panel.innerHTML = '<div class="loading">⏳ 正在启动...</div>'; return; }
+    if (panel) { panel.style.display = 'block'; panel.innerHTML = '<div class="loading">正在启动...</div>'; return; }
 
     panel = document.createElement('div');
     panel.id = 'progressPanel';
     panel.style.cssText = 'position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:#fff;border:1px solid var(--rule);border-radius:4px;box-shadow:0 8px 32px rgba(0,0,0,0.12);padding:24px;z-index:1000;min-width:340px;max-width:90vw;';
-    panel.innerHTML = '<div class="loading">⏳ 正在启动...</div>';
+    panel.innerHTML = '<div class="loading">正在启动...</div>';
     document.body.appendChild(panel);
 }
 
@@ -590,17 +586,15 @@ function updateProgressPanel(sourceStates, isComplete, summary) {
     if (!panel) return;
 
     const sourceLabels = {'8-K':'SEC 8-K 重大事件','13D/13G':'13D/13G 大动作','research_view':'高盛研究观点','news':'RSS 新闻','macro_view':'FRED 宏观', ..._sourceLabels};
-    const statusIcons = {'waiting':'⏳','ok':'✅','error':'❌'};
     const statusColors = {'waiting':'#999','ok':'#2e7d32','error':'#d32f2f'};
 
-    let html = '<h3 class="prog-title">🔄 每日情报抓取进度</h3>';
+    let html = '<h3 class="prog-title">每日情报抓取进度</h3>';
     for (const [name, state] of Object.entries(sourceStates)) {
         if (name === '__notes') continue;
-        const icon = statusIcons[state.status] || '⏳';
         const color = statusColors[state.status] || '#999';
         const label = sourceLabels[name] || name;
         html += `<div class="prog-row-lg">
-            <span class="prog-label">${icon} ${esc(label)}</span>
+            <span class="prog-label"><span class="dot" style="background:${color};"></span>${esc(label)}</span>
             <span class="prog-status" style="color:${color};">
                 ${state.status === 'ok' ? state.count + ' 条信号' : state.status === 'error' ? esc(state.error).substring(0,50) : '等待中'}
             </span>
@@ -608,15 +602,15 @@ function updateProgressPanel(sourceStates, isComplete, summary) {
     }
 
     (sourceStates.__notes || []).forEach(n => {
-        html += `<div class="prog-err-line">🟡 ${esc(sourceLabels[n.source] || n.source)}：${esc(n.note)}</div>`;
+        html += `<div class="prog-err-line">${esc(sourceLabels[n.source] || n.source)}：${esc(n.note)}</div>`;
     });
 
     if (isComplete && summary) {
         html += `<div class="prog-summary">
-            <strong>📊 运行报告</strong><br>
+            <strong>运行报告</strong><br>
             <span class="prog-line">新增信号：${summary.new_signals || 0} 条</span><br>
             <span class="prog-line">参与评分：${summary.total_scored || 0} 条</span><br>
-            <span class="prog-line ${(summary.errors||[]).length ? 'err' : 'ok'}">${(summary.errors||[]).length ? '⚠️ ' + summary.errors.length + ' 个源出错' : '✅ 全部成功'}</span>
+            <span class="prog-line ${(summary.errors||[]).length ? 'err' : 'ok'}">${(summary.errors||[]).length ? summary.errors.length + ' 个源出错' : '全部成功'}</span>
         </div>
         <button class="run-btn mt-12" onclick="document.getElementById('progressPanel').style.display='none'">关闭</button>`;
     }
@@ -641,7 +635,7 @@ async function syncPipelineButton() {
         const st = await (await fetch('/api/pipeline/status')).json();
         if (st.running) {
             document.getElementById('runPipelineBtn').disabled = true;
-            setRunMsg('⏳ 流水线运行中…（通常需要几分钟）', 'info');
+            setRunMsg('流水线运行中…（通常需要几分钟）', 'info');
             showProgressPanel();
             attachPipelineStream();
         }
@@ -650,7 +644,7 @@ async function syncPipelineButton() {
         const ds = await (await fetch('/api/pipeline/run-daily/status')).json();
         if (ds.running) {
             document.getElementById('runDailyBtn').disabled = true;
-            setDailyMsg('⏳ 正在抓取最新信号…', 'info');
+            setDailyMsg('正在抓取最新信号…', 'info');
         }
     } catch (e) { /* status endpoint unreachable — leave button as-is */ }
 }
@@ -733,12 +727,12 @@ function extractHoldings(doc) {
 
 // ====== Quarter view render (selector + in-content tabs + panels) ======
 const QUARTER_TABS = [
-    ['all', '📑 全部'],
-    ['overview', '📊 概览'],
-    ['analysis', '🤖 AI 分析'],
-    ['changes', '📈 持仓变化'],
-    ['signals', '📡 多源信号'],
-    ['holdings', '📋 持仓明细'],
+    ['all', '全部'],
+    ['overview', '概览'],
+    ['analysis', 'AI 分析'],
+    ['changes', '持仓变化'],
+    ['signals', '多源信号'],
+    ['holdings', '持仓明细'],
 ];
 
 function previousQuarterOf(q) {
@@ -749,7 +743,7 @@ function previousQuarterOf(q) {
 function renderQuarterView() {
     const main = document.getElementById('mainContent');
     if (!reportData) {
-        main.innerHTML = '<div class="empty-state"><div class="icon">📭</div><p>暂无数据</p></div>';
+        main.innerHTML = '<div class="empty-state"><p>暂无数据</p></div>';
         return;
     }
     const options = reports.map((r, i) =>
@@ -757,9 +751,9 @@ function renderQuarterView() {
     ).join('');
     main.innerHTML = `
         <div class="daily-header">
-            <h2>📅 季度报告</h2>
+            <h2>季度报告</h2>
             <div class="date-picker-row">
-                <span>📅 选择季度：</span>
+                <span>选择季度：</span>
                 <select id="quarterSelect" onchange="loadQuarter(this.value)">${options}</select>
             </div>
         </div>
@@ -794,7 +788,7 @@ function renderQuarterPanel() {
             el.innerHTML = renderOverview(d);
             break;
         case 'analysis':
-            el.innerHTML = '<div id="insightSlot"><div class="loading">🤖 AI 季度洞察生成中...</div></div>' + renderAnalysis(d);
+            el.innerHTML = '<div id="insightSlot"><div class="loading">AI 季度洞察生成中...</div></div>' + renderAnalysis(d);
             loadQuarterInsight(d);
             break;
         case 'changes':
@@ -810,8 +804,8 @@ function renderQuarterPanel() {
             break;
         case 'all':
         default:
-            el.innerHTML = '<div id="insightSlot"><div class="loading">🤖 AI 季度洞察生成中...</div></div>'
-                + '<div id="tickerSlot"><div class="loading">🤖 重点标的分析生成中...</div></div>'
+            el.innerHTML = '<div id="insightSlot"><div class="loading">AI 季度洞察生成中...</div></div>'
+                + '<div id="tickerSlot"><div class="loading">重点标的分析生成中...</div></div>'
                 + '<div id="changesSlot"><div class="loading">加载中...</div></div>'
                 + renderHighSignalsCard(d)
                 + renderTopHoldingsCard(d);
@@ -826,7 +820,7 @@ async function loadQuarterInsight(d, force = false) {
     const slot = document.getElementById('insightSlot');
     if (!slot) return;
     const prev = previousQuarterOf(d.quarter);
-    if (force) slot.innerHTML = '<div class="loading">🤖 AI 季度洞察重新生成中...</div>';
+    if (force) slot.innerHTML = '<div class="loading">AI 季度洞察重新生成中...</div>';
     try {
         const query = prev ? `?previous=${prev}` : '';
         const resp = force
@@ -836,9 +830,9 @@ async function loadQuarterInsight(d, force = false) {
         if (r.report) {
             const formatted = formatMd(r.report);
             slot.innerHTML = `<div class="daily-report-card">
-                <h3>🤖 ${d.quarter} AI 季度洞察</h3>
+                <h3>${d.quarter} AI 季度洞察</h3>
                 <div>${formatted}</div>
-                <div class="mt-10"><button class="btn-sm" onclick="loadQuarterInsight(reportData, true)">🔄 重新生成</button></div>
+                <div class="mt-10"><button class="btn-sm" onclick="loadQuarterInsight(reportData, true)">重新生成</button></div>
             </div>`;
         } else {
             slot.innerHTML = '';
@@ -852,7 +846,7 @@ async function loadQuarterInsight(d, force = false) {
 async function loadTickerProfiles(d, force = false) {
     const slot = document.getElementById('tickerSlot');
     if (!slot) return;
-    if (force) slot.innerHTML = '<div class="loading">🤖 重点标的分析重新生成中...</div>';
+    if (force) slot.innerHTML = '<div class="loading">重点标的分析重新生成中...</div>';
     try {
         const resp = force
             ? await fetch(`/api/ticker-profiles/${d.quarter}/regenerate`, { method: 'POST' })
@@ -895,13 +889,13 @@ function renderTickerProfiles(quarter, profiles, error) {
         : (error ? '<p class="muted">AI 标的解析暂不可用，仅展示持仓数据。</p>' : '');
     return `
         <div class="page-header">
-            <h2>🎯 重点标的分析</h2>
+            <h2>重点标的分析</h2>
             <span class="meta">${quarter} · 前十大重仓</span>
         </div>
         <div class="card">
             ${cards}
             ${note}
-            <div class="mt-10"><button class="btn-sm" onclick="loadTickerProfiles(reportData, true)">🔄 重新生成</button></div>
+            <div class="mt-10"><button class="btn-sm" onclick="loadTickerProfiles(reportData, true)">重新生成</button></div>
         </div>
     `;
 }
@@ -911,7 +905,7 @@ function renderHighSignalsCard(d) {
     const high = d.signals.filter(s => s.strength === 'high');
     return `
         <div class="page-header">
-            <h2>🔴 高优先级信号</h2>
+            <h2>高优先级信号</h2>
             <span class="meta">共 ${high.length} 条 · ${d.quarter}</span>
         </div>
         <div class="card">
@@ -934,7 +928,7 @@ function renderTopHoldingsCard(d) {
     `).join('');
     return `
         <div class="page-header">
-            <h2>📋 前十大持仓</h2>
+            <h2>前十大持仓</h2>
             <span class="meta">${d.quarter} · 占比为占全部披露持仓市值比例</span>
         </div>
         <div class="card">
@@ -965,7 +959,7 @@ function renderChangeGroup(title, items, valueFn, badgeClass) {
 
 function renderChangesCard(quarter, previous, r) {
     if (r.message) {
-        return `<div class="card"><h3>📈 持仓变化（${quarter} vs ${previous}）</h3><p class="muted">上一季度暂无持仓数据，无法进行环比对比。</p></div>`;
+        return `<div class="card"><h3>持仓变化（${quarter} vs ${previous}）</h3><p class="muted">上一季度暂无持仓数据，无法进行环比对比。</p></div>`;
     }
     const hhi = Number(r.concentration_change || 0);
     const hhiText = `${hhi >= 0 ? '+' : ''}${hhi.toFixed(4)}（${hhi > 0 ? '持仓更集中' : hhi < 0 ? '持仓更分散' : '基本持平'}）`;
@@ -976,14 +970,14 @@ function renderChangesCard(quarter, previous, r) {
         return `${fmtYi(prev)} → ${fmtYi(cur)}（${p > 0 ? '+' : ''}${p}%）`;
     };
     return `<div class="card mb-14">
-            <h3>📈 持仓变化（${quarter} vs ${previous}）</h3>
+            <h3>持仓变化（${quarter} vs ${previous}）</h3>
             <p class="card-note">金额单位：美元 · 增减持阈值为市值变动 ±20% · 集中度变化：${hhiText}</p>
         </div>
         <div class="change-grid">
             ${renderChangeGroup('🆕 新建仓', r.new_positions, it => fmtYi(it.value), 'new')}
-            ${renderChangeGroup('📈 增持', r.increased_positions, pct, 'inc')}
-            ${renderChangeGroup('📉 减持', r.decreased_positions, pct, 'dec')}
-            ${renderChangeGroup('🗑️ 清仓', r.sold_positions, it => fmtYi(it.value), 'sold')}
+            ${renderChangeGroup('增持', r.increased_positions, pct, 'inc')}
+            ${renderChangeGroup('减持', r.decreased_positions, pct, 'dec')}
+            ${renderChangeGroup('清仓', r.sold_positions, it => fmtYi(it.value), 'sold')}
         </div>`;
 }
 
@@ -991,7 +985,7 @@ async function loadQuarterChanges(d, el) {
     if (!el) return;
     const prev = previousQuarterOf(d.quarter);
     if (!prev) {
-        el.innerHTML = `<div class="card"><h3>📈 持仓变化（对比上季）</h3><p class="muted">暂无上一季度数据，跑完下一季度对账后即可查看环比变化。</p></div>`;
+        el.innerHTML = `<div class="card"><h3>持仓变化（对比上季）</h3><p class="muted">暂无上一季度数据，跑完下一季度对账后即可查看环比变化。</p></div>`;
         return;
     }
     try {
@@ -1015,7 +1009,7 @@ function renderOverview(d) {
 
     return `
         <div class="page-header">
-            <h2>📊 ${d.quarter} 概览</h2>
+            <h2>${d.quarter} 概览</h2>
             <span class="meta">${d.generated_at || ''}</span>
         </div>
         <div class="stats-row">
@@ -1041,18 +1035,18 @@ function renderOverview(d) {
         </div>
 
         <div class="card">
-            <h3>📡 信号源状态</h3>
+            <h3>信号源状态</h3>
             <div class="chip-row">
                 ${Object.entries(d.sourceStatus).map(([src, status]) => `
                     <span class="src-status ${status === 'ok' ? 'ok' : 'warn'}">
-                        ${src}: ${status === 'ok' ? '✅' : '⚠️ 暂不可用'}
+                        ${src}: ${status === 'ok' ? '正常' : '暂不可用'}
                     </span>
                 `).join('')}
             </div>
         </div>
 
         <div class="card">
-            <h3>🎯 重点标的</h3>
+            <h3>重点标的</h3>
             <div class="chip-row-sm">
                 ${d.keyTickers.map(t => `<span class="ticker-chip">${t}</span>`).join('')}
             </div>
@@ -1060,7 +1054,7 @@ function renderOverview(d) {
 
         ${d.signals.length > 0 ? `
         <div class="card">
-            <h3>🔴 最新高优先级信号</h3>
+            <h3>最新高优先级信号</h3>
             ${d.signals.filter(s => s.strength === 'high').slice(0, 3).map(s => renderSignalCard(s)).join('')}
             ${d.signals.filter(s => s.strength === 'high').length === 0 ? '<p class="muted">本季度无高优先级信号</p>' : ''}
         </div>
@@ -1073,7 +1067,7 @@ function renderAnalysis(d) {
     const confidence = parseConfidence(d.confidence);
     return `
         <div class="page-header">
-            <h2>🤖 AI 分析洞察</h2>
+            <h2>AI 分析洞察</h2>
             <span class="meta">${d.quarter} · 置信度 ${(confidence * 100).toFixed(0)}%</span>
         </div>
         <div class="card"><h3>总体摘要</h3><p class="analysis-text">${a.summary}</p></div>
@@ -1081,18 +1075,18 @@ function renderAnalysis(d) {
         <div class="card"><h3>前十大重仓股分析</h3><p class="analysis-text">${a.topHoldings}</p></div>
         <div class="card"><h3>行业偏好</h3><p class="analysis-text">${a.sector}</p></div>
         <div class="card"><h3>交易信号</h3><p class="analysis-text">${a.signals}</p></div>
-        <div class="card"><h3>⚠️ 风险提示</h3><p class="analysis-text danger">${a.risks}</p></div>
-        <div class="card"><h3>💡 散户可借鉴思路</h3><p class="analysis-text">${a.retail}</p></div>
+        <div class="card"><h3>风险提示</h3><p class="analysis-text danger">${a.risks}</p></div>
+        <div class="card"><h3>散户可借鉴思路</h3><p class="analysis-text">${a.retail}</p></div>
     `;
 }
 
 function renderSignalsPanel(d) {
     return `
         <div class="page-header">
-            <h2>📡 多源信号</h2>
+            <h2>多源信号</h2>
             <span class="meta">共 ${d.signals.length} 条信号 · ${d.quarter}</span>
         </div>
-        ${d.signalsError ? '<div class="card card-error"><p>⚠️ 信号数据加载失败，请稍后重试</p></div>' : ''}
+        ${d.signalsError ? '<div class="card card-error"><p>信号数据加载失败，请稍后重试</p></div>' : ''}
         <div id="signalsContainer"></div>
     `;
 }
@@ -1111,7 +1105,7 @@ function renderSignals() {
     });
 
     if (filtered.length === 0) {
-        container.innerHTML = '<div class="empty-state"><div class="icon">🔍</div><p>没有匹配的信号，试试调整筛选条件</p></div>';
+        container.innerHTML = '<div class="empty-state"><p>没有匹配的信号，试试调整筛选条件</p></div>';
         return;
     }
 
@@ -1124,9 +1118,9 @@ function renderSignals() {
     let html = '';
     for (const [level, signals] of Object.entries(grouped)) {
         if (signals.length === 0) continue;
-        const emoji = level === 'high' ? '🔴' : level === 'medium' ? '🟡' : '🟢';
+        const dotClass = level === 'high' ? 'dot-high' : level === 'medium' ? 'dot-medium' : 'dot-low';
         const label = level === 'high' ? '高优先级' : level === 'medium' ? '中优先级' : '低优先级';
-        html += `<div class="card"><h3>${emoji} ${label}信号 (${signals.length})</h3>`;
+        html += `<div class="card"><h3><span class="dot ${dotClass}"></span>${label}信号 (${signals.length})</h3>`;
         signals.forEach(s => { html += renderSignalCard(s); });
         html += '</div>';
     }
@@ -1170,8 +1164,8 @@ function renderSignalCard(s) {
             <h4>${esc(s.title)}</h4>
             <p class="sig-summary">${esc(s.summary)}</p>
             <div class="sig-meta">
-                ${companies.length ? `<span>🏢 ${companies.map(esc).join(', ')}</span>` : ''}
-                ${hasCrossRefs ? '<span class="cross-badge">🔗 交叉信号</span>' : ''}
+                ${companies.length ? `<span>${companies.map(esc).join(', ')}</span>` : ''}
+                ${hasCrossRefs ? '<span class="cross-badge">交叉信号</span>' : ''}
                 ${link ? `<a href="${esc(link)}" target="_blank" rel="noopener" class="sig-link">查看原文 →</a>` : ''}
             </div>
         </div>
@@ -1205,7 +1199,7 @@ function renderHoldingsPanel(d) {
         `).join('');
         return `
             <div class="page-header">
-                <h2>📋 持仓明细</h2>
+                <h2>持仓明细</h2>
                 <span class="meta">${d.quarter} · ${companies.length} 家公司（由 ${d.holdings.length} 条记录汇总）</span>
             </div>
             <div class="card">
@@ -1230,7 +1224,7 @@ function renderHoldingsPanel(d) {
 
     return `
         <div class="page-header">
-            <h2>📋 持仓明细</h2>
+            <h2>持仓明细</h2>
             <span class="meta">${d.quarter} · ${d.holdings.length} 条记录</span>
         </div>
         <div class="card">
@@ -1337,9 +1331,9 @@ async function loadTodayView() {
 function renderTodayView(today) {
     document.getElementById('mainContent').innerHTML = `
         <div class="daily-header">
-            <h2>📡 每日情报</h2>
+            <h2>每日情报</h2>
             <div class="date-picker-row">
-                <span>📅 查看日期：</span>
+                <span>查看日期：</span>
                 <input type="date" id="dailyDatePicker" value="${today}" onchange="loadDateSignals(this.value)">
                 <button class="btn-sm primary" onclick="loadDateSignals(document.getElementById('dailyDatePicker').value)">查看</button>
             </div>
@@ -1359,9 +1353,8 @@ function renderTodayFeed() {
     const filtered = filterSignalsBy(todayData);
     if (filtered.length === 0) {
         el.innerHTML = `<div class="empty-state">
-            <div class="icon">📭</div>
             <p>今日暂无情报</p>
-            <p class="feed-hint">点左侧「📡 手动运行每日情报」开始抓取</p>
+            <p class="feed-hint">点左侧「运行每日情报」开始抓取</p>
         </div>`;
         return;
     }
@@ -1425,22 +1418,21 @@ function renderDailyIntel() {
     if (dailyData.length === 0 && filtered.length === 0) {
         target.innerHTML = `
             <div class="daily-header">
-                <h2>📡 每日情报</h2>
+                <h2>每日情报</h2>
                 <div class="day-selector">
                     ${[7,14,30,90].map(d => `<button class="day-btn${d===dailyDays?' active':''}" data-days="${d}" onclick="loadDailyIntel(${d})">${d} 天</button>`).join('')}
                 </div>
             </div>
             <div class="empty-state">
-                <div class="icon">📭</div>
-                <p>暂无最近情报</p>
-                <p class="feed-hint">点击左侧「📡 手动运行每日情报」开始抓取</p>
+                    <p>暂无最近情报</p>
+                <p class="feed-hint">点击左侧「运行每日情报」开始抓取</p>
             </div>`;
         return;
     }
 
     let html = `
         <div class="daily-header">
-            <h2>📡 每日情报</h2>
+            <h2>每日情报</h2>
             <div class="day-selector">
                 ${[7,14,30,90].map(d => `<button class="day-btn${d===dailyDays?' active':''}" data-days="${d}" onclick="loadDailyIntel(${d})">${d} 天</button>`).join('')}
             </div>
@@ -1492,10 +1484,10 @@ function onFilterChange() {
 
 // ====== Settings page ======
 async function renderSettings() {
-    let html = '<div class="page-header"><h2>⚙️ 系统设置</h2></div>';
+    let html = '<div class="page-header"><h2>系统设置</h2></div>';
 
     // --- Signal sources ---
-    html += '<div class="settings-section"><h3>📡 信号源管理</h3>';
+    html += '<div class="settings-section"><h3>信号源管理</h3>';
     try {
         const resp = await fetch('/api/settings/sources');
         const sources = await resp.json();
@@ -1503,13 +1495,13 @@ async function renderSettings() {
             const typeTag = s.type ? ` <span class="mini-tag type">${({rss:'RSS',webpage:'网页',topic:'主题'})[s.type] || esc(s.type)}</span>` : '';
             const policyTag = s.filter_policy ? ` <span class="mini-tag policy">${s.filter_policy === 'gs_only' ? '仅高盛' : '全保留'}</span>` : '';
             const actions = s.builtin ? '' :
-                ` <button class="btn-sm" onclick="editCustomSource('${esc(s.name)}')">✏️ 编辑</button>` +
-                ` <button class="btn-sm danger" onclick="deleteCustomSource('${esc(s.name)}')">🗑 删除</button>`;
+                ` <button class="btn-sm" onclick="editCustomSource('${esc(s.name)}')">编辑</button>` +
+                ` <button class="btn-sm danger" onclick="deleteCustomSource('${esc(s.name)}')">删除</button>`;
             html += `<div class="source-row">
                 <div class="info"><div class="name">${esc(s.label)}${typeTag}${policyTag} <span class="src-name">(${esc(s.name)})</span></div>
                 <div class="desc">${esc(s.description || s.url || '')} ${s.builtin ? '<span class="c-muted">· 内置</span>' : '<span class="c-accent">· 自定义</span>'}</div></div>
                 <div>
-                <button class="toggle-btn ${s.enabled?'on':'off'}" onclick="toggleSource('${esc(s.name)}',${!s.enabled})">${s.enabled?'✅ 已启用':'⏸ 已禁用'}</button>${actions}
+                <button class="toggle-btn ${s.enabled?'on':'off'}" onclick="toggleSource('${esc(s.name)}',${!s.enabled})">${s.enabled?'已启用':'已禁用'}</button>${actions}
                 </div>
             </div>`;
         });
@@ -1517,7 +1509,7 @@ async function renderSettings() {
 
     // --- Custom source add/edit form ---
     html += `<div class="add-form mt-12" id="customSourceForm">
-        <div class="form-title" id="csFormTitle">➕ 添加自定义信息源</div>
+        <div class="form-title" id="csFormTitle">添加自定义信息源</div>
         <input id="csLabel" placeholder="名称（如 高盛研报页）">
         <input id="csName" placeholder="标识（小写英文/数字/下划线，如 gs_insights）">
         <select id="csType" onchange="onCsTypeChange()"><option value="rss">RSS 订阅</option><option value="webpage">网页地址</option><option value="topic">主题搜索</option></select>
@@ -1525,33 +1517,33 @@ async function renderSettings() {
         <input id="csInstruction" placeholder="提取说明（如：提取页面中高盛的市场观点与目标价）" class="grow-input" style="display:none;">
         <label class="nowrap"><input type="radio" name="csPolicy" value="gs_only" checked> 仅高盛相关</label>
         <label class="nowrap"><input type="radio" name="csPolicy" value="all"> 全部保留</label>
-        <button class="btn-sm" onclick="testCustomSource()">🔍 测试源</button>
-        <button class="btn-sm primary" onclick="saveCustomSource()">💾 保存</button>
+        <button class="btn-sm" onclick="testCustomSource()">测试源</button>
+        <button class="btn-sm primary" onclick="saveCustomSource()">保存</button>
         <button class="btn-sm" onclick="resetCustomSourceForm()" id="csCancelBtn" style="display:none;">取消</button>
         <div id="csTestResult" class="form-msg"></div>
     </div>`;
     html += '</div>';
 
     // --- LLM models ---
-    html += '<div class="settings-section"><h3>🤖 大模型设置</h3><div id="llmModelList">加载中...</div>';
+    html += '<div class="settings-section"><h3>大模型设置</h3><div id="llmModelList">加载中...</div>';
     html += `<div class="add-form">
         <input id="newModelName" placeholder="模型名称（如 DeepSeek）">
         <input id="newModelBaseUrl" placeholder="Base URL（如 https://api.deepseek.com/anthropic/v1）">
         <input id="newModelToken" placeholder="Auth Token" type="password">
         <input id="newModelId" placeholder="模型ID（如 deepseek-v4-pro[1m]）">
-        <button class="btn-sm primary" onclick="addLLMModel()">➕ 添加</button>
-        <button class="btn-sm" onclick="testLLMModel()">🔍 测试当前填写</button>
+        <button class="btn-sm primary" onclick="addLLMModel()">添加</button>
+        <button class="btn-sm" onclick="testLLMModel()">测试当前填写</button>
         <div id="testResult"></div>
     </div>`;
     html += '</div>';
 
     // --- User management (admin only; the settings view itself is admin-only) ---
-    html += '<div class="settings-section"><h3>👥 用户管理</h3><div id="userList">加载中...</div>';
+    html += '<div class="settings-section"><h3>用户管理</h3><div id="userList">加载中...</div>';
     html += `<div class="add-form">
         <input id="newUserName" placeholder="用户名">
         <input id="newUserPassword" placeholder="密码" type="password">
         <select id="newUserRole"><option value="viewer">普通用户</option><option value="admin">管理员</option></select>
-        <button class="btn-sm primary" onclick="addUser()">➕ 添加用户</button>
+        <button class="btn-sm primary" onclick="addUser()">添加用户</button>
         <div id="userFormMsg" class="form-msg"></div>
     </div>`;
     html += '</div>';
@@ -1577,19 +1569,19 @@ async function loadUserList() {
             const isSelf = currentUser && u.username === currentUser.username;
             const roleName = u.role === 'admin' ? '管理员' : '普通用户';
             const toggleRole = u.role === 'admin' ? 'viewer' : 'admin';
-            const toggleLabel = u.role === 'admin' ? '⬇ 设为普通用户' : '⬆ 设为管理员';
+            const toggleLabel = u.role === 'admin' ? '设为普通用户' : '设为管理员';
             return `<div class="model-row">
                 <div class="info">
-                    <div class="model-name">👤 ${esc(u.username)}
+                    <div class="model-name">${esc(u.username)}
                         ${u.role === 'admin' ? '<span class="badge-default">管理员</span>' : ''}
                         ${isBuiltin ? '<span class="builtin-note">（内置账号）</span>' : ''}
                     </div>
                     <div class="model-detail">角色：${roleName} · 创建于 ${esc((u.created_at || '').slice(0, 10))}</div>
                 </div>
                 <div>
-                    <button class="btn-sm" onclick="resetUserPassword('${esc(u.username)}')">🔑 重置密码</button>
+                    <button class="btn-sm" onclick="resetUserPassword('${esc(u.username)}')">重置密码</button>
                     ${!isBuiltin ? `<button class="btn-sm" onclick="changeUserRole('${esc(u.username)}','${toggleRole}')">${toggleLabel}</button>` : ''}
-                    ${!isBuiltin && !isSelf ? `<button class="btn-sm danger" onclick="deleteUser('${esc(u.username)}')">🗑 删除</button>` : ''}
+                    ${!isBuiltin && !isSelf ? `<button class="btn-sm danger" onclick="deleteUser('${esc(u.username)}')">删除</button>` : ''}
                 </div>
             </div>`;
         }).join('');
@@ -1613,7 +1605,7 @@ async function addUser() {
         });
         const data = await resp.json().catch(() => ({}));
         if (!resp.ok) { setUserMsg(data.detail || '添加失败', true); return; }
-        setUserMsg(`✅ 用户 ${username} 已添加`, false);
+        setUserMsg(`用户 ${username} 已添加`, false);
         document.getElementById('newUserName').value = '';
         document.getElementById('newUserPassword').value = '';
         loadUserList();
@@ -1630,7 +1622,7 @@ async function resetUserPassword(username) {
         });
         const data = await resp.json().catch(() => ({}));
         if (!resp.ok) { alert(data.detail || '重置失败'); return; }
-        setUserMsg(`✅ 已重置 ${username} 的密码（该用户需重新登录）`, false);
+        setUserMsg(`已重置 ${username} 的密码（该用户需重新登录）`, false);
     } catch(e) { alert('网络错误，请重试'); }
 }
 
@@ -1652,7 +1644,7 @@ async function deleteUser(username) {
         const resp = await fetch('/api/settings/users/' + encodeURIComponent(username), {method: 'DELETE'});
         const data = await resp.json().catch(() => ({}));
         if (!resp.ok) { alert(data.detail || '删除失败'); return; }
-        setUserMsg(`✅ 用户 ${username} 已删除`, false);
+        setUserMsg(`用户 ${username} 已删除`, false);
         loadUserList();
     } catch(e) { alert('网络错误，请重试'); }
 }
@@ -1674,8 +1666,8 @@ async function loadLLMModelList() {
                     <div class="model-detail">${esc(m.model_name)} · ${esc(m.base_url)} · Token: ${esc(m.auth_token_masked)}</div>
                 </div>
                 <div>
-                    ${!m.is_default ? `<button class="btn-sm primary" onclick="setDefaultModel('${esc(m.id)}')">⭐ 设为默认</button>` : ''}
-                    ${!m.is_default ? `<button class="btn-sm danger" onclick="deleteModel('${esc(m.id)}')">🗑 删除</button>` : ''}
+                    ${!m.is_default ? `<button class="btn-sm primary" onclick="setDefaultModel('${esc(m.id)}')">设为默认</button>` : ''}
+                    ${!m.is_default ? `<button class="btn-sm danger" onclick="deleteModel('${esc(m.id)}')">删除</button>` : ''}
                 </div>
             </div>
         `).join('');
@@ -1710,7 +1702,7 @@ function onCsTypeChange() {
 
 function resetCustomSourceForm() {
     _editingSourceName = null;
-    document.getElementById('csFormTitle').textContent = '➕ 添加自定义信息源';
+    document.getElementById('csFormTitle').textContent = '添加自定义信息源';
     document.getElementById('csLabel').value = '';
     document.getElementById('csName').value = '';
     document.getElementById('csName').disabled = false;
@@ -1751,7 +1743,7 @@ async function editCustomSource(name) {
     const s = sources.find(x => x.name === name);
     if (!s) return;
     _editingSourceName = name;
-    document.getElementById('csFormTitle').textContent = '✏️ 编辑自定义源：' + s.label;
+    document.getElementById('csFormTitle').textContent = '编辑自定义源：' + s.label;
     document.getElementById('csLabel').value = s.label;
     document.getElementById('csName').value = s.name;
     document.getElementById('csName').disabled = true;
@@ -1785,23 +1777,23 @@ async function testCustomSource() {
         filter_policy: _csPolicy(),
         label: document.getElementById('csLabel').value.trim(),
     };
-    box.textContent = '⏳ 正在抓取并预览 AI 预筛…';
+    box.textContent = '正在抓取并预览 AI 预筛…';
     try {
         const resp = await fetch('/api/settings/sources/test', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)});
         const data = await resp.json();
-        if (!resp.ok) { box.textContent = '❌ ' + (data.detail || '请求失败'); return; }
-        if (!data.ok) { box.textContent = '❌ ' + (data.error || '抓取失败'); return; }
+        if (!resp.ok) { box.textContent = (data.detail || '请求失败'); return; }
+        if (!data.ok) { box.textContent = (data.error || '抓取失败'); return; }
         if (data.count === 0) {
-            box.textContent = '⚠️ 地址可访问但没有符合条件的内容' + (data.note ? `（${data.note}）` : '，请确认地址和策略是否正确');
+            box.textContent = '地址可访问但没有符合条件的内容' + (data.note ? `（${data.note}）` : '，请确认地址和策略是否正确');
             return;
         }
         const kept = (data.items || []).filter(i => i.kept).length;
-        let head = `✅ 抓取 ${data.count} 条`;
+        let head = `抓取 ${data.count} 条`;
         if (data.ai_used) head += `，AI 预筛保留 ${kept} 条`;
         if (data.note) head += `（${data.note}）`;
-        const lines = (data.items || []).map(i => `${i.kept ? '✅' : '❌'} ${esc(i.title)}`).join('<br>');
+        const lines = (data.items || []).map(i => `<span class="dot" style="background:${i.kept ? '#2e7d32' : '#c62828'}"></span>${esc(i.title)}`).join('<br>');
         box.innerHTML = esc(head) + '<br>' + lines;
-    } catch(e) { box.textContent = '❌ 网络错误: ' + e; }
+    } catch(e) { box.textContent = '网络错误: ' + e; }
 }
 
 async function addLLMModel() {
@@ -1827,13 +1819,13 @@ async function testLLMModel() {
     const modelName = document.getElementById('newModelId').value.trim();
     const el = document.getElementById('testResult');
     if (!baseUrl || !authToken || !modelName) { el.innerHTML='<div class="test-result err">请填写 Base URL、Auth Token 和模型ID</div>'; return; }
-    el.innerHTML = '<div class="test-result pending">⏳ 测试中...</div>';
+    el.innerHTML = '<div class="test-result pending">测试中...</div>';
     try {
         const resp = await fetch('/api/settings/llm-models/test', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({base_url:baseUrl,auth_token:authToken,model_name:modelName})});
         const r = await resp.json();
-        if (r.status === 'ok') el.innerHTML = `<div class="test-result ok">✅ 连通成功！响应: ${esc(r.response)}</div>`;
-        else el.innerHTML = `<div class="test-result err">❌ 失败: ${esc(r.error)}</div>`;
-    } catch(e) { el.innerHTML = `<div class="test-result err">❌ 网络错误: ${e}</div>`; }
+        if (r.status === 'ok') el.innerHTML = `<div class="test-result ok">连通成功！响应: ${esc(r.response)}</div>`;
+        else el.innerHTML = `<div class="test-result err">失败: ${esc(r.error)}</div>`;
+    } catch(e) { el.innerHTML = `<div class="test-result err">网络错误: ${e}</div>`; }
 }
 
 async function setDefaultModel(id) {
@@ -1859,7 +1851,7 @@ async function analyzeSignal(signalId, title, summary, source) {
     if (panel.classList.contains('open')) { panel.classList.remove('open'); return; }
     panel.classList.add('open');
     if (panel.dataset.loaded === 'true') return;
-    panel.innerHTML = '<span class="c-muted">🤖 AI 分析中...</span>';
+    panel.innerHTML = '<span class="c-muted">AI 分析中...</span>';
     try {
         const resp = await fetch(`/api/signals/${signalId}/analyze`, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({title,summary,source})});
         if (!resp.ok) { panel.innerHTML = '<span class="c-danger">AI 分析失败</span>'; return; }
@@ -1873,8 +1865,8 @@ async function loadDailyReport(dateStr, force) {
     const container = document.getElementById('dailyReportContainer');
     if (!container) return;
     container.innerHTML = force
-        ? '<div class="loading">🤖 正在重新生成每日报告...</div>'
-        : '<div class="loading">📋 生成每日报告中...</div>';
+        ? '<div class="loading">正在重新生成每日报告...</div>'
+        : '<div class="loading">生成每日报告中...</div>';
     try {
         const resp = force
             ? await fetch(`/api/daily-report/${dateStr}/regenerate`, {method: 'POST'})
@@ -1883,13 +1875,13 @@ async function loadDailyReport(dateStr, force) {
         if (r.report) {
             const formatted = formatMd(r.report);
             const staleHint = r.stale
-                ? `<div class="stale-warn">⚠️ 这份摘要生成时只有 ${r.signal_count} 条情报，现在已有 ${r.current_signal_count} 条，可点击「重新生成」更新。</div>`
+                ? `<div class="stale-warn">这份摘要生成时只有 ${r.signal_count} 条情报，现在已有 ${r.current_signal_count} 条，可点击「重新生成」更新。</div>`
                 : '';
             container.innerHTML = `<div class="daily-report-card">
-                <h3>📋 ${dateStr} 每日情报摘要</h3>
+                <h3>${dateStr} 每日情报摘要</h3>
                 <div class="mt-8">${formatted}</div>
                 ${staleHint}
-                <div class="mt-10"><button class="btn-sm" onclick="loadDailyReport('${dateStr}', true)">🔄 重新生成</button></div>
+                <div class="mt-10"><button class="btn-sm" onclick="loadDailyReport('${dateStr}', true)">重新生成</button></div>
             </div>`;
         } else {
             container.innerHTML = '';
@@ -1910,7 +1902,7 @@ function addAiToggles(rootEl) {
 
         const toggle = document.createElement('span');
         toggle.className = 'ai-toggle';
-        toggle.textContent = '🤖 AI 解读';
+        toggle.textContent = 'AI 解读';
         toggle.onclick = function() {
             const title = titleEl.textContent || '';
             const summaryEl = card.querySelector('.sig-summary');
@@ -1952,12 +1944,12 @@ async function loadDateSignals(dateStr) {
         const sources = new Set(filtered.map(s => s.source));
 
         let html = `<div class="daily-header">
-            <h2>📡 ${dateStr} 情报</h2>
+            <h2>${dateStr} 情报</h2>
             <div class="date-picker-row">
-                <span>📅 查看日期：</span>
+                <span>查看日期：</span>
                 <input type="date" id="dailyDatePicker" value="${dateStr}" onchange="loadDateSignals(this.value)">
                 <button class="btn-sm primary" onclick="loadDateSignals(document.getElementById('dailyDatePicker').value)">查看</button>
-                <button class="btn-sm" onclick="loadDailyReport(document.getElementById('dailyDatePicker').value)">📋 生成日报</button>
+                <button class="btn-sm" onclick="loadDailyReport(document.getElementById('dailyDatePicker').value)">生成日报</button>
                 <button class="btn-sm" onclick="loadTodayView()">← 返回今日</button>
             </div>
         </div>
@@ -1974,7 +1966,7 @@ async function loadDateSignals(dateStr) {
 
         addAiToggles(document.getElementById('mainContent'));
         loadDailyReport(dateStr);  // auto: cached -> instant; missing -> generated on demand
-    } catch(e) { document.getElementById('mainContent').innerHTML = '<div class="empty-state"><div class="icon">📭</div><p>加载失败: ' + e.message + '</p></div>'; }
+    } catch(e) { document.getElementById('mainContent').innerHTML = '<div class="empty-state"><p>加载失败: ' + e.message + '</p></div>'; }
 }
 
 // Keep the mobile topbar title in sync for ALL view switches, including
@@ -1983,7 +1975,7 @@ const _origSwitchMainView = switchMainView;
 switchMainView = async function(view) {
     const titleEl = document.getElementById('mobilePageTitle');
     if (titleEl) {
-        const t = ({ daily: '📡 每日情报', quarter: '📅 季度报告', settings: '⚙️ 设置', guide: '📖 使用指南' })[view];
+        const t = ({ daily: '每日情报', quarter: '季度报告', settings: '设置', guide: '使用指南' })[view];
         if (t) titleEl.textContent = t;
     }
     return _origSwitchMainView(view);

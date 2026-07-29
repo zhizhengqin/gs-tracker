@@ -47,6 +47,10 @@
         .sig-card strong.title { font-family: var(--serif); font-size: 1rem; display: block; margin-bottom: 6px; }
         .sig-card p { margin: 6px 0; color: var(--ink-muted); font-size: 0.84rem; line-height: 1.65; }
         .sig-foot { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; font-size: 0.75rem; color: var(--ink-muted); }
+        .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; }
+        .dot-high { background: var(--accent); }
+        .dot-medium { background: #b26a00; }
+        .dot-low { background: #2e7d32; }
         .cross-badge { background: var(--paper-dark); border: 1px solid var(--rule); color: var(--ink-muted); padding: 2px 8px; border-radius: 3px; font-weight: 600; }
         .sig-foot a { color: var(--accent); text-decoration: none; font-weight: 600; }
         .footer { text-align: center; padding: 20px; font-size: 0.68rem; color: var(--ink-muted); letter-spacing: 0.04em; border-top: 1px solid var(--rule); }
@@ -101,14 +105,14 @@
             <div class="mb-12">
                 {% for src, status in source_status.items() %}
                 <span class="src-status {% if status == 'ok' %}ok{% else %}warn{% endif %}">
-                    {{ src }}: {% if status == 'ok' %}✅{% else %}⚠️ 暂不可用{% endif %}
+                    {{ src }}: {% if status == 'ok' %}正常{% else %}暂不可用{% endif %}
                 </span>
                 {% endfor %}
             </div>
 
             {% if signal_errors %}
             <div class="error-box">
-                <strong>⚠️ 部分信号源获取失败：</strong>
+                <strong>部分信号源获取失败：</strong>
                 <ul>
                     {% for err in signal_errors %}
                     <li>{{ err }}</li>
@@ -134,9 +138,9 @@
                 {% if group %}
                 <div class="mb-16">
                     <h3>
-                        {% if level == 'high' %}🔴 高优先级信号
-                        {% elif level == 'medium' %}🟡 中优先级信号
-                        {% else %}🟢 低优先级信号
+                        {% if level == 'high' %}<span class="dot dot-high"></span>高优先级信号
+                        {% elif level == 'medium' %}<span class="dot dot-medium"></span>中优先级信号
+                        {% else %}<span class="dot dot-low"></span>低优先级信号
                         {% endif %}
                         （{{ group|length }}）
                     </h3>
@@ -153,7 +157,7 @@
                             <span>相关公司: {{ sig.companies|join(', ') }}</span>
                             {% endif %}
                             {% if sig.cross_refs %}
-                            <span class="cross-badge">🔗 交叉信号</span>
+                            <span class="cross-badge">交叉信号</span>
                             {% endif %}
                             {% if sig.url %}
                             <a href="{{ sig.url }}" target="_blank" rel="noopener">查看原文 →</a>
