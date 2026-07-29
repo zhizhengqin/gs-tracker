@@ -480,6 +480,73 @@ tr:hover td { background: var(--paper); }
     background: var(--paper-dark); border: 1px solid var(--rule); color: var(--ink-muted);
 }
 
+/* ====== 指南来源标签配色 ====== */
+.guide-doc .src-tag.t13f { background: #e3f2fd; color: #1565c0; border-color: transparent; }
+.guide-doc .src-tag.t8k { background: #e8f5e9; color: #2e7d32; border-color: transparent; }
+.guide-doc .src-tag.t13d { background: #ede7f6; color: #6a1b9a; border-color: transparent; }
+
+/* ====== 通用工具类（替代残留内联样式） ====== */
+.mt-8 { margin-top: 8px; }
+.mt-10 { margin-top: 10px; }
+.mt-12 { margin-top: 12px; }
+.mt-24 { margin-top: 24px; }
+.mb-14 { margin-bottom: 14px; }
+.ta-c { text-align: center; }
+.ta-r { text-align: right; }
+.w-40 { width: 40px; }
+.nowrap { white-space: nowrap; }
+.mono { font-family: var(--mono); }
+.muted { color: #999; }
+.c-muted { color: #888; }
+.c-danger { color: #d32f2f; }
+.c-accent { color: var(--accent); }
+
+/* ====== 流水线进度面板 ====== */
+.prog-title { margin-bottom: 16px; font-size: 1.1em; }
+.prog-step { margin-bottom: 6px; }
+.prog-row { display: flex; align-items: center; justify-content: space-between; padding: 4px 0; font-size: 0.9em; }
+.prog-row-lg { display: flex; align-items: center; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #eee; }
+.prog-label { font-weight: 600; }
+.prog-status { font-size: 0.9em; }
+.prog-detail { color: #999; font-size: 0.85em; }
+.prog-more { border-top: 1px solid #eee; padding-top: 8px; }
+.prog-summary { margin-top: 16px; padding-top: 12px; border-top: 2px solid var(--accent); }
+.prog-line { font-size: 0.9em; }
+.prog-line.ok { color: var(--ok); }
+.prog-line.err { color: var(--danger); }
+.prog-err-line { color: var(--warn); font-size: 0.82em; padding: 3px 0; }
+
+/* ====== 季度洞察 / AI 分析 ====== */
+.chip-row { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 8px; }
+.chip-row-sm { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+.src-status { padding: 6px 14px; border-radius: 8px; font-size: 0.9em; }
+.src-status.ok { background: #e8f5e9; color: #2e7d32; }
+.src-status.warn { background: #fff3e0; color: #e65100; }
+.ticker-chip { background: #e3f2fd; color: #1565c0; padding: 6px 14px; border-radius: 20px; font-size: 0.9em; font-weight: 600; }
+.analysis-text { line-height: 1.8; color: #555; }
+.analysis-text.danger { color: var(--danger); }
+.card-note { font-size: 0.85em; color: #888; margin: 6px 0 0; }
+.card-error { border-left: 4px solid #e65100; }
+.card-error p { color: #e65100; margin: 0; }
+.ai-conf { margin-top: 4px; }
+
+/* ====== 每日情报 / 统计 ====== */
+.stat-card .num.danger { color: var(--danger); }
+.stat-card .num.small { font-size: 1.2em; }
+.feed-hint { font-size: 0.85em; margin-top: 8px; }
+.stale-warn { color: var(--warn); font-size: 0.85em; margin-top: 8px; }
+
+/* ====== 设置页 ====== */
+.mini-tag { font-size: 0.7em; padding: 1px 6px; border-radius: 8px; }
+.mini-tag.type { background: #ede7f6; color: #5e35b1; }
+.mini-tag.policy { background: #e0f2f1; color: #00695c; }
+.src-name { font-size: 0.75em; color: #888; }
+.form-title { font-weight: 600; margin-bottom: 6px; }
+.grow-input { flex: 1; min-width: 260px; }
+.form-msg { width: 100%; font-size: 0.85em; color: #555; }
+.builtin-note { font-size: 0.7em; color: #888; }
+.test-result.pending { color: #888; }
+
 /* ====== 页面进入动效 ====== */
 @keyframes magazine-in {
     from { opacity: 0; transform: translateY(12px); }

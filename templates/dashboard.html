@@ -55,7 +55,7 @@
             <label><input type="checkbox" checked onchange="onFilterChange()" class="filter-source" value="macro_view"> 宏观指标</label>
             </span>
         </div>
-        <h3 style="margin-top:24px;">优先级</h3>
+        <h3 class="mt-24">优先级</h3>
         <div class="signal-filter">
             <label><input type="checkbox" checked onchange="onFilterChange()" class="filter-strength" value="high"> 🔴 高优先级</label>
             <label><input type="checkbox" checked onchange="onFilterChange()" class="filter-strength" value="medium"> 🟡 中优先级</label>
@@ -122,16 +122,16 @@
         <h3>三、信号源科普（重点）</h3>
         <p>系统的情报来自多个「信号源」，左侧边栏的「🔍 信号筛选」里可以按来源勾选/取消。下面逐一解释每个来源是什么意思。</p>
 
-        <h4><span class="src-tag" style="background:#e3f2fd;color:#1565c0;">13F</span>13F 持仓 —— 高盛每个季度买了什么股票</h4>
+        <h4><span class="src-tag t13f">13F</span>13F 持仓 —— 高盛每个季度买了什么股票</h4>
         <p><strong>是什么：</strong>SEC 规定，凡是管理资产超过 1 亿美元的投资机构，每个季度结束后都必须提交一份叫「13F」的表格，如实列出自己持有的全部美股（哪些公司、多少股、值多少钱）。高盛也必须提交。</p>
         <p><strong>有什么用：</strong>这是唯一能直接看到「高盛买了什么」的官方渠道。对比前后两个季度的 13F，就能看出它在加仓什么、抛售什么。</p>
         <div class="warn">⚠️ 两个重要局限：① <strong>滞后最长 45 天</strong>——比如一季度的持仓最晚 5 月 15 日才披露，你看到的是一两个月前的动作；② 13F 只包含<strong>美股多头持仓</strong>，看不到做空、债券、期权等操作。所以它适合观察中长期布局，不适合抄短线作业。</div>
 
-        <h4><span class="src-tag" style="background:#e8f5e9;color:#2e7d32;">8-K</span>SEC 8-K —— 公司突发大事的「官方快讯」</h4>
+        <h4><span class="src-tag t8k">8-K</span>SEC 8-K —— 公司突发大事的「官方快讯」</h4>
         <p><strong>是什么：</strong>上市公司一旦发生重大事件，必须在 <strong>4 个工作日</strong>内向 SEC 提交一份「8-K」临时报告。所谓重大事件包括：高管辞职或上任、并购收购、财报发布、债务违约、退市风险等。</p>
         <p><strong>有什么用：</strong>8-K 相当于公司突发新闻的「官方版本」，比媒体报道更权威、更及时。系统会盯住高盛自身及关联公司的 8-K，一有大事你马上就能看到。</p>
 
-        <h4><span class="src-tag" style="background:#ede7f6;color:#6a1b9a;">13D/13G</span>13D / 13G —— 大股东「举牌」公告</h4>
+        <h4><span class="src-tag t13d">13D/13G</span>13D / 13G —— 大股东「举牌」公告</h4>
         <p><strong>是什么：</strong>任何投资者买入某家上市公司超过 <strong>5%</strong> 的股份，都必须向 SEC 公开申报，俗称「举牌」。申报分两种：</p>
         <ul>
             <li><strong>13D（积极投资）</strong>：买方打算干预公司经营（比如要求更换管理层、推动并购），必须在 10 天内申报。出现 13D 通常意味着「大事要发生」。</li>
@@ -458,30 +458,30 @@ function updatePipelinePanel(sourceStates, steps, summary) {
     const stepDefaults = {'holdings': '抓取 13F 持仓', 'analysis': 'AI 持仓分析', 'comparison': '季度持仓对比', 'report': '生成季度报告'};
     const stepIcons = {'running': '⏳', 'done': '✅', 'error': '❌'};
 
-    let html = '<h3 style="margin-bottom:16px;font-size:1.1em;">🔄 季度对账进度</h3>';
+    let html = '<h3 class="prog-title">🔄 季度对账进度</h3>';
 
-    html += '<div style="margin-bottom:6px;">';
+    html += '<div class="prog-step">';
     stepOrder.forEach(key => {
         const st = steps[key];
         const icon = st ? (stepIcons[st.status] || '⏳') : '⚪';
         const color = st && st.status === 'done' ? '#2e7d32' : st && st.status === 'error' ? '#d32f2f' : '#999';
         const label = st && st.label ? st.label : stepDefaults[key];
-        html += `<div style="display:flex;align-items:center;justify-content:space-between;padding:4px 0;font-size:0.9em;">
+        html += `<div class="prog-row">
             <span style="color:${color};">${icon} ${esc(label)}</span>
-            <span style="color:#999;font-size:0.85em;">${st && st.detail ? esc(st.detail) : ''}</span>
+            <span class="prog-detail">${st && st.detail ? esc(st.detail) : ''}</span>
         </div>`;
     });
     html += '</div>';
 
     if (Object.keys(sourceStates).length) {
-        html += '<div style="border-top:1px solid #eee;padding-top:8px;">';
+        html += '<div class="prog-more">';
         for (const [name, state] of Object.entries(sourceStates)) {
             const icon = statusIcons[state.status] || '⏳';
             const color = statusColors[state.status] || '#999';
             const label = sourceLabels[name] || name;
-            html += `<div style="display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid #eee;">
-                <span style="font-weight:600;">${icon} ${esc(label)}</span>
-                <span style="color:${color};font-size:0.9em;">
+            html += `<div class="prog-row-lg">
+                <span class="prog-label">${icon} ${esc(label)}</span>
+                <span class="prog-status" style="color:${color};">
                     ${state.status === 'ok' ? state.count + ' 条信号' : state.status === 'error' ? esc(state.error).substring(0,50) : '等待中'}
                 </span>
             </div>`;
@@ -491,14 +491,14 @@ function updatePipelinePanel(sourceStates, steps, summary) {
 
     if (summary) {
         const errCount = (summary.errors || []).length;
-        html += `<div style="margin-top:16px;padding-top:12px;border-top:2px solid var(--accent);">
+        html += `<div class="prog-summary">
             <strong>📊 运行报告</strong><br>
-            <span style="font-size:0.9em;">对账季度：${esc(summary.quarter || '')}</span><br>
-            <span style="font-size:0.9em;">信号总数：${summary.signal_count || 0} 条</span><br>
-            <span style="font-size:0.9em;color:${errCount ? 'var(--danger)' : 'var(--success)'};">${errCount ? '⚠️ ' + errCount + ' 个源出错' : '✅ 全部成功'}</span>
-            ${(summary.errors || []).map(e => `<div style="color:#b26a00;font-size:0.82em;padding:3px 0;">🟡 ${esc(String(e)).substring(0, 120)}</div>`).join('')}
+            <span class="prog-line">对账季度：${esc(summary.quarter || '')}</span><br>
+            <span class="prog-line">信号总数：${summary.signal_count || 0} 条</span><br>
+            <span class="prog-line ${errCount ? 'err' : 'ok'}">${errCount ? '⚠️ ' + errCount + ' 个源出错' : '✅ 全部成功'}</span>
+            ${(summary.errors || []).map(e => `<div class="prog-err-line">🟡 ${esc(String(e)).substring(0, 120)}</div>`).join('')}
         </div>
-        <button class="run-btn" style="margin-top:12px;" onclick="document.getElementById('progressPanel').style.display='none'">关闭</button>`;
+        <button class="run-btn mt-12" onclick="document.getElementById('progressPanel').style.display='none'">关闭</button>`;
     }
 
     panel.innerHTML = html;
@@ -593,32 +593,32 @@ function updateProgressPanel(sourceStates, isComplete, summary) {
     const statusIcons = {'waiting':'⏳','ok':'✅','error':'❌'};
     const statusColors = {'waiting':'#999','ok':'#2e7d32','error':'#d32f2f'};
 
-    let html = '<h3 style="margin-bottom:16px;font-size:1.1em;">🔄 每日情报抓取进度</h3>';
+    let html = '<h3 class="prog-title">🔄 每日情报抓取进度</h3>';
     for (const [name, state] of Object.entries(sourceStates)) {
         if (name === '__notes') continue;
         const icon = statusIcons[state.status] || '⏳';
         const color = statusColors[state.status] || '#999';
         const label = sourceLabels[name] || name;
-        html += `<div style="display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid #eee;">
-            <span style="font-weight:600;">${icon} ${esc(label)}</span>
-            <span style="color:${color};font-size:0.9em;">
+        html += `<div class="prog-row-lg">
+            <span class="prog-label">${icon} ${esc(label)}</span>
+            <span class="prog-status" style="color:${color};">
                 ${state.status === 'ok' ? state.count + ' 条信号' : state.status === 'error' ? esc(state.error).substring(0,50) : '等待中'}
             </span>
         </div>`;
     }
 
     (sourceStates.__notes || []).forEach(n => {
-        html += `<div style="color:#b26a00;font-size:0.85em;padding:4px 0;">🟡 ${esc(sourceLabels[n.source] || n.source)}：${esc(n.note)}</div>`;
+        html += `<div class="prog-err-line">🟡 ${esc(sourceLabels[n.source] || n.source)}：${esc(n.note)}</div>`;
     });
 
     if (isComplete && summary) {
-        html += `<div style="margin-top:16px;padding-top:12px;border-top:2px solid var(--accent);">
+        html += `<div class="prog-summary">
             <strong>📊 运行报告</strong><br>
-            <span style="font-size:0.9em;">新增信号：${summary.new_signals || 0} 条</span><br>
-            <span style="font-size:0.9em;">参与评分：${summary.total_scored || 0} 条</span><br>
-            <span style="font-size:0.9em;color:${(summary.errors||[]).length ? 'var(--danger)' : 'var(--success)'};">${(summary.errors||[]).length ? '⚠️ ' + summary.errors.length + ' 个源出错' : '✅ 全部成功'}</span>
+            <span class="prog-line">新增信号：${summary.new_signals || 0} 条</span><br>
+            <span class="prog-line">参与评分：${summary.total_scored || 0} 条</span><br>
+            <span class="prog-line ${(summary.errors||[]).length ? 'err' : 'ok'}">${(summary.errors||[]).length ? '⚠️ ' + summary.errors.length + ' 个源出错' : '✅ 全部成功'}</span>
         </div>
-        <button class="run-btn" style="margin-top:12px;" onclick="document.getElementById('progressPanel').style.display='none'">关闭</button>`;
+        <button class="run-btn mt-12" onclick="document.getElementById('progressPanel').style.display='none'">关闭</button>`;
     }
 
     panel.innerHTML = html;
@@ -759,7 +759,7 @@ function renderQuarterView() {
         <div class="daily-header">
             <h2>📅 季度报告</h2>
             <div class="date-picker-row">
-                <span style="font-size:0.85em;color:#888;">📅 选择季度：</span>
+                <span>📅 选择季度：</span>
                 <select id="quarterSelect" onchange="loadQuarter(this.value)">${options}</select>
             </div>
         </div>
@@ -838,13 +838,13 @@ async function loadQuarterInsight(d, force = false) {
             slot.innerHTML = `<div class="daily-report-card">
                 <h3>🤖 ${d.quarter} AI 季度洞察</h3>
                 <div>${formatted}</div>
-                <div style="margin-top:10px;"><button class="btn-sm" onclick="loadQuarterInsight(reportData, true)">🔄 重新生成</button></div>
+                <div class="mt-10"><button class="btn-sm" onclick="loadQuarterInsight(reportData, true)">🔄 重新生成</button></div>
             </div>`;
         } else {
             slot.innerHTML = '';
         }
     } catch (e) {
-        slot.innerHTML = '<p style="color:#999;">AI 季度洞察加载失败</p>';
+        slot.innerHTML = '<p class="muted">AI 季度洞察加载失败</p>';
     }
 }
 
@@ -856,7 +856,7 @@ function fmtYi(v) {
 function renderChangeGroup(title, items, valueFn, badgeColor) {
     const rows = (items || []).slice(0, 10).map(it =>
         `<li><span>${esc(it.name_of_issuer || '')}</span><span class="val">${valueFn(it)}</span></li>`
-    ).join('') || '<li style="color:#999;">无</li>';
+    ).join('') || '<li class="muted">无</li>';
     return `<div class="card change-group">
         <h3>${title}<span class="change-count" style="background:${badgeColor};">${(items || []).length}</span></h3>
         <ul>${rows}</ul>
@@ -865,7 +865,7 @@ function renderChangeGroup(title, items, valueFn, badgeColor) {
 
 function renderChangesCard(quarter, previous, r) {
     if (r.message) {
-        return `<div class="card"><h3>📈 持仓变化（${quarter} vs ${previous}）</h3><p style="color:#999;">上一季度暂无持仓数据，无法进行环比对比。</p></div>`;
+        return `<div class="card"><h3>📈 持仓变化（${quarter} vs ${previous}）</h3><p class="muted">上一季度暂无持仓数据，无法进行环比对比。</p></div>`;
     }
     const hhi = Number(r.concentration_change || 0);
     const hhiText = `${hhi >= 0 ? '+' : ''}${hhi.toFixed(4)}（${hhi > 0 ? '持仓更集中' : hhi < 0 ? '持仓更分散' : '基本持平'}）`;
@@ -875,9 +875,9 @@ function renderChangesCard(quarter, previous, r) {
         const p = ((cur - prev) / prev * 100).toFixed(0);
         return `${fmtYi(prev)} → ${fmtYi(cur)}（${p > 0 ? '+' : ''}${p}%）`;
     };
-    return `<div class="card" style="margin-bottom:14px;">
+    return `<div class="card mb-14">
             <h3>📈 持仓变化（${quarter} vs ${previous}）</h3>
-            <p style="font-size:0.85em;color:#888;margin:6px 0 0;">金额单位：美元 · 增减持阈值为市值变动 ±20% · 集中度变化：${hhiText}</p>
+            <p class="card-note">金额单位：美元 · 增减持阈值为市值变动 ±20% · 集中度变化：${hhiText}</p>
         </div>
         <div class="change-grid">
             ${renderChangeGroup('🆕 新建仓', r.new_positions, it => fmtYi(it.value), '#e8f5e9;color:#2e7d32;')}
@@ -891,7 +891,7 @@ async function loadQuarterChanges(d, el) {
     if (!el) return;
     const prev = previousQuarterOf(d.quarter);
     if (!prev) {
-        el.innerHTML = `<div class="card"><h3>📈 持仓变化（对比上季）</h3><p style="color:#999;">暂无上一季度数据，跑完下一季度对账后即可查看环比变化。</p></div>`;
+        el.innerHTML = `<div class="card"><h3>📈 持仓变化（对比上季）</h3><p class="muted">暂无上一季度数据，跑完下一季度对账后即可查看环比变化。</p></div>`;
         return;
     }
     try {
@@ -899,7 +899,7 @@ async function loadQuarterChanges(d, el) {
         const r = await resp.json();
         el.innerHTML = renderChangesCard(d.quarter, prev, r);
     } catch (e) {
-        el.innerHTML = '<p style="color:#999;">持仓变化加载失败</p>';
+        el.innerHTML = '<p class="muted">持仓变化加载失败</p>';
     }
 }
 
@@ -933,7 +933,7 @@ function renderOverview(d) {
             </div>
             <div class="stat-card">
                 <span class="sentiment-tag ${sentimentClass}">${sentiment}</span>
-                <div class="label" style="margin-top: 4px;">AI 情绪判断
+                <div class="label ai-conf">AI 情绪判断
                     <span class="confidence-bar"><span class="fill" style="width:${confidence * 100}%"></span></span>
                     ${(confidence * 100).toFixed(0)}%
                 </div>
@@ -942,10 +942,9 @@ function renderOverview(d) {
 
         <div class="card">
             <h3>📡 信号源状态</h3>
-            <div style="display:flex;gap:16px;flex-wrap:wrap;margin-top:8px;">
+            <div class="chip-row">
                 ${Object.entries(d.sourceStatus).map(([src, status]) => `
-                    <span style="padding:6px 14px;border-radius:8px;font-size:0.9em;
-                        ${status === 'ok' ? 'background:#e8f5e9;color:#2e7d32;' : 'background:#fff3e0;color:#e65100;'}">
+                    <span class="src-status ${status === 'ok' ? 'ok' : 'warn'}">
                         ${src}: ${status === 'ok' ? '✅' : '⚠️ 暂不可用'}
                     </span>
                 `).join('')}
@@ -954,8 +953,8 @@ function renderOverview(d) {
 
         <div class="card">
             <h3>🎯 重点标的</h3>
-            <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;">
-                ${d.keyTickers.map(t => `<span style="background:#e3f2fd;color:#1565c0;padding:6px 14px;border-radius:20px;font-size:0.9em;font-weight:600;">${t}</span>`).join('')}
+            <div class="chip-row-sm">
+                ${d.keyTickers.map(t => `<span class="ticker-chip">${t}</span>`).join('')}
             </div>
         </div>
 
@@ -963,7 +962,7 @@ function renderOverview(d) {
         <div class="card">
             <h3>🔴 最新高优先级信号</h3>
             ${d.signals.filter(s => s.strength === 'high').slice(0, 3).map(s => renderSignalCard(s)).join('')}
-            ${d.signals.filter(s => s.strength === 'high').length === 0 ? '<p style="color:#999;">本季度无高优先级信号</p>' : ''}
+            ${d.signals.filter(s => s.strength === 'high').length === 0 ? '<p class="muted">本季度无高优先级信号</p>' : ''}
         </div>
         ` : ''}
     `;
@@ -977,13 +976,13 @@ function renderAnalysis(d) {
             <h2>🤖 AI 分析洞察</h2>
             <span class="meta">${d.quarter} · 置信度 ${(confidence * 100).toFixed(0)}%</span>
         </div>
-        <div class="card"><h3>总体摘要</h3><p style="line-height:1.8;color:#555;">${a.summary}</p></div>
-        <div class="card"><h3>集中度分析</h3><p style="line-height:1.8;color:#555;">${a.concentration}</p></div>
-        <div class="card"><h3>前十大重仓股分析</h3><p style="line-height:1.8;color:#555;">${a.topHoldings}</p></div>
-        <div class="card"><h3>行业偏好</h3><p style="line-height:1.8;color:#555;">${a.sector}</p></div>
-        <div class="card"><h3>交易信号</h3><p style="line-height:1.8;color:#555;">${a.signals}</p></div>
-        <div class="card"><h3>⚠️ 风险提示</h3><p style="line-height:1.8;color:var(--danger);">${a.risks}</p></div>
-        <div class="card"><h3>💡 散户可借鉴思路</h3><p style="line-height:1.8;color:#555;">${a.retail}</p></div>
+        <div class="card"><h3>总体摘要</h3><p class="analysis-text">${a.summary}</p></div>
+        <div class="card"><h3>集中度分析</h3><p class="analysis-text">${a.concentration}</p></div>
+        <div class="card"><h3>前十大重仓股分析</h3><p class="analysis-text">${a.topHoldings}</p></div>
+        <div class="card"><h3>行业偏好</h3><p class="analysis-text">${a.sector}</p></div>
+        <div class="card"><h3>交易信号</h3><p class="analysis-text">${a.signals}</p></div>
+        <div class="card"><h3>⚠️ 风险提示</h3><p class="analysis-text danger">${a.risks}</p></div>
+        <div class="card"><h3>💡 散户可借鉴思路</h3><p class="analysis-text">${a.retail}</p></div>
     `;
 }
 
@@ -993,7 +992,7 @@ function renderSignalsPanel(d) {
             <h2>📡 多源信号</h2>
             <span class="meta">共 ${d.signals.length} 条信号 · ${d.quarter}</span>
         </div>
-        ${d.signalsError ? '<div class="card" style="border-left:4px solid #e65100;"><p style="color:#e65100;margin:0;">⚠️ 信号数据加载失败，请稍后重试</p></div>' : ''}
+        ${d.signalsError ? '<div class="card card-error"><p>⚠️ 信号数据加载失败，请稍后重试</p></div>' : ''}
         <div id="signalsContainer"></div>
     `;
 }
@@ -1098,10 +1097,10 @@ function renderHoldingsPanel(d) {
         const companies = aggregateHoldingsByName(d.holdings);
         const rows = companies.map((c, i) => `
             <tr>
-                <td style="color:#888;">${i + 1}</td>
+                <td class="c-muted">${i + 1}</td>
                 <td><strong>${c.name}</strong></td>
-                <td style="text-align:center;color:#888;">${c.count > 1 ? c.count + ' 笔' : ''}</td>
-                <td style="text-align:right;font-family:monospace;">${formatHoldingsValue(c.value)}</td>
+                <td class="ta-c c-muted">${c.count > 1 ? c.count + ' 笔' : ''}</td>
+                <td class="ta-r mono">${formatHoldingsValue(c.value)}</td>
             </tr>
         `).join('');
         return `
@@ -1113,8 +1112,8 @@ function renderHoldingsPanel(d) {
                 ${toggle}
                 <div class="table-wrap"><div class="table-scroll">
                 <table>
-                    <thead><tr><th style="width:40px;">#</th><th>公司名称</th><th style="text-align:center;">合并笔数</th><th style="text-align:right;">持仓价值合计（美元）</th></tr></thead>
-                    <tbody>${rows || '<tr><td colspan="4" style="text-align:center;color:#999;">暂无持仓数据</td></tr>'}</tbody>
+                    <thead><tr><th class="w-40">#</th><th>公司名称</th><th class="ta-c">合并笔数</th><th class="ta-r">持仓价值合计（美元）</th></tr></thead>
+                    <tbody>${rows || '<tr><td colspan="4" class="ta-c muted">暂无持仓数据</td></tr>'}</tbody>
                 </table>
                 </div></div>
             </div>
@@ -1123,9 +1122,9 @@ function renderHoldingsPanel(d) {
 
     const rows = d.holdings.map((h, i) => `
         <tr>
-            <td style="color:#888;">${i + 1}</td>
+            <td class="c-muted">${i + 1}</td>
             <td><strong>${h.name}</strong></td>
-            <td style="text-align:right;font-family:monospace;">${h.value}</td>
+            <td class="ta-r mono">${h.value}</td>
         </tr>
     `).join('');
 
@@ -1138,8 +1137,8 @@ function renderHoldingsPanel(d) {
             ${toggle}
             <div class="table-wrap"><div class="table-scroll">
             <table>
-                <thead><tr><th style="width:40px;">#</th><th>公司名称</th><th style="text-align:right;">持仓价值（美元）</th></tr></thead>
-                <tbody>${rows || '<tr><td colspan="3" style="text-align:center;color:#999;">暂无持仓数据</td></tr>'}</tbody>
+                <thead><tr><th class="w-40">#</th><th>公司名称</th><th class="ta-r">持仓价值（美元）</th></tr></thead>
+                <tbody>${rows || '<tr><td colspan="3" class="ta-c muted">暂无持仓数据</td></tr>'}</tbody>
             </table>
             </div></div>
         </div>
@@ -1240,7 +1239,7 @@ function renderTodayView(today) {
         <div class="daily-header">
             <h2>📡 每日情报</h2>
             <div class="date-picker-row">
-                <span style="font-size:0.85em;color:#888;">📅 查看日期：</span>
+                <span>📅 查看日期：</span>
                 <input type="date" id="dailyDatePicker" value="${today}" onchange="loadDateSignals(this.value)">
                 <button class="btn-sm primary" onclick="loadDateSignals(document.getElementById('dailyDatePicker').value)">查看</button>
             </div>
@@ -1262,7 +1261,7 @@ function renderTodayFeed() {
         el.innerHTML = `<div class="empty-state">
             <div class="icon">📭</div>
             <p>今日暂无情报</p>
-            <p style="font-size:0.85em;margin-top:8px;">点左侧「📡 手动运行每日情报」开始抓取</p>
+            <p class="feed-hint">点左侧「📡 手动运行每日情报」开始抓取</p>
         </div>`;
         return;
     }
@@ -1334,7 +1333,7 @@ function renderDailyIntel() {
             <div class="empty-state">
                 <div class="icon">📭</div>
                 <p>暂无最近情报</p>
-                <p style="font-size:0.85em;margin-top:8px;">点击左侧「📡 手动运行每日情报」开始抓取</p>
+                <p class="feed-hint">点击左侧「📡 手动运行每日情报」开始抓取</p>
             </div>`;
         return;
     }
@@ -1348,9 +1347,9 @@ function renderDailyIntel() {
         </div>
         <div class="daily-stats">
             <div class="stat-card"><div class="num">${filtered.length}</div><div class="label">情报总数</div></div>
-            <div class="stat-card"><div class="num" style="color:var(--danger);">${highCount}</div><div class="label">高优先级</div></div>
+            <div class="stat-card"><div class="num danger">${highCount}</div><div class="label">高优先级</div></div>
             <div class="stat-card"><div class="num">${sources.size}</div><div class="label">活跃信号源</div></div>
-            <div class="stat-card"><div class="num" style="font-size:1.2em;">${dayLabel}</div><div class="label">时间范围</div></div>
+            <div class="stat-card"><div class="num small">${dayLabel}</div><div class="label">时间范围</div></div>
         </div>
         <div class="daily-feed">
             ${filtered.map(s => renderSignalCard(s)).join('')}
@@ -1401,35 +1400,35 @@ async function renderSettings() {
         const resp = await fetch('/api/settings/sources');
         const sources = await resp.json();
         sources.forEach(s => {
-            const typeTag = s.type ? ` <span style="font-size:0.7em;background:#ede7f6;color:#5e35b1;padding:1px 6px;border-radius:8px;">${({rss:'RSS',webpage:'网页',topic:'主题'})[s.type] || esc(s.type)}</span>` : '';
-            const policyTag = s.filter_policy ? ` <span style="font-size:0.7em;background:#e0f2f1;color:#00695c;padding:1px 6px;border-radius:8px;">${s.filter_policy === 'gs_only' ? '仅高盛' : '全保留'}</span>` : '';
+            const typeTag = s.type ? ` <span class="mini-tag type">${({rss:'RSS',webpage:'网页',topic:'主题'})[s.type] || esc(s.type)}</span>` : '';
+            const policyTag = s.filter_policy ? ` <span class="mini-tag policy">${s.filter_policy === 'gs_only' ? '仅高盛' : '全保留'}</span>` : '';
             const actions = s.builtin ? '' :
                 ` <button class="btn-sm" onclick="editCustomSource('${esc(s.name)}')">✏️ 编辑</button>` +
                 ` <button class="btn-sm danger" onclick="deleteCustomSource('${esc(s.name)}')">🗑 删除</button>`;
             html += `<div class="source-row">
-                <div class="info"><div class="name">${esc(s.label)}${typeTag}${policyTag} <span style="font-size:0.75em;color:#888;">(${esc(s.name)})</span></div>
-                <div class="desc">${esc(s.description || s.url || '')} ${s.builtin ? '<span style="color:#888;">· 内置</span>' : '<span style="color:var(--accent);">· 自定义</span>'}</div></div>
+                <div class="info"><div class="name">${esc(s.label)}${typeTag}${policyTag} <span class="src-name">(${esc(s.name)})</span></div>
+                <div class="desc">${esc(s.description || s.url || '')} ${s.builtin ? '<span class="c-muted">· 内置</span>' : '<span class="c-accent">· 自定义</span>'}</div></div>
                 <div>
                 <button class="toggle-btn ${s.enabled?'on':'off'}" onclick="toggleSource('${esc(s.name)}',${!s.enabled})">${s.enabled?'✅ 已启用':'⏸ 已禁用'}</button>${actions}
                 </div>
             </div>`;
         });
-    } catch(e) { html += '<p style="color:#999;">加载失败</p>'; }
+    } catch(e) { html += '<p class="muted">加载失败</p>'; }
 
     // --- Custom source add/edit form ---
-    html += `<div class="add-form" id="customSourceForm" style="margin-top:12px;">
-        <div style="font-weight:600;margin-bottom:6px;" id="csFormTitle">➕ 添加自定义信息源</div>
+    html += `<div class="add-form mt-12" id="customSourceForm">
+        <div class="form-title" id="csFormTitle">➕ 添加自定义信息源</div>
         <input id="csLabel" placeholder="名称（如 高盛研报页）">
         <input id="csName" placeholder="标识（小写英文/数字/下划线，如 gs_insights）">
         <select id="csType" onchange="onCsTypeChange()"><option value="rss">RSS 订阅</option><option value="webpage">网页地址</option><option value="topic">主题搜索</option></select>
-        <input id="csUrl" placeholder="地址（https://…）" style="flex:1;min-width:260px;">
-        <input id="csInstruction" placeholder="提取说明（如：提取页面中高盛的市场观点与目标价）" style="flex:1;min-width:260px;display:none;">
-        <label style="white-space:nowrap;"><input type="radio" name="csPolicy" value="gs_only" checked> 仅高盛相关</label>
-        <label style="white-space:nowrap;"><input type="radio" name="csPolicy" value="all"> 全部保留</label>
+        <input id="csUrl" placeholder="地址（https://…）" class="grow-input">
+        <input id="csInstruction" placeholder="提取说明（如：提取页面中高盛的市场观点与目标价）" class="grow-input" style="display:none;">
+        <label class="nowrap"><input type="radio" name="csPolicy" value="gs_only" checked> 仅高盛相关</label>
+        <label class="nowrap"><input type="radio" name="csPolicy" value="all"> 全部保留</label>
         <button class="btn-sm" onclick="testCustomSource()">🔍 测试源</button>
         <button class="btn-sm primary" onclick="saveCustomSource()">💾 保存</button>
         <button class="btn-sm" onclick="resetCustomSourceForm()" id="csCancelBtn" style="display:none;">取消</button>
-        <div id="csTestResult" style="width:100%;font-size:0.85em;color:#555;"></div>
+        <div id="csTestResult" class="form-msg"></div>
     </div>`;
     html += '</div>';
 
@@ -1453,7 +1452,7 @@ async function renderSettings() {
         <input id="newUserPassword" placeholder="密码" type="password">
         <select id="newUserRole"><option value="viewer">普通用户</option><option value="admin">管理员</option></select>
         <button class="btn-sm primary" onclick="addUser()">➕ 添加用户</button>
-        <div id="userFormMsg" style="width:100%;font-size:0.85em;color:#555;"></div>
+        <div id="userFormMsg" class="form-msg"></div>
     </div>`;
     html += '</div>';
 
@@ -1470,7 +1469,7 @@ async function loadUserList() {
         const resp = await fetch('/api/settings/users');
         const users = await resp.json();
         if (users.length === 0) {
-            container.innerHTML = '<p style="color:#999;">暂无用户</p>';
+            container.innerHTML = '<p class="muted">暂无用户</p>';
             return;
         }
         container.innerHTML = users.map(u => {
@@ -1483,7 +1482,7 @@ async function loadUserList() {
                 <div class="info">
                     <div class="model-name">👤 ${esc(u.username)}
                         ${u.role === 'admin' ? '<span class="badge-default">管理员</span>' : ''}
-                        ${isBuiltin ? '<span style="font-size:0.7em;color:#888;">（内置账号）</span>' : ''}
+                        ${isBuiltin ? '<span class="builtin-note">（内置账号）</span>' : ''}
                     </div>
                     <div class="model-detail">角色：${roleName} · 创建于 ${esc((u.created_at || '').slice(0, 10))}</div>
                 </div>
@@ -1494,7 +1493,7 @@ async function loadUserList() {
                 </div>
             </div>`;
         }).join('');
-    } catch(e) { container.innerHTML = '<p style="color:#999;">加载失败</p>'; }
+    } catch(e) { container.innerHTML = '<p class="muted">加载失败</p>'; }
 }
 
 function setUserMsg(text, isErr) {
@@ -1565,7 +1564,7 @@ async function loadLLMModelList() {
         const resp = await fetch('/api/settings/llm-models');
         const models = await resp.json();
         if (models.length === 0) {
-            container.innerHTML = '<p style="color:#999;">暂无配置的大模型。请添加至少一个模型。</p>';
+            container.innerHTML = '<p class="muted">暂无配置的大模型。请添加至少一个模型。</p>';
             return;
         }
         container.innerHTML = models.map(m => `
@@ -1580,7 +1579,7 @@ async function loadLLMModelList() {
                 </div>
             </div>
         `).join('');
-    } catch(e) { container.innerHTML = '<p style="color:#999;">加载失败</p>'; }
+    } catch(e) { container.innerHTML = '<p class="muted">加载失败</p>'; }
 }
 
 async function toggleSource(name, enable) {
@@ -1728,7 +1727,7 @@ async function testLLMModel() {
     const modelName = document.getElementById('newModelId').value.trim();
     const el = document.getElementById('testResult');
     if (!baseUrl || !authToken || !modelName) { el.innerHTML='<div class="test-result err">请填写 Base URL、Auth Token 和模型ID</div>'; return; }
-    el.innerHTML = '<div class="test-result" style="color:#888;">⏳ 测试中...</div>';
+    el.innerHTML = '<div class="test-result pending">⏳ 测试中...</div>';
     try {
         const resp = await fetch('/api/settings/llm-models/test', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({base_url:baseUrl,auth_token:authToken,model_name:modelName})});
         const r = await resp.json();
@@ -1760,14 +1759,14 @@ async function analyzeSignal(signalId, title, summary, source) {
     if (panel.classList.contains('open')) { panel.classList.remove('open'); return; }
     panel.classList.add('open');
     if (panel.dataset.loaded === 'true') return;
-    panel.innerHTML = '<span style="color:#888;">🤖 AI 分析中...</span>';
+    panel.innerHTML = '<span class="c-muted">🤖 AI 分析中...</span>';
     try {
         const resp = await fetch(`/api/signals/${signalId}/analyze`, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({title,summary,source})});
-        if (!resp.ok) { panel.innerHTML = '<span style="color:#d32f2f;">AI 分析失败</span>'; return; }
+        if (!resp.ok) { panel.innerHTML = '<span class="c-danger">AI 分析失败</span>'; return; }
         const r = await resp.json();
         panel.innerHTML = formatMd(r.analysis);
         panel.dataset.loaded = 'true';
-    } catch(e) { panel.innerHTML = '<span style="color:#d32f2f;">网络错误</span>'; }
+    } catch(e) { panel.innerHTML = '<span class="c-danger">网络错误</span>'; }
 }
 
 async function loadDailyReport(dateStr, force) {
@@ -1784,18 +1783,18 @@ async function loadDailyReport(dateStr, force) {
         if (r.report) {
             const formatted = formatMd(r.report);
             const staleHint = r.stale
-                ? `<div style="color:#b26a00;font-size:0.85em;margin-top:8px;">⚠️ 这份摘要生成时只有 ${r.signal_count} 条情报，现在已有 ${r.current_signal_count} 条，可点击「重新生成」更新。</div>`
+                ? `<div class="stale-warn">⚠️ 这份摘要生成时只有 ${r.signal_count} 条情报，现在已有 ${r.current_signal_count} 条，可点击「重新生成」更新。</div>`
                 : '';
             container.innerHTML = `<div class="daily-report-card">
                 <h3>📋 ${dateStr} 每日情报摘要</h3>
-                <div style="margin-top:8px;">${formatted}</div>
+                <div class="mt-8">${formatted}</div>
                 ${staleHint}
-                <div style="margin-top:10px;"><button class="btn-sm" onclick="loadDailyReport('${dateStr}', true)">🔄 重新生成</button></div>
+                <div class="mt-10"><button class="btn-sm" onclick="loadDailyReport('${dateStr}', true)">🔄 重新生成</button></div>
             </div>`;
         } else {
             container.innerHTML = '';
         }
-    } catch(e) { container.innerHTML = '<p style="color:#999;">日报加载失败</p>'; }
+    } catch(e) { container.innerHTML = '<p class="muted">日报加载失败</p>'; }
 }
 
 // Add AI-analysis toggles to every signal card under a root element.
@@ -1855,7 +1854,7 @@ async function loadDateSignals(dateStr) {
         let html = `<div class="daily-header">
             <h2>📡 ${dateStr} 情报</h2>
             <div class="date-picker-row">
-                <span style="font-size:0.85em;color:#888;">📅 查看日期：</span>
+                <span>📅 查看日期：</span>
                 <input type="date" id="dailyDatePicker" value="${dateStr}" onchange="loadDateSignals(this.value)">
                 <button class="btn-sm primary" onclick="loadDateSignals(document.getElementById('dailyDatePicker').value)">查看</button>
                 <button class="btn-sm" onclick="loadDailyReport(document.getElementById('dailyDatePicker').value)">📋 生成日报</button>
@@ -1864,9 +1863,9 @@ async function loadDateSignals(dateStr) {
         </div>
         <div class="daily-stats">
             <div class="stat-card"><div class="num">${filtered.length}</div><div class="label">当日情报</div></div>
-            <div class="stat-card"><div class="num" style="color:var(--danger);">${highCount}</div><div class="label">高优先级</div></div>
+            <div class="stat-card"><div class="num danger">${highCount}</div><div class="label">高优先级</div></div>
             <div class="stat-card"><div class="num">${sources.size}</div><div class="label">活跃信号源</div></div>
-            <div class="stat-card"><div class="num" style="font-size:1.2em;">${dateStr}</div><div class="label">查看日期</div></div>
+            <div class="stat-card"><div class="num small">${dateStr}</div><div class="label">查看日期</div></div>
         </div>
         <div id="dailyReportContainer"></div>
         <div class="daily-feed">${filtered.map(s => renderSignalCard(s)).join('')}</div>`;
