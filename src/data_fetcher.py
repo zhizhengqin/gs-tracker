@@ -198,7 +198,10 @@ class SEC13FFetcher:
 
         df = pd.DataFrame(records)
         if not df.empty:
-            df["value"] = pd.to_numeric(df["value"], errors="coerce") * 1000
+            # SEC amended Form 13F (compliance since 2023): <value> is already
+            # in dollars rounded to the nearest dollar — do NOT multiply by
+            # 1000 (that rule only applied to pre-2023 filings in thousands).
+            df["value"] = pd.to_numeric(df["value"], errors="coerce")
             df["shares"] = pd.to_numeric(df["shares"], errors="coerce")
             df["voting_sole"] = pd.to_numeric(df["voting_sole"], errors="coerce")
             df["voting_shared"] = pd.to_numeric(df["voting_shared"], errors="coerce")

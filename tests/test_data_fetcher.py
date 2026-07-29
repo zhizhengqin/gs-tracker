@@ -62,7 +62,8 @@ async def test_parse_13f_infotable(httpx_mock):
     assert len(df) == 1
     assert df.iloc[0]["name_of_issuer"] == "Apple Inc"
     assert df.iloc[0]["cusip"] == "037833100"
-    assert df.iloc[0]["value"] == 100000000.0  # 千美元 -> 美元
+    # Post-2023 13F filings report <value> in dollars already; no scaling
+    assert df.iloc[0]["value"] == 100000.0
     assert df.iloc[0]["shares"] == 10000
     await fetcher.close()
 

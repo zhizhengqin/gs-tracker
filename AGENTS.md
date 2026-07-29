@@ -44,7 +44,7 @@ gs-tracker/
 - pytest, pytest-asyncio, black, flake8, mypy
 
 ## 数据规范
-- 13F value 单位为美元（XML 原始为千美元，需 ×1000）
+- 13F value 单位为美元（SEC 2023 年起新规：XML 原始值已是美元，禁止再 ×1000；仅 2023 年前的历史申报为千美元）
 - 季度格式: `YYYY-QN`，如 `2026-Q1`
 - Goldman Sachs CIK: `0000886982`
 - 13F 截止日: Q1(5/15), Q2(8/14), Q3(11/14), Q4(2/14)
