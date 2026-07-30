@@ -1901,8 +1901,7 @@ async function deleteModel(id) {
 }
 
 // ====== Daily intel AI analysis + date picker ======
-async function analyzeSignal(signalId, title, summary, source) {
-    const panel = document.getElementById('ai-' + signalId);
+async function analyzeSignal(panel, signalId, title, summary, source) {
     if (!panel) return;
     if (panel.classList.contains('open')) { panel.classList.remove('open'); return; }
     panel.classList.add('open');
@@ -1921,8 +1920,7 @@ async function analyzeSignal(signalId, title, summary, source) {
 // it at fetch time). 404 = not generated yet (e.g. older signals) — collapse
 // back and leave the manual button; never auto-POST here so browsing history
 // can't spend LLM quota unexpectedly.
-async function autoLoadHighAnalysis(signalId) {
-    const panel = document.getElementById('ai-' + signalId);
+async function autoLoadHighAnalysis(panel, signalId) {
     if (!panel) return;
     panel.classList.add('open');
     panel.innerHTML = '<span class="c-muted">AI 解读加载中...</span>';
@@ -2027,7 +2025,7 @@ function addAiToggles(rootEl) {
             const summary = summaryEl ? summaryEl.textContent : '';
             const sourceEl = card.querySelector('.sig-source');
             const source = sourceEl ? sourceEl.textContent : '';
-            analyzeSignal(sigId, title, summary, source);
+            analyzeSignal(panel, sigId, title, summary, source);
         };
         card.appendChild(toggle);
 
@@ -2037,7 +2035,7 @@ function addAiToggles(rootEl) {
         card.appendChild(panel);
 
         // High-priority cards: show the pipeline-generated analysis directly.
-        if (card.classList.contains('high')) autoLoadHighAnalysis(sigId);
+        if (card.classList.contains('high')) autoLoadHighAnalysis(panel, sigId);
     });
 }
 
