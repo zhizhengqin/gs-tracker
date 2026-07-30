@@ -24,6 +24,20 @@ def test_schedule_quarterly_check_creates_monday_job():
     scheduler.shutdown()
 
 
+def test_schedule_daily_intel_creates_hourly_job():
+    scheduler = GSScheduler()
+    scheduler.schedule_daily_intel()
+    job = scheduler.scheduler.get_job("daily_intel")
+    assert job is not None
+
+    field_map = {f.name: str(f) for f in job.trigger.fields}
+    assert field_map["minute"] == "0"
+    assert field_map["hour"] == "*"
+    assert field_map["day_of_week"] == "*"
+    assert str(job.trigger.timezone) == "Asia/Shanghai"
+    scheduler.shutdown()
+
+
 @pytest.mark.asyncio
 async def test_run_quarterly_pipeline_delegates_to_run_pipeline(monkeypatch):
     scheduler = GSScheduler()

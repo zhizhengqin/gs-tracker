@@ -18,7 +18,8 @@ from src.config import (  # noqa: F401  (REPORT_OUTPUT_DIR kept as a patchable n
     ensure_directories,
 )
 from src.data_fetcher import SEC13FFetcher
-from src.daily_report import ensure_daily_report
+from src.daily_report import ensure_daily_report, refresh_daily_report
+from src.signal_analysis import auto_analyze_high_signals
 from src.llm_config import resolve_llm_config
 from src.notifier import Notification, Notifier, _format_summary
 from src.quarter_compare import QuarterComparator
@@ -275,11 +276,27 @@ async def run_daily_intel_stream():
         except Exception:
             logger.exception("Source close failed")
 
+    # Auto-generate AI analysis for new HIGH-strength signals. Awaited before
+    # the complete event so a manual run's view reload shows them right away;
+    # failures never block the pipeline (manual click retries later).
+    if new_signals:
+        try:
+            analyzed = await auto_analyze_high_signals(new_signals)
+            if analyzed:
+                logger.info("Auto-generated AI analysis for %d high-priority signals", analyzed)
+        except Exception:
+            logger.exception("Auto signal analysis failed")
+
     # Kick off daily report generation (add-on: never blocks/fails the pipeline;
-    # web SSE keeps the loop alive so the task completes).
+    # web SSE keeps the loop alive so the task completes). New signals force a
+    # regeneration so the hourly job keeps today's summary current; otherwise
+    # only generate when no report exists yet.
     try:
         today = datetime.now(BEIJING_TZ).strftime("%Y-%m-%d")
-        await ensure_daily_report(today)
+        if new_signals:
+            await refresh_daily_report(today)
+        else:
+            await ensure_daily_report(today)
     except Exception:
         logger.exception("Failed to schedule daily report generation")
 

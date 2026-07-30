@@ -225,3 +225,61 @@ async def test_ensure_swallows_generation_errors(monkeypatch):
     )
     task = await dr.ensure_daily_report("2026-07-27")
     await task  # must not raise
+
+
+@pytest.mark.asyncio
+async def test_refresh_regenerates_despite_cache(monkeypatch):
+    """New signals arrived: refresh drops the cached report and regenerates."""
+    import src.daily_report as dr
+    dr._report_tasks.clear()
+    row = {"report_text": "旧日报", "signal_count": 1}
+    deleted = []
+    monkeypatch.setattr(
+        "src.daily_report.get_daily_report", lambda d: None if deleted else row
+    )
+    monkeypatch.setattr("src.daily_report.delete_daily_report", lambda d: deleted.append(d))
+    monkeypatch.setattr("src.daily_report.get_signals_by_date", lambda d: [_signal()])
+    monkeypatch.setattr("src.daily_report.save_daily_report", lambda d, t, c=0: None)
+    monkeypatch.setattr("src.daily_report.get_default_llm_model", lambda: None)
+    client = _patch_llm(monkeypatch)
+
+    task = await dr.refresh_daily_report("2026-07-27")
+    assert task is not None
+    await task
+    assert deleted == ["2026-07-27"]
+    assert client.calls == 1
+
+
+@pytest.mark.asyncio
+async def test_refresh_without_signals_is_noop(monkeypatch):
+    """当天没有信号时不删除缓存、不生成，避免空调 LLM。"""
+    import src.daily_report as dr
+    dr._report_tasks.clear()
+    deleted = []
+    monkeypatch.setattr("src.daily_report.get_signals_by_date", lambda d: [])
+    monkeypatch.setattr("src.daily_report.delete_daily_report", lambda d: deleted.append(d))
+
+    assert await dr.refresh_daily_report("2026-07-27") is None
+    assert deleted == []
+
+
+@pytest.mark.asyncio
+async def test_refresh_chains_after_in_flight_generation(monkeypatch):
+    """进行中的生成（如网页请求触发）不被取消；refresh 排队在其后重生成。"""
+    import src.daily_report as dr
+    dr._report_tasks.clear()
+    deleted = []
+    monkeypatch.setattr("src.daily_report.get_daily_report", lambda d: None)
+    monkeypatch.setattr("src.daily_report.delete_daily_report", lambda d: deleted.append(d))
+    monkeypatch.setattr("src.daily_report.get_signals_by_date", lambda d: [_signal()])
+    monkeypatch.setattr("src.daily_report.save_daily_report", lambda d, t, c=0: None)
+    monkeypatch.setattr("src.daily_report.get_default_llm_model", lambda: None)
+    client = _patch_llm(monkeypatch)
+
+    t1 = await dr.ensure_daily_report("2026-07-27")
+    t2 = await dr.refresh_daily_report("2026-07-27")
+    assert t1 is not None and t2 is not None and t1 is not t2
+    await t2
+    assert not t1.cancelled()
+    assert client.calls == 2  # 旧的一轮 + refresh 重生成的一轮
+    assert deleted == ["2026-07-27"]

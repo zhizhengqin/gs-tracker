@@ -40,14 +40,15 @@ class GSScheduler:
         )
 
     def schedule_daily_intel(self) -> None:
-        """Schedule the lightweight daily intelligence job (Mon-Fri, 17:00 CST).
+        """Schedule the lightweight daily intelligence job (hourly, on the hour).
 
-        17:00 Beijing ≈ 04:00-05:00 US Eastern — captures overnight
-        disclosures and news from the previous US trading day.
+        Runs every hour at minute 0 (Asia/Shanghai) so fresh disclosures and
+        news land within an hour; the pipeline tail regenerates today's daily
+        summary whenever new signals arrive.
         """
         self.scheduler.add_job(
             self.run_daily_intel,
-            CronTrigger(day_of_week="mon-fri", hour=17, minute=0),
+            CronTrigger(minute=0),
             id="daily_intel",
             replace_existing=True,
             max_instances=1,

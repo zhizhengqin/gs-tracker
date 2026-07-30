@@ -11,6 +11,8 @@ from the legacy endpoint):
 
 ensure_daily_report() adds process-wide dedupe so the pipeline tail, the
 endpoint fallback, and the scheduler can never double-generate one date.
+refresh_daily_report() force-regenerates after new signals arrive (hourly
+intel job): drops the cache and chains a fresh pass after any in-flight one.
 """
 import asyncio
 import logging
@@ -18,6 +20,7 @@ from typing import Optional
 
 from src.llm_config import resolve_llm_config
 from src.storage import (
+    delete_daily_report,
     get_daily_report,
     get_default_llm_model,
     get_signals_by_date,
@@ -146,15 +149,45 @@ async def _generate_safe(date: str) -> None:
 async def ensure_daily_report(date: str) -> Optional[asyncio.Task]:
     """Idempotent fire-and-forget generation.
 
-    Returns None when a cached report already exists; otherwise returns the
-    in-flight (or newly created) generation Task. Callers that only want
-    fire-and-forget ignore the return; callers that must wait (scheduler/CLI)
-    await it.
+    Returns None when a cached report already exists and nothing newer is
+    being generated; otherwise returns the in-flight (or newly created)
+    generation Task — including a refresh_daily_report() pass still running
+    for this date, so callers awaiting the task always get the fresh result.
+    Callers that only want fire-and-forget ignore the return; callers that
+    must wait (scheduler/CLI) await it.
     """
+    task = _report_tasks.get(date)
+    if task is not None and not task.done():
+        return task
     if await asyncio.to_thread(get_daily_report, date):
         return None
-    task = _report_tasks.get(date)
-    if task is None or task.done():
-        task = asyncio.create_task(_generate_safe(date))
-        _report_tasks[date] = task
+    task = asyncio.create_task(_generate_safe(date))
+    _report_tasks[date] = task
+    return task
+
+
+async def refresh_daily_report(date: str) -> Optional[asyncio.Task]:
+    """Force-regenerate the daily report after new signals arrived.
+
+    No-op when the date has no signals (nothing to summarize, so the cached
+    state is left alone and no LLM call is spent). Otherwise drops the cache
+    and starts a fresh generation. An in-flight generation (e.g. triggered
+    by a web request) is NOT cancelled — callers may be awaiting it — the
+    fresh pass chains after it and overwrites its result.
+    """
+    if not await asyncio.to_thread(get_signals_by_date, date):
+        return None
+    existing = _report_tasks.get(date)
+
+    async def _regen() -> None:
+        if existing is not None and not existing.done():
+            try:
+                await existing
+            except asyncio.CancelledError:
+                pass
+        await asyncio.to_thread(delete_daily_report, date)
+        await _generate_safe(date)
+
+    task = asyncio.create_task(_regen())
+    _report_tasks[date] = task
     return task

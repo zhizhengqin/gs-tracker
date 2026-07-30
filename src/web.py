@@ -26,6 +26,11 @@ from src.config import GOLDMAN_CIK, PROJECT_ROOT, REPORT_OUTPUT_DIR
 from src.daily_report import ensure_daily_report, generate_daily_report
 from src.llm_config import resolve_llm_config
 from src.quarter_insight import ensure_quarter_insight, generate_quarter_insight
+from src.signal_analysis import (
+    ANALYSIS_FAILURE_SENTINEL,
+    AnalysisError,
+    ensure_signal_analysis,
+)
 from src.signals.ai_triage import AiTriage
 from src.signals.base import Signal
 from src.storage import (
@@ -51,7 +56,6 @@ from src.storage import (
     init_db,
     list_users,
     save_daily_report,
-    save_signal_analysis,
     set_default_llm_model,
     set_setting,
     update_user,
@@ -1063,7 +1067,9 @@ async def api_signals_by_date(date: str) -> dict:
 
 # ====== Signal AI analysis ======
 
-_ANALYSIS_FAILURE_SENTINEL = "AI 未生成有效解读"
+# Legacy alias kept for existing call sites/tests; logic lives in
+# src.signal_analysis (shared with the pipeline's auto-generation).
+_ANALYSIS_FAILURE_SENTINEL = ANALYSIS_FAILURE_SENTINEL
 
 
 @app.get("/api/signals/{signal_id}/analysis")
@@ -1080,87 +1086,32 @@ async def api_analyze_signal(signal_id: str, body: dict = Body(default={})) -> d
     """Generate AI analysis for a signal and cache it.
 
     Accepts optional signal metadata in the request body so the LLM
-    has context even if the signal is not in the DB.
+    has context even if the signal is not in the DB. Dedupes against
+    in-flight auto-generation from the daily-intel pipeline.
     """
-    # Check cache first — a cached failure sentinel is treated as a miss so
-    # earlier transient failures self-heal on the next request.
-    cached = await asyncio.to_thread(get_signal_analysis, signal_id)
-    if cached and cached != _ANALYSIS_FAILURE_SENTINEL:
-        return {"signal_id": signal_id, "analysis": cached, "cached": True}
-
-    from src.signals.news_source import clean_html_text
-
-    title = clean_html_text((body.get("title") or "").strip())
-    summary = clean_html_text((body.get("summary") or "").strip())
+    title = (body.get("title") or "").strip()
+    summary = (body.get("summary") or "").strip()
     source = (body.get("source") or "").strip()
-
     if not title:
         raise HTTPException(status_code=422, detail="请提供信号标题(title)")
 
-    db_model = await asyncio.to_thread(get_default_llm_model)
-    llm = _llm_client_kwargs(db_model)
-    if not llm["api_key"] and not llm["auth_token"]:
-        raise HTTPException(
-            status_code=400,
-            detail="尚未配置大模型，请先在「设置」页添加大模型（如 DeepSeek/Kimi）",
-        )
-
+    task = await ensure_signal_analysis(signal_id, title, summary, source)
+    if task is None:
+        cached = await asyncio.to_thread(get_signal_analysis, signal_id)
+        return {"signal_id": signal_id, "analysis": cached, "cached": True}
     try:
-        import anthropic
-
-        client = anthropic.AsyncAnthropic(
-            api_key=llm["api_key"],
-            auth_token=llm["auth_token"],
-            base_url=llm["base_url"],
-            timeout=30.0,
-        )
-        prompt = (
-            "你是一位高盛情报分析助手。请用中文简要分析以下情报信号，"
-            "帮助中国投资者理解其含义。\n\n"
-            f"信号来源：{source}\n"
-            f"标题：{title}\n"
-            f"摘要：{summary}\n\n"
-            "要求：\n"
-            "1. 用中文翻译并概括信号核心内容（2-3句）\n"
-            "2. 如有涉及评级/目标价，必须署名来源（如'高盛'），禁止以本系统名义给出买卖建议\n"
-            "3. 用通俗语言解释对普通投资者可能意味着什么（1-2句）\n"
-            "4. 总字数控制在200字以内"
-        )
-        resp = await client.messages.create(
-            model=llm["model"],
-            # Headroom for gateways whose models emit a thinking block first —
-            # an 800 cap was exhausted by reasoning, yielding empty text.
-            max_tokens=2048,
-            messages=[{"role": "user", "content": prompt}],
-        )
-        text = ""
-        for block in resp.content:
-            if hasattr(block, "text"):
-                text += block.text
-
-        if not text.strip():
-            # Transient empty completions happen with some gateways — retry once
-            resp = await client.messages.create(
-                model=llm["model"],
-                max_tokens=2048,
-                messages=[{"role": "user", "content": prompt}],
+        analysis = await task
+    except AnalysisError as exc:
+        if str(exc) == "no_llm_configured":
+            raise HTTPException(
+                status_code=400,
+                detail="尚未配置大模型，请先在「设置」页添加大模型（如 DeepSeek/Kimi）",
             )
-            for block in resp.content:
-                if hasattr(block, "text"):
-                    text += block.text
-
-        if not text.strip():
-            # Do NOT cache failures — a later click should try again.
-            raise HTTPException(status_code=502, detail="AI 暂时未能生成解读，请稍后重试")
-
-        analysis = text.strip()
-        await asyncio.to_thread(save_signal_analysis, signal_id, analysis)
-        return {"signal_id": signal_id, "analysis": analysis, "cached": False}
-    except HTTPException:
-        raise
+        raise HTTPException(status_code=502, detail="AI 暂时未能生成解读，请稍后重试")
     except Exception as exc:
         logger.exception("AI analysis failed for signal %s", signal_id)
         raise HTTPException(status_code=500, detail=f"AI 分析失败：{exc}")
+    return {"signal_id": signal_id, "analysis": analysis, "cached": False}
 
 
 # ====== Daily report ======

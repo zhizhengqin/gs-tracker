@@ -88,13 +88,14 @@
 <div class="guide-doc">
     <div class="guide-hero">
         <h2>系统使用指南</h2>
-        <p>写给完全不懂金融和编程的你：看完这一页，就能独立使用 GS-Tracker。</p>
+        <p>看完这一页，就能独立使用 GS-Tracker。</p>
         <div class="guide-toc">
             <a href="#g-what">系统是什么</a>
             <a href="#g-start">三分钟上手</a>
             <a href="#g-sources">信号源科普</a>
             <a href="#g-priority">优先级</a>
             <a href="#g-pages">页面说明</a>
+            <a href="#g-freq">更新频率</a>
             <a href="#g-faq">常见问题</a>
         </div>
     </div>
@@ -111,7 +112,7 @@
         <ol>
             <li><strong>打开网页</strong>，默认就是「每日情报」页：最上面是 AI 自动生成的今日日报，下面是一条一条的原始信号。</li>
             <li>今天还没有情报？点左侧边栏的 <strong>「运行每日情报」</strong>，等一两分钟，页面会自动刷新出结果。</li>
-            <li>对某条信号感兴趣，点卡片上的 <strong>「AI 解读」</strong>，AI 会用中文解释这条消息意味着什么。</li>
+            <li><strong>高优先级信号</strong>的 AI 解读会自动生成并直接展示；其它信号感兴趣就点卡片上的 <strong>「AI 解读」</strong>，AI 会用中文解释这条消息意味着什么。</li>
             <li>想看高盛上个季度到底买了什么股票？点左侧 <strong>「季度报告」</strong>。</li>
             <li>手机上也能用：点左上角 <strong>☰</strong> 展开同样的菜单，功能完全一致。</li>
         </ol>
@@ -159,7 +160,7 @@
         <h3>四、信号优先级怎么看？</h3>
         <p>每条信号都会被自动评一个优先级，左侧筛选区可以按优先级过滤：</p>
         <ul>
-            <li><span class="dot dot-high"></span><strong>高优先级</strong>：值得当天就看，比如大额持仓变动、高管变动、官方重大公告。</li>
+            <li><span class="dot dot-high"></span><strong>高优先级</strong>：值得当天就看，比如大额持仓变动、高管变动、官方重大公告。这类信号的 AI 解读会在抓取后自动生成，直接展示在卡片下方，无需点击。</li>
             <li><span class="dot dot-medium"></span><strong>中优先级</strong>：有一定参考价值，扫一眼标题即可。</li>
             <li><span class="dot dot-low"></span><strong>低优先级</strong>：背景信息，知道有这回事就行。</li>
         </ul>
@@ -171,10 +172,10 @@
         <h4>每日情报（默认页）</h4>
         <ul>
             <li><strong>顶部 AI 日报</strong>：当天所有信号的 AI 中文汇总，先读它。</li>
-            <li><strong>今日情报列表</strong>：一条条原始信号，点「AI 解读」可看单条详解（结果有缓存，不重复消耗 AI 额度）。</li>
+            <li><strong>今日情报列表</strong>：一条条原始信号。高优先级信号的 AI 解读已自动展开在卡片下方；中低优先级信号点「AI 解读」生成详解（结果有缓存，不重复消耗 AI 额度）。</li>
             <li><strong>查看日期</strong>：页面顶部可选择任意历史日期回溯当天的情报。</li>
             <li><strong>更早的情报</strong>：页面底部折叠区，展开可看最近 30 天。</li>
-            <li><strong>重新生成日报</strong>：情报是全天陆续抓进来的，如果日报生成得早、后来又来了新情报，卡片上会出现橙色提醒（"生成时只有 N 条，现在已有 M 条"），点卡片底部的「重新生成」即可让 AI 基于最新情报重写一份。</li>
+            <li><strong>重新生成日报</strong>：系统每小时自动抓取，抓到新情报后会自动重写日报，一般不用你操心。如果刚好在新情报入库、日报还没自动更新的间隙，卡片上会出现橙色提醒（"生成时只有 N 条，现在已有 M 条"），点卡片底部的「重新生成」可以不等定时任务、立刻让 AI 基于最新情报重写一份。</li>
         </ul>
         <h4>季度报告</h4>
         <ul>
@@ -189,22 +190,37 @@
         </ul>
         <h4>左侧两个按钮的区别</h4>
         <ul>
-            <li><strong>运行每日情报</strong>：立刻抓取今天的多源信号并生成日报（平时系统每天自动跑，这个按钮用于你想「现在就要」的时刻）。</li>
-            <li><strong>运行季度对账</strong>：抓取最新的 13F 持仓并生成季度报告（每季度跑一次即可，在 13F 披露截止日后使用）。</li>
+            <li><strong>运行每日情报</strong>：立刻抓取今天的多源信号并生成日报（平时系统每小时自动跑一次，这个按钮用于你想「现在就要」的时刻）。</li>
+            <li><strong>运行季度对账</strong>：抓取最新的 13F 持仓并生成季度报告（系统每周一早 9 点自动检查一次有没有新的 13F 申报；13F 本身每季度才披露一次，所以平时大多空手而归，披露截止日后用它手动补跑即可）。</li>
         </ul>
         <p>两个按钮点击后都会出现<strong>实时进度面板</strong>：左侧显示流水线的四个步骤，右侧逐个信号源显示抓取状态（进行中 → 成功 / 失败），让你清楚知道系统正在做什么。</p>
     </div>
 
+    <div class="card" id="g-freq">
+        <h3>六、各板块更新频率</h3>
+        <p>系统在后台有一个定时任务，自动保持各板块内容新鲜。下面是每个板块的更新节奏（全部为北京时间）：</p>
+        <table>
+            <tr><th>板块</th><th>更新频率</th><th>说明</th></tr>
+            <tr><td><strong>每日情报信号</strong></td><td>每小时自动抓取一次（整点）</td><td>8-K、13D/13G、高盛研究、新闻、宏观、自定义源全部每小时扫一遍，只抓新内容</td></tr>
+            <tr><td><strong>AI 每日日报</strong></td><td>抓到新情报后自动重新生成</td><td>没有新情报时不重复生成，不浪费 AI 额度</td></tr>
+            <tr><td><strong>单条 AI 解读</strong></td><td>高优先级：抓取后自动生成；其它：手动点击生成</td><td>生成后缓存并自动展开（高优先级），重复看不消耗额度</td></tr>
+            <tr><td><strong>13F 持仓（季度对账）</strong></td><td>每周一早 9 点自动检查</td><td>13F 本身每季度才披露一次（截止日 5/15、8/14、11/14、2/14），平时检查多为空跑</td></tr>
+            <tr><td><strong>季度报告（AI 洞察、重点标的）</strong></td><td>生成后长期缓存</td><td>内容不会自动变，点「重新生成」才会更新</td></tr>
+            <tr><td><strong>历史情报保留</strong></td><td>最近 90 天</td><td>更早的信号随每次抓取自动清理，历史日报和季度报告不受影响</td></tr>
+        </table>
+        <div class="tip">所有自动任务失败都不会影响你已保存的数据，下次到点会自动重试；手动按钮随时可用。</div>
+    </div>
+
     <div class="card" id="g-faq">
-        <h3>六、常见问题</h3>
+        <h3>七、常见问题</h3>
         <p><strong>Q：为什么 13F 持仓数据是一两个月前的？</strong><br>
         A：这是 SEC 规则决定的，所有机构都一样，最长滞后 45 天。想更早发现重仓线索，多留意 13D/13G 信号。</p>
         <p><strong>Q：为什么有些新闻看起来和高盛关系不大？</strong><br>
         A：系统默认只保留与高盛相关的新闻并会定期清理噪音；如有个别漏网之鱼，可在设置里关闭「新闻」源，或调整自定义主题。</p>
         <p><strong>Q：日报里写的条数和下面的实际情报数量对不上？</strong><br>
-        A：情报是全天陆续入库的，日报生成之后再抓到的新情报不会自动改摘要。这时卡片上会出现橙色提醒，点「重新生成」就能更新到最新内容。</p>
+        A：情报是全天陆续入库的。系统每小时抓到新情报后会自动重写日报，一般过一会儿数量就对上了；如果你正好卡在新情报刚入库、日报还没自动更新的间隙，卡片上会出现橙色提醒，点「重新生成」可立刻更新到最新内容。</p>
         <p><strong>Q：AI 解读和日报会重复消耗额度吗？</strong><br>
-        A：不会。单条解读和每日日报都有缓存，同一天同一内容只调用一次 AI；只有你主动点「重新生成」才会再调用一次。</p>
+        A：不会重复消耗。单条解读和每日日报都有缓存，同一内容只调用一次 AI。会触发新调用的情况只有三种：高优先级信号抓取后自动生成解读、系统抓到新情报自动更新日报、你主动点「AI 解读」或「重新生成」。</p>
         <p><strong>Q：我的 API Key 安全吗？</strong><br>
         A：Key 只保存在你自己服务器的本地数据库里，不会外传；代码中也没有硬编码任何密钥。</p>
         <p><strong>Q：手机上功能完整吗？</strong><br>
@@ -1901,6 +1917,24 @@ async function analyzeSignal(signalId, title, summary, source) {
     } catch(e) { panel.innerHTML = '<span class="c-danger">网络错误</span>'; }
 }
 
+// Auto-show cached AI analysis on high-priority cards (the pipeline generates
+// it at fetch time). 404 = not generated yet (e.g. older signals) — collapse
+// back and leave the manual button; never auto-POST here so browsing history
+// can't spend LLM quota unexpectedly.
+async function autoLoadHighAnalysis(signalId) {
+    const panel = document.getElementById('ai-' + signalId);
+    if (!panel) return;
+    panel.classList.add('open');
+    panel.innerHTML = '<span class="c-muted">AI 解读加载中...</span>';
+    try {
+        const resp = await fetch(`/api/signals/${signalId}/analysis`);
+        if (!resp.ok) { panel.classList.remove('open'); panel.innerHTML = ''; return; }
+        const r = await resp.json();
+        panel.innerHTML = formatMd(r.analysis);
+        panel.dataset.loaded = 'true';
+    } catch(e) { panel.classList.remove('open'); panel.innerHTML = ''; }
+}
+
 async function loadDailyReport(dateStr, force) {
     const container = document.getElementById('dailyReportContainer');
     if (!container) return;
@@ -2001,6 +2035,9 @@ function addAiToggles(rootEl) {
         panel.className = 'ai-panel';
         panel.id = 'ai-' + sigId;
         card.appendChild(panel);
+
+        // High-priority cards: show the pipeline-generated analysis directly.
+        if (card.classList.contains('high')) autoLoadHighAnalysis(sigId);
     });
 }
 

@@ -524,6 +524,124 @@ async def test_stream_schedules_daily_report(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_stream_refreshes_daily_report_when_new_signals(monkeypatch, make_signal):
+    """本次抓到新信号时，流水线应强制重生成当日日报（refresh 而非 ensure）。"""
+    import json as _json
+    from datetime import datetime, timezone
+    import src.main as main_mod
+
+    refresh_calls, ensure_calls = [], []
+
+    async def _fake_refresh(date):
+        refresh_calls.append(date)
+        return None
+
+    async def _fake_ensure(date):
+        ensure_calls.append(date)
+        return None
+
+    class _Src:
+        async def fetch(self, _query):
+            return [make_signal(source="8-K")]
+
+        async def close(self):
+            return None
+
+    monkeypatch.setattr(main_mod, "refresh_daily_report", _fake_refresh)
+    monkeypatch.setattr(main_mod, "ensure_daily_report", _fake_ensure)
+    monkeypatch.setattr(main_mod, "_build_daily_sources", lambda: [("8-K", _Src())])
+    monkeypatch.setattr(main_mod, "get_recent_signals", lambda days=30: [])
+    monkeypatch.setattr(main_mod, "save_signals_incremental", lambda *a, **kw: None)
+    monkeypatch.setattr(main_mod, "save_signal_run", lambda *a, **kw: None)
+    monkeypatch.setattr(main_mod, "cleanup_expired_signals", lambda *a, **kw: None)
+
+    events = []
+    async for event_json in main_mod.run_daily_intel_stream():
+        events.append(_json.loads(event_json))
+
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    assert refresh_calls == [today]
+    assert ensure_calls == []
+    assert events[-1]["event"] == "complete"
+    assert events[-1]["new_signals"] == 1
+
+
+@pytest.mark.asyncio
+async def test_stream_auto_analyzes_new_signals_before_complete(monkeypatch, make_signal):
+    """complete 事件发出前，流水线应先完成新信号的自动 AI 解读。"""
+    import json as _json
+    import src.main as main_mod
+
+    auto_calls = []
+    sig = make_signal(source="8-K")
+
+    async def _fake_auto(signals):
+        auto_calls.append([s.id for s in signals])
+
+    class _Src:
+        async def fetch(self, _query):
+            return [sig]
+
+        async def close(self):
+            return None
+
+    async def _noop(date):
+        return None
+
+    monkeypatch.setattr(main_mod, "auto_analyze_high_signals", _fake_auto)
+    monkeypatch.setattr(main_mod, "refresh_daily_report", _noop)
+    monkeypatch.setattr(main_mod, "ensure_daily_report", _noop)
+    monkeypatch.setattr(main_mod, "_build_daily_sources", lambda: [("8-K", _Src())])
+    monkeypatch.setattr(main_mod, "get_recent_signals", lambda days=30: [])
+    monkeypatch.setattr(main_mod, "save_signals_incremental", lambda *a, **kw: None)
+    monkeypatch.setattr(main_mod, "save_signal_run", lambda *a, **kw: None)
+    monkeypatch.setattr(main_mod, "cleanup_expired_signals", lambda *a, **kw: None)
+
+    events = []
+    async for event_json in main_mod.run_daily_intel_stream():
+        events.append(_json.loads(event_json))
+
+    assert auto_calls == [[sig.id]]
+    assert events[-1]["event"] == "complete"
+
+
+@pytest.mark.asyncio
+async def test_stream_auto_analyze_failure_does_not_break_pipeline(monkeypatch, make_signal):
+    """自动解读失败不阻塞流水线，complete 事件照常发出。"""
+    import json as _json
+    import src.main as main_mod
+
+    async def _boom(signals):
+        raise RuntimeError("LLM down")
+
+    class _Src:
+        async def fetch(self, _query):
+            return [make_signal(source="8-K")]
+
+        async def close(self):
+            return None
+
+    async def _noop(date):
+        return None
+
+    monkeypatch.setattr(main_mod, "auto_analyze_high_signals", _boom)
+    monkeypatch.setattr(main_mod, "refresh_daily_report", _noop)
+    monkeypatch.setattr(main_mod, "ensure_daily_report", _noop)
+    monkeypatch.setattr(main_mod, "_build_daily_sources", lambda: [("8-K", _Src())])
+    monkeypatch.setattr(main_mod, "get_recent_signals", lambda days=30: [])
+    monkeypatch.setattr(main_mod, "save_signals_incremental", lambda *a, **kw: None)
+    monkeypatch.setattr(main_mod, "save_signal_run", lambda *a, **kw: None)
+    monkeypatch.setattr(main_mod, "cleanup_expired_signals", lambda *a, **kw: None)
+
+    events = []
+    async for event_json in main_mod.run_daily_intel_stream():
+        events.append(_json.loads(event_json))
+
+    assert events[-1]["event"] == "complete"
+    assert events[-1]["new_signals"] == 1
+
+
+@pytest.mark.asyncio
 async def test_run_daily_intel_awaits_report_task(monkeypatch):
     """调度器/CLI 路径必须等日报生成完（一次性进程退出前落地）。"""
     import asyncio
