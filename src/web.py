@@ -1205,38 +1205,52 @@ def _validate_quarter_format(quarter: str) -> None:
 
 
 @app.get("/api/quarter-insight/{quarter}")
-async def api_get_quarter_insight(quarter: str, previous: str = "") -> dict:
+async def api_get_quarter_insight(
+    quarter: str, previous: str = "", institution: str = ""
+) -> dict:
     """Return (or generate) the AI insight report for the given quarter."""
     _validate_quarter_format(quarter)
-    task = await ensure_quarter_insight(quarter, previous or None)
+    inst = institution.strip() or "gs"
+    _validate_institution(inst)
+    task = await ensure_quarter_insight(quarter, previous or None, inst)
     if task is not None:
         await task
-    return await generate_quarter_insight(quarter, previous or None)
+    return await generate_quarter_insight(quarter, previous or None, institution=inst)
 
 
 @app.post("/api/quarter-insight/{quarter}/regenerate")
-async def api_regenerate_quarter_insight(quarter: str, previous: str = "") -> dict:
+async def api_regenerate_quarter_insight(
+    quarter: str, previous: str = "", institution: str = ""
+) -> dict:
     """Force-regenerate the AI insight report, bypassing the cache."""
     _validate_quarter_format(quarter)
-    return await generate_quarter_insight(quarter, previous or None, force=True)
+    inst = institution.strip() or "gs"
+    _validate_institution(inst)
+    return await generate_quarter_insight(
+        quarter, previous or None, force=True, institution=inst
+    )
 
 
 @app.get("/api/ticker-profiles/{quarter}")
-async def api_get_ticker_profiles(quarter: str) -> dict:
+async def api_get_ticker_profiles(quarter: str, institution: str = "") -> dict:
     """Return (or generate) AI profiles for the quarter's top-10 holdings."""
     from src.ticker_profiles import generate_ticker_profiles
 
     _validate_quarter_format(quarter)
-    return await generate_ticker_profiles(quarter)
+    inst = institution.strip() or "gs"
+    _validate_institution(inst)
+    return await generate_ticker_profiles(quarter, institution=inst)
 
 
 @app.post("/api/ticker-profiles/{quarter}/regenerate")
-async def api_regenerate_ticker_profiles(quarter: str) -> dict:
+async def api_regenerate_ticker_profiles(quarter: str, institution: str = "") -> dict:
     """Force-regenerate ticker profiles, bypassing the cache."""
     from src.ticker_profiles import generate_ticker_profiles
 
     _validate_quarter_format(quarter)
-    return await generate_ticker_profiles(quarter, force=True)
+    inst = institution.strip() or "gs"
+    _validate_institution(inst)
+    return await generate_ticker_profiles(quarter, force=True, institution=inst)
 
 
 @app.get("/api/quarters/comparison")

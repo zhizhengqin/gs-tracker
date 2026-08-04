@@ -17,6 +17,7 @@ from src.llm_config import resolve_llm_config
 from src.storage import (
     get_default_llm_model,
     get_holdings,
+    get_institution,
     get_ticker_profiles,
     save_ticker_profiles,
 )
@@ -24,6 +25,19 @@ from src.storage import (
 logger = logging.getLogger(__name__)
 
 TOP_N = 10
+
+
+def _resolve_institution(institution: str) -> tuple[str, str]:
+    # Resolve an institution id to (cik, Chinese display label); GS fallback.
+    if institution == "gs":
+        return GOLDMAN_CIK, "高盛"
+    try:
+        row = get_institution(institution)
+    except Exception:
+        row = None
+    if row:
+        return row["cik"] or GOLDMAN_CIK, row["display_name"]
+    return GOLDMAN_CIK, institution
 
 
 def aggregate_top_holdings(holdings: list[dict], limit: int = TOP_N) -> list[dict]:
@@ -89,10 +103,12 @@ def _merge_profiles(base: list[dict], ai_items: list) -> list[dict]:
     return merged
 
 
-async def generate_ticker_profiles(quarter: str, force: bool = False) -> dict:
+async def generate_ticker_profiles(
+    quarter: str, force: bool = False, institution: str = "gs"
+) -> dict:
     """Return (or generate) AI profiles for the quarter's top-10 holdings."""
     if not force:
-        cached = await asyncio.to_thread(get_ticker_profiles, quarter)
+        cached = await asyncio.to_thread(get_ticker_profiles, quarter, institution)
         if cached:
             return {
                 "quarter": quarter,
@@ -100,7 +116,8 @@ async def generate_ticker_profiles(quarter: str, force: bool = False) -> dict:
                 "cached": True,
             }
 
-    holdings = await asyncio.to_thread(get_holdings, GOLDMAN_CIK, quarter)
+    cik, label = _resolve_institution(institution)
+    holdings = await asyncio.to_thread(get_holdings, cik, quarter)
     if not holdings:
         return {
             "quarter": quarter,
@@ -132,7 +149,7 @@ async def generate_ticker_profiles(quarter: str, force: bool = False) -> dict:
             timeout=60.0,
         )
         prompt = (
-            "你是一位资深美股分析师。下面是高盛 13F 披露的前十大重仓标的"
+            f"你是一位资深美股分析师。下面是{label} 13F 披露的前十大重仓标的"
             "（13F 原始名称，可能是公司、ETF 或指数信托）。\n\n"
             f"{tickers_text}\n\n"
             "请为每个标的生成一段最基本的中文档案，并严格按 JSON 数组输出，"
@@ -166,7 +183,9 @@ async def generate_ticker_profiles(quarter: str, force: bool = False) -> dict:
             }
 
         profiles = _merge_profiles(base, ai_items)
-        await asyncio.to_thread(save_ticker_profiles, quarter, json.dumps(profiles, ensure_ascii=False))
+        await asyncio.to_thread(
+            save_ticker_profiles, quarter, json.dumps(profiles, ensure_ascii=False), institution
+        )
         return {"quarter": quarter, "profiles": profiles, "cached": False}
     except Exception as exc:
         logger.exception("Ticker profiles generation failed for %s", quarter)

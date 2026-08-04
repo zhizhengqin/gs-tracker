@@ -876,7 +876,10 @@ async function loadQuarterInsight(d, force = false) {
     const prev = previousQuarterOf(d.quarter);
     if (force) slot.innerHTML = '<div class="loading">AI 季度洞察重新生成中...</div>';
     try {
-        const query = prev ? `?previous=${prev}` : '';
+        const params = new URLSearchParams();
+        if (prev) params.set('previous', prev);
+        params.set('institution', quarterInst());
+        const query = `?${params.toString()}`;
         const resp = force
             ? await fetch(`/api/quarter-insight/${d.quarter}/regenerate${query}`, { method: 'POST' })
             : await fetch(`/api/quarter-insight/${d.quarter}${query}`);
@@ -902,9 +905,10 @@ async function loadTickerProfiles(d, force = false) {
     if (!slot) return;
     if (force) slot.innerHTML = '<div class="loading">重点标的分析重新生成中...</div>';
     try {
+        const tq = `?institution=${quarterInst()}`;
         const resp = force
-            ? await fetch(`/api/ticker-profiles/${d.quarter}/regenerate`, { method: 'POST' })
-            : await fetch(`/api/ticker-profiles/${d.quarter}`);
+            ? await fetch(`/api/ticker-profiles/${d.quarter}/regenerate${tq}`, { method: 'POST' })
+            : await fetch(`/api/ticker-profiles/${d.quarter}${tq}`);
         const r = await resp.json();
         const profiles = Array.isArray(r.profiles) ? r.profiles : [];
         if (r.message || profiles.length === 0) {

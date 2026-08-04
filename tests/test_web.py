@@ -851,12 +851,12 @@ def test_daily_report_regenerate_bad_date():
 def test_quarter_insight_endpoint_delegates(monkeypatch):
     import src.web as web
 
-    async def _fake(quarter, previous=None, force=False):
+    async def _fake(quarter, previous=None, force=False, institution="gs"):
         return {"quarter": quarter, "report": "伪季度洞察", "cached": True}
 
     monkeypatch.setattr(web, "generate_quarter_insight", _fake)
 
-    async def _none(quarter, previous=None):
+    async def _none(quarter, previous=None, institution="gs"):
         return None
 
     monkeypatch.setattr(web, "ensure_quarter_insight", _none)
@@ -873,7 +873,7 @@ def test_quarter_insight_endpoint_bad_quarter():
 def test_quarter_insight_regenerate(monkeypatch):
     import src.web as web
 
-    async def _fake(quarter, previous=None, force=False):
+    async def _fake(quarter, previous=None, force=False, institution="gs"):
         assert force is True
         return {"quarter": quarter, "report": "重新生成的洞察", "cached": False}
 
@@ -884,7 +884,7 @@ def test_quarter_insight_regenerate(monkeypatch):
 
 
 def test_ticker_profiles_endpoint_delegates(monkeypatch):
-    async def _fake(quarter, force=False):
+    async def _fake(quarter, force=False, institution="gs"):
         return {"quarter": quarter, "profiles": [{"ticker": "NVIDIA CORP"}], "cached": True}
 
     monkeypatch.setattr("src.ticker_profiles.generate_ticker_profiles", _fake)
@@ -898,8 +898,48 @@ def test_ticker_profiles_endpoint_bad_quarter():
     assert resp.status_code == 422
 
 
+def test_quarter_insight_institution_passthrough(monkeypatch):
+    """institution=jpm 必须透传给生成函数，未知机构返回 422。"""
+    import src.web as web
+
+    seen = {}
+
+    async def _fake(quarter, previous=None, force=False, institution="gs"):
+        seen["institution"] = institution
+        return {"quarter": quarter, "report": "JPM 洞察", "cached": True}
+
+    monkeypatch.setattr(web, "generate_quarter_insight", _fake)
+
+    async def _none(quarter, previous=None, institution="gs"):
+        return None
+
+    monkeypatch.setattr(web, "ensure_quarter_insight", _none)
+    resp = client.get("/api/quarter-insight/2026-Q1?institution=jpm")
+    assert resp.status_code == 200
+    assert seen["institution"] == "jpm"
+
+    resp = client.get("/api/quarter-insight/2026-Q1?institution=nope")
+    assert resp.status_code == 422
+
+
+def test_ticker_profiles_institution_passthrough(monkeypatch):
+    seen = {}
+
+    async def _fake(quarter, force=False, institution="gs"):
+        seen["institution"] = institution
+        return {"quarter": quarter, "profiles": [], "cached": True}
+
+    monkeypatch.setattr("src.ticker_profiles.generate_ticker_profiles", _fake)
+    resp = client.get("/api/ticker-profiles/2026-Q1?institution=jpm")
+    assert resp.status_code == 200
+    assert seen["institution"] == "jpm"
+
+    resp = client.get("/api/ticker-profiles/2026-Q1?institution=nope")
+    assert resp.status_code == 422
+
+
 def test_ticker_profiles_regenerate(monkeypatch):
-    async def _fake(quarter, force=False):
+    async def _fake(quarter, force=False, institution="gs"):
         assert force is True
         return {"quarter": quarter, "profiles": [], "cached": False}
 
