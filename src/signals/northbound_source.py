@@ -77,6 +77,7 @@ class NorthboundSource:
                     summary=f"北向资金持有{name}，占流通股{pct}%",
                     companies=[name],
                     strength=SignalStrength.HIGH if abs(pct - prev_pct) > 1 else SignalStrength.MEDIUM,
+                    institution_id="all",
                 )
             )
 
