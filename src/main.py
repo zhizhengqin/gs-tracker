@@ -166,7 +166,7 @@ async def run_daily_intel_stream():
         note = getattr(src, "fetch_note", "")
         return note if isinstance(note, str) else ""
 
-    sources = _build_daily_sources(institution_id)
+    sources = _build_daily_sources("gs")
     source_names = [n for n, _ in sources]
     yield json.dumps({"event": "start", "sources": source_names})
 
