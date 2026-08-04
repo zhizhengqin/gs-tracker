@@ -716,6 +716,32 @@ class TestQuarterInsights:
         assert storage.get_quarter_insight("2026-Q1", "jpm")["report_text"] == "摩根大通版"
         assert storage.get_quarter_insight("2026-Q1")["report_text"] == "高盛版"  # 默认 gs
 
+    def test_get_signal_by_id(self, fresh_db, make_signal):
+        assert storage.get_signal_by_id("sig00001") is None
+        storage.save_signals("2026-Q1", [make_signal()])
+        sig = storage.get_signal_by_id("sig00001")
+        assert sig is not None
+        assert sig.title == "高盛增持苹果"
+        assert sig.companies == ["AAPL"]
+
+    def test_get_signals_in_range(self, fresh_db, make_signal):
+        from datetime import datetime, timezone
+        storage.save_signals("2026-Q1", [
+            make_signal(id="in", title="范围内信号",
+                        published_at=datetime(2026, 3, 31, 12, tzinfo=timezone.utc)),
+            make_signal(id="out", title="范围外信号",
+                        published_at=datetime(2026, 1, 5, 12, tzinfo=timezone.utc)),
+        ])
+        rows = storage.get_signals_in_range("2026-03-25", "2026-04-02")
+        assert [s.id for s in rows] == ["in"]
+
+    def test_cross_analysis_roundtrip(self, fresh_db):
+        assert storage.get_cross_analysis("sig-1") is None
+        storage.save_cross_analysis("sig-1", "## 一致点\n都看多")
+        assert storage.get_cross_analysis("sig-1") == "## 一致点\n都看多"
+        storage.save_cross_analysis("sig-1", "新版")
+        assert storage.get_cross_analysis("sig-1") == "新版"
+
     def test_ticker_profiles_institution_scoped(self, fresh_db):
         storage.save_ticker_profiles("2026-Q1", '[{"ticker":"GS-T"}]', institution="gs")
         storage.save_ticker_profiles("2026-Q1", '[{"ticker":"JPM-T"}]', institution="jpm")

@@ -898,6 +898,44 @@ def test_ticker_profiles_endpoint_bad_quarter():
     assert resp.status_code == 422
 
 
+def test_cross_analysis_get_404_when_missing():
+    resp = client.get("/api/signals/no-such/cross-analysis")
+    assert resp.status_code == 404
+
+
+def test_cross_analysis_post_delegates(monkeypatch):
+    async def _fake(signal_id):
+        return "## 一致点\n都看多英伟达"
+
+    monkeypatch.setattr("src.cross_analysis.generate_cross_analysis", _fake)
+    resp = client.post("/api/signals/sig-1/cross-analysis")
+    assert resp.status_code == 200
+    assert "都看多英伟达" in resp.json()["analysis"]
+
+    resp = client.get("/api/signals/sig-1/cross-analysis")
+    assert resp.status_code == 404  # 未写库（mock 跳过了保存），GET 仍 404
+
+
+def test_cross_analysis_post_missing_signal_404(monkeypatch):
+    async def _fake(signal_id):
+        raise KeyError(signal_id)
+
+    monkeypatch.setattr("src.cross_analysis.generate_cross_analysis", _fake)
+    resp = client.post("/api/signals/ghost/cross-analysis")
+    assert resp.status_code == 404
+
+
+def test_cross_analysis_post_no_llm_400(monkeypatch):
+    from src.cross_analysis import CrossAnalysisError
+
+    async def _fake(signal_id):
+        raise CrossAnalysisError("no_llm_configured")
+
+    monkeypatch.setattr("src.cross_analysis.generate_cross_analysis", _fake)
+    resp = client.post("/api/signals/sig-1/cross-analysis")
+    assert resp.status_code == 400
+
+
 def test_quarter_insight_institution_passthrough(monkeypatch):
     """institution=jpm 必须透传给生成函数，未知机构返回 422。"""
     import src.web as web

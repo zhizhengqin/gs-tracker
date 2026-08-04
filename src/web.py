@@ -1112,6 +1112,35 @@ async def api_signals_by_date(date: str, institution: str = "") -> dict:
 _ANALYSIS_FAILURE_SENTINEL = ANALYSIS_FAILURE_SENTINEL
 
 
+@app.get("/api/signals/{signal_id}/cross-analysis")
+async def api_get_cross_analysis(signal_id: str) -> dict:
+    """Return cached cross-institution analysis for a signal."""
+    from src.storage import get_cross_analysis
+
+    text = await asyncio.to_thread(get_cross_analysis, signal_id)
+    if text is None:
+        raise HTTPException(status_code=404, detail="该信号暂无跨机构解读")
+    return {"signal_id": signal_id, "analysis": text}
+
+
+@app.post("/api/signals/{signal_id}/cross-analysis")
+async def api_generate_cross_analysis(signal_id: str) -> dict:
+    """Generate (or return cached) cross-institution analysis for a signal."""
+    from src.cross_analysis import CrossAnalysisError, generate_cross_analysis
+
+    try:
+        text = await generate_cross_analysis(signal_id)
+    except KeyError:
+        raise HTTPException(status_code=404, detail="未找到该信号")
+    except CrossAnalysisError as exc:
+        if str(exc) == "no_llm_configured":
+            raise HTTPException(
+                status_code=400, detail="尚未配置大模型，请先在「设置」页添加"
+            )
+        raise HTTPException(status_code=502, detail=f"跨机构解读生成失败: {exc}")
+    return {"signal_id": signal_id, "analysis": text}
+
+
 @app.get("/api/signals/{signal_id}/analysis")
 async def api_get_signal_analysis(signal_id: str) -> dict:
     """Return cached AI analysis for a signal."""

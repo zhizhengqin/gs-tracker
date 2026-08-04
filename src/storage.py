@@ -273,6 +273,12 @@ def init_db() -> None:
                 PRIMARY KEY (quarter, institution)
             );
 
+            CREATE TABLE IF NOT EXISTS cross_analysis (
+                signal_id TEXT PRIMARY KEY,
+                analysis_text TEXT NOT NULL,
+                generated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+
             CREATE TABLE IF NOT EXISTS users (
                 username TEXT PRIMARY KEY,
                 password_hash TEXT NOT NULL,
@@ -1136,6 +1142,32 @@ def save_signal_analysis(signal_id: str, analysis_text: str) -> None:
         conn.commit()
 
 
+# ====== Cross-institution AI analysis cache ======
+
+
+def get_cross_analysis(signal_id: str) -> Optional[str]:
+    """Return cached cross-institution analysis for a signal, or None."""
+    with get_connection() as conn:
+        row = conn.execute(
+            "SELECT analysis_text FROM cross_analysis WHERE signal_id = ?",
+            (signal_id,),
+        ).fetchone()
+        return row["analysis_text"] if row else None
+
+
+def save_cross_analysis(signal_id: str, analysis_text: str) -> None:
+    """Cache a cross-institution analysis (idempotent upsert)."""
+    with get_connection() as conn:
+        conn.execute(
+            "INSERT INTO cross_analysis (signal_id, analysis_text, generated_at) "
+            "VALUES (?, ?, CURRENT_TIMESTAMP) "
+            "ON CONFLICT(signal_id) DO UPDATE SET "
+            "analysis_text=excluded.analysis_text, generated_at=CURRENT_TIMESTAMP",
+            (signal_id, analysis_text),
+        )
+        conn.commit()
+
+
 # ====== Daily report cache ======
 
 def get_daily_report(date_str: str) -> Optional[dict]:
@@ -1230,6 +1262,63 @@ def save_ticker_profiles(
 
 # ====== Signals by date ======
 
+_SIGNAL_COLS = (
+    "id, source, title, published_at, summary, companies, strength, url, "
+    "cross_refs, institution_id, cross_institutional"
+)
+
+
+def _signal_from_row(row: sqlite3.Row) -> Optional[Signal]:
+    """Convert a signals-table row to a Signal; None when malformed."""
+    try:
+        return Signal(
+            id=row["id"],
+            source=row["source"],
+            title=row["title"],
+            published_at=datetime.fromisoformat(row["published_at"]),
+            summary=row["summary"] or "",
+            companies=json.loads(row["companies"]) if row["companies"] else [],
+            strength=SignalStrength(row["strength"]),
+            url=row["url"],
+            cross_refs=json.loads(row["cross_refs"]) if row["cross_refs"] else [],
+            institution_id=row["institution_id"] if "institution_id" in row.keys() else "gs",
+            cross_institutional=bool(row["cross_institutional"]) if "cross_institutional" in row.keys() else False,
+        )
+    except (ValueError, TypeError, KeyError) as exc:
+        logger.warning("Skipping malformed signal row (id=%s): %s", row["id"], exc)
+        return None
+
+
+def get_signal_by_id(signal_id: str) -> Optional[Signal]:
+    """Return one signal by id, or None."""
+    with get_connection() as conn:
+        row = conn.execute(
+            f"SELECT {_SIGNAL_COLS} FROM signals WHERE id = ? LIMIT 1",
+            (signal_id,),
+        ).fetchone()
+        return _signal_from_row(row) if row else None
+
+
+def get_signals_in_range(start_date: str, end_date: str) -> List[Signal]:
+    """Return signals whose Beijing-time publish date falls in [start, end]."""
+    with get_connection() as conn:
+        cursor = conn.execute(
+            f"""
+            SELECT {_SIGNAL_COLS}
+            FROM signals
+            WHERE DATE(published_at, '+8 hours') BETWEEN ? AND ?
+            ORDER BY published_at DESC
+            """,
+            (start_date, end_date),
+        )
+        signals: List[Signal] = []
+        for row in cursor.fetchall():
+            sig = _signal_from_row(row)
+            if sig is not None:
+                signals.append(sig)
+        return signals
+
+
 def get_signals_by_date(date_str: str, institution_id: Optional[str] = None) -> List[Signal]:
     """Return all signals published on a specific date (YYYY-MM-DD).
 
@@ -1245,9 +1334,7 @@ def get_signals_by_date(date_str: str, institution_id: Optional[str] = None) -> 
     with get_connection() as conn:
         cursor = conn.execute(
             f"""
-            SELECT id, source, title, published_at, summary,
-                   companies, strength, url, cross_refs, institution_id,
-                   cross_institutional
+            SELECT {_SIGNAL_COLS}
             FROM signals
             WHERE DATE(published_at, '+8 hours') = ? {inst_filter}
             ORDER BY published_at DESC
@@ -1256,24 +1343,7 @@ def get_signals_by_date(date_str: str, institution_id: Optional[str] = None) -> 
         )
         signals: List[Signal] = []
         for row in cursor.fetchall():
-            try:
-                signals.append(
-                    Signal(
-                        id=row["id"],
-                        source=row["source"],
-                        title=row["title"],
-                        published_at=datetime.fromisoformat(row["published_at"]),
-                        summary=row["summary"] or "",
-                        companies=json.loads(row["companies"]) if row["companies"] else [],
-                        strength=SignalStrength(row["strength"]),
-                        url=row["url"],
-                        cross_refs=json.loads(row["cross_refs"]) if row["cross_refs"] else [],
-                        institution_id=row["institution_id"] if "institution_id" in row.keys() else "gs",
-                        cross_institutional=bool(row["cross_institutional"]) if "cross_institutional" in row.keys() else False,
-                    )
-                )
-            except (ValueError, TypeError, KeyError) as exc:
-                logger.warning(
-                    "Skipping malformed signal row (id=%s): %s", row["id"], exc
-                )
+            sig = _signal_from_row(row)
+            if sig is not None:
+                signals.append(sig)
         return signals
