@@ -539,6 +539,7 @@ _UPSERT_SIGNAL_SQL = """
         strength=excluded.strength,
         cross_refs=excluded.cross_refs,
         relevance_score=excluded.relevance_score,
+        institution_id=excluded.institution_id,
         quarter=excluded.quarter
 """
 
