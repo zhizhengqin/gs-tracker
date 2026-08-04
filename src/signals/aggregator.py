@@ -13,6 +13,62 @@ from src.signals.sec_8k_source import Sec8kSource
 logger = logging.getLogger(__name__)
 
 
+# Aliases used to decide which institution an article is *about* when the
+# same piece is caught by multiple institutions' keyword filters.
+_INSTITUTION_ALIASES: Dict[str, tuple] = {
+    "gs": ("goldman sachs", "goldman", "高盛"),
+    "jpm": ("jpmorgan chase", "jpmorgan", "jpm", "摩根大通", "摩根"),
+}
+
+
+def _content_key(signal: Signal) -> str:
+    """Identity of the underlying article, independent of which source caught it."""
+    if signal.url:
+        return f"url:{signal.url.strip().lower()}"
+    return "title:" + "".join(signal.title.split()).lower()
+
+
+def _institution_affinity(signal: Signal) -> int:
+    """How strongly the text points at this signal's own institution."""
+    text = f"{signal.title} {signal.summary}".lower()
+    return sum(text.count(a) for a in _INSTITUTION_ALIASES.get(signal.institution_id, ()))
+
+
+def dedup_across_institutions(signals: List[Signal]) -> List[Signal]:
+    """Collapse the same article caught by several institutions into one.
+
+    Winner is the copy whose institution is mentioned most in the text
+    (e.g. a JPM rate-outlook piece caught by both GS and JPM news filters
+    is attributed to JPM). Ties keep the first occurrence.
+    """
+    groups: Dict[str, List[Signal]] = {}
+    order: List[str] = []
+    for s in signals:
+        key = _content_key(s)
+        if key not in groups:
+            groups[key] = []
+            order.append(key)
+        groups[key].append(s)
+
+    result: List[Signal] = []
+    for key in order:
+        group = groups[key]
+        if len(group) == 1:
+            result.append(group[0])
+            continue
+        winner = max(group, key=_institution_affinity)
+        dropped = [s for s in group if s is not winner]
+        if dropped:
+            logger.info(
+                "Cross-institution dedup: kept %s copy of %r, dropped %d duplicate(s)",
+                winner.institution_id, winner.title, len(dropped),
+            )
+        result.append(winner)
+    return result
+
+
+
+
 @dataclass
 class AggregationResult:
     """Output of a signal aggregation run."""
@@ -95,6 +151,10 @@ class SignalAggregator:
             if s.dedupe_key not in seen:
                 seen.add(s.dedupe_key)
                 deduped.append(s)
+
+        # Same article caught by multiple institutions -> single copy,
+        # attributed to the institution it is actually about.
+        deduped = dedup_across_institutions(deduped)
 
         # Sort: strength (HIGH→LOW), then date (newest first)
         strength_order = {SignalStrength.HIGH: 0, SignalStrength.MEDIUM: 1, SignalStrength.LOW: 2}

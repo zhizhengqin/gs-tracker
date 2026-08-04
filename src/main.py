@@ -24,7 +24,7 @@ from src.llm_config import resolve_llm_config
 from src.notifier import Notification, Notifier, _format_summary
 from src.quarter_compare import QuarterComparator
 from src.reporter import ReportGenerator
-from src.signals.aggregator import SignalAggregator
+from src.signals.aggregator import SignalAggregator, dedup_across_institutions
 from src.signals.ai_triage import AiTriage
 from src.signals.base import Signal
 from src.signals.news_source import NewsSource
