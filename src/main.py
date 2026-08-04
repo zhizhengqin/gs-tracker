@@ -28,6 +28,7 @@ from src.signals.aggregator import SignalAggregator
 from src.signals.ai_triage import AiTriage
 from src.signals.base import Signal
 from src.signals.news_source import NewsSource
+from src.signals.jpm_research_source import JPMResearchSource
 from src.signals.topic_source import TopicSource
 from src.signals.webpage_source import WebpageSource
 from src.signals.scorer import SignalScorer
@@ -64,7 +65,7 @@ logger = logging.getLogger(__name__)
 BEIJING_TZ = timezone(timedelta(hours=8))
 
 
-ALL_SOURCE_NAMES = ("13F", "8-K", "13D/13G", "research_view", "news", "macro_view", "qfii", "northbound")
+ALL_SOURCE_NAMES = ("13F", "8-K", "13D/13G", "research_view", "news", "news_jpm", "jpm_research", "macro_view", "qfii", "northbound")
 
 
 def _enabled_source_names() -> set:
@@ -108,6 +109,14 @@ def _build_daily_sources(institution_id: str = "gs") -> list:
         feeds = list(RSS_FEEDS)
         if feeds:
             sources.append(("news", NewsSource(rss_urls=feeds)))
+    if "news_jpm" in enabled:
+        feeds = list(RSS_FEEDS)
+        if feeds:
+            # Distinct source_name so JPM-tagged items never fingerprint-collide
+            # with the GS-tagged copy of the same article.
+            sources.append(("news_jpm", NewsSource(rss_urls=feeds, source_name="news_jpm", institution_id="jpm")))
+    if "jpm_research" in enabled:
+        sources.append(("jpm_research", JPMResearchSource()))
     # Custom sources from the settings page (one instance per source)
     for entry in _custom_source_configs():
         if entry.get("name") not in enabled:
@@ -214,14 +223,14 @@ async def run_daily_intel_stream():
     # AI pre-ingest triage: news-type sources only (builtin "news" + custom
     # sources). Authoritative SEC/research sources bypass triage entirely.
     custom_entries = _custom_source_configs()
-    triageable_names = {"news"} | {e.get("name", "") for e in custom_entries}
+    triageable_names = {"news", "news_jpm"} | {e.get("name", "") for e in custom_entries}
     triage_groups: dict[str, list[int]] = {}
     for idx, sig in enumerate(new_signals):
         if sig.source in triageable_names:
             triage_groups.setdefault(sig.source, []).append(idx)
 
     if triage_groups:
-        policy_by_source = {"news": "gs_only"}
+        policy_by_source = {"news": "gs_only", "news_jpm": "jpm_only"}
         policy_by_source.update(
             {e["name"]: e.get("filter_policy", "gs_only") for e in custom_entries}
         )

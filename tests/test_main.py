@@ -233,15 +233,16 @@ class TestDailyIntel:
         with patch("src.main.NewsSource") as mock_news, \
              patch("src.main.Sec8kSource") as mock_8k, \
              patch("src.main.ResearchViewSource") as mock_rv, \
+             patch("src.main.JPMResearchSource") as mock_jpmr, \
              patch("src.main.ThirteenDGSource") as mock_dg:
-            for cls in (mock_news, mock_rv, mock_dg):
+            for cls in (mock_news, mock_rv, mock_dg, mock_jpmr):
                 cls.return_value.fetch_since = AsyncMock(return_value=([], None))
                 cls.return_value.close = AsyncMock()
             mock_8k.return_value.fetch = AsyncMock(return_value=[])
             mock_8k.return_value.close = AsyncMock()
             # 8-K source doesn't have fetch_since — delete auto-created MagicMock attr
             del mock_8k.return_value.fetch_since
-            mocks.update(news=mock_news, sec8k=mock_8k, research=mock_rv, dg=mock_dg)
+            mocks.update(news=mock_news, sec8k=mock_8k, research=mock_rv, dg=mock_dg, jpm_research=mock_jpmr)
             yield mocks
 
     @pytest.fixture
@@ -306,9 +307,9 @@ class TestDailyIntel:
 
         assert events[0]["event"] == "start"
         done_events = [e for e in events if e["event"] == "source_done"]
-        # RSS_FEEDS empty → no news source; 8-K + 13D/13G + research_view + A-share sources remain
-        assert len(done_events) == 5
-        assert {e["source"] for e in done_events} == {"8-K", "13D/13G", "research_view", "northbound", "qfii"}
+        # RSS_FEEDS empty → no news sources; 8-K + 13D/13G + research_view + jpm_research + A-share sources remain
+        assert len(done_events) == 6
+        assert {e["source"] for e in done_events} == {"8-K", "13D/13G", "research_view", "jpm_research", "northbound", "qfii"}
         assert events[-1]["event"] == "complete"
         assert not any(e["event"] == "triage_note" for e in events)
 
@@ -448,6 +449,10 @@ class TestDailyIntel:
         sig2 = make_signal(id="n2", source="news", title="无关新闻B")
         _mock_sources["news"].return_value.fetch_since = AsyncMock(
             return_value=([sig1, sig2], None)
+        )
+        monkeypatch.setattr(
+            "src.main._build_daily_sources",
+            lambda *_a, **_k: [("news", _mock_sources["news"].return_value)],
         )
 
         with patch("src.main.AiTriage") as MockTriage, \
