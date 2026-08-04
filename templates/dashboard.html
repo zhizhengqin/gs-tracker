@@ -1989,6 +1989,27 @@ async function analyzeSignal(panel, signalId, title, summary, source) {
     } catch(e) { panel.innerHTML = '<span class="c-danger">网络错误</span>'; }
 }
 
+// Cross-institutional divergence read: POST generates (or returns cached),
+// result renders inline like the regular AI analysis panel.
+async function analyzeCross(panel, signalId) {
+    if (!panel) return;
+    if (panel.classList.contains('open')) { panel.classList.remove('open'); return; }
+    panel.classList.add('open');
+    if (panel.dataset.loaded === 'true') return;
+    panel.innerHTML = '<span class="c-muted">跨机构对比生成中...</span>';
+    try {
+        const resp = await fetch(`/api/signals/${signalId}/cross-analysis`, {method:'POST'});
+        if (!resp.ok) {
+            const e = await resp.json().catch(() => ({}));
+            panel.innerHTML = `<span class="c-danger">${esc(e.detail || '生成失败')}</span>`;
+            return;
+        }
+        const r = await resp.json();
+        panel.innerHTML = formatMd(r.analysis);
+        panel.dataset.loaded = 'true';
+    } catch(e) { panel.innerHTML = '<span class="c-danger">网络错误</span>'; }
+}
+
 // Auto-show cached AI analysis on high-priority cards (the pipeline generates
 // it at fetch time). 404 = not generated yet (e.g. older signals) — collapse
 // back and leave the manual button; never auto-POST here so browsing history
@@ -2109,6 +2130,20 @@ function addAiToggles(rootEl) {
 
         // High-priority cards: show the pipeline-generated analysis directly.
         if (card.classList.contains('high')) autoLoadHighAnalysis(panel, sigId);
+
+        // Cross-institutional cards: offer the GS-vs-JPM divergence read.
+        const crossBadgeEl = card.querySelector('.cross-badge');
+        if (crossBadgeEl && crossBadgeEl.textContent.includes('跨机构')) {
+            const crossToggle = document.createElement('span');
+            crossToggle.className = 'ai-toggle';
+            crossToggle.textContent = 'AI 交叉解读';
+            const crossPanel = document.createElement('div');
+            crossPanel.className = 'ai-panel';
+            crossPanel.id = 'cross-' + sigId;
+            crossToggle.onclick = function() { analyzeCross(crossPanel, sigId); };
+            card.appendChild(crossToggle);
+            card.appendChild(crossPanel);
+        }
     });
 }
 
