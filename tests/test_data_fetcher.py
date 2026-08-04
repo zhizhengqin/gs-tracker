@@ -290,3 +290,33 @@ async def test_missing_infotable_leaves_filing_info_without_xml_url(httpx_mock):
     assert filing_info["report_date"] == "2026-03-31"
     assert "xml_url" not in filing_info
     await fetcher.close()
+
+
+class TestInfotableFilename:
+    def test_jpm_style_information_table_name(self):
+        """JPM names its info table e.g. Information_Table_03.31.2026.xml."""
+        index = {"directory": {"item": [
+            {"name": "0000019617-26-000225-index.html"},
+            {"name": "primary_doc.xml"},
+            {"name": "Information_Table_03.31.2026.xml"},
+        ]}}
+        assert SEC13FFetcher._find_infotable_filename(index) == "Information_Table_03.31.2026.xml"
+
+    def test_gs_style_infotable_name_still_wins(self):
+        index = {"directory": {"item": [
+            {"name": "primary_doc.xml"},
+            {"name": "infotable.xml"},
+            {"name": "Information_Table_extra.xml"},
+        ]}}
+        assert SEC13FFetcher._find_infotable_filename(index) == "infotable.xml"
+
+    def test_single_non_primary_xml_fallback(self):
+        index = {"directory": {"item": [
+            {"name": "primary_doc.xml"},
+            {"name": "weird_name.xml"},
+        ]}}
+        assert SEC13FFetcher._find_infotable_filename(index) == "weird_name.xml"
+
+    def test_no_xml_returns_none(self):
+        index = {"directory": {"item": [{"name": "primary_doc.xml"}]}}
+        assert SEC13FFetcher._find_infotable_filename(index) is None

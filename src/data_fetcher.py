@@ -97,9 +97,13 @@ class SEC13FFetcher:
         if not forms or not accession_numbers or len(forms) != len(accession_numbers):
             raise ValueError("No 13F-HR filing found")
 
-        try:
-            index = forms.index("13F-HR")
-        except ValueError:
+        # The recent list is newest-first; an amendment (13F-HR/A) supersedes
+        # the original filing for the same period, so accept both forms.
+        index = next(
+            (i for i, f in enumerate(forms) if f in ("13F-HR", "13F-HR/A")),
+            None,
+        )
+        if index is None:
             raise ValueError("No 13F-HR filing found")
 
         accession_number = accession_numbers[index]
@@ -140,12 +144,29 @@ class SEC13FFetcher:
 
     @staticmethod
     def _find_infotable_filename(filing_index: dict) -> Optional[str]:
-        """Find the infotable XML filename from a SEC filing index.json."""
+        """Find the infotable XML filename from a SEC filing index.json.
+
+        Filers name this file freely: GS uses "infotable"-style names while
+        JPM uses e.g. "Information_Table_03.31.2026.xml". Match known
+        patterns first, then fall back to the only non-primary XML in the
+        filing (a 13F directory holds primary_doc.xml + the info table).
+        """
         items = filing_index.get("directory", {}).get("item", [])
-        for item in items:
-            name = item.get("name", "")
-            if "infotable" in name.lower() and name.lower().endswith(".xml"):
+        xml_names = [
+            item.get("name", "")
+            for item in items
+            if item.get("name", "").lower().endswith(".xml")
+        ]
+        for name in xml_names:
+            if "infotable" in name.lower():
                 return name
+        for name in xml_names:
+            lowered = name.lower()
+            if "information_table" in lowered or "informationtable" in lowered:
+                return name
+        candidates = [n for n in xml_names if n.lower() != "primary_doc.xml"]
+        if len(candidates) == 1:
+            return candidates[0]
         return None
 
     async def fetch_historical_holdings(self, quarters: List[str]) -> pd.DataFrame:

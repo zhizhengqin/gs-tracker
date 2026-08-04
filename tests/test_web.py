@@ -113,6 +113,50 @@ def test_api_reports(tmp_path, monkeypatch):
     assert data[0]["path"] == "/reports/2026-Q1.html"
 
 
+def test_api_reports_jpm_subdirectory(tmp_path, monkeypatch):
+    """JPM reports live in a per-institution subdir with matching paths."""
+    monkeypatch.setattr("src.web.REPORT_OUTPUT_DIR", tmp_path)
+    (tmp_path / "2026-Q1.html").write_text("<html>GS Q1</html>", encoding="utf-8")
+    jpm_dir = tmp_path / "jpm"
+    jpm_dir.mkdir()
+    (jpm_dir / "2026-Q2.html").write_text("<html>JPM Q2</html>", encoding="utf-8")
+
+    resp = client.get("/api/reports?institution=jpm")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert len(data) == 1
+    assert data[0]["quarter"] == "2026-Q2"
+    assert data[0]["path"] == "/reports/jpm/2026-Q2.html"
+
+    # GS listing must not see the JPM subdir file
+    gs = client.get("/api/reports?institution=gs").json()
+    assert [r["quarter"] for r in gs] == ["2026-Q1"]
+
+
+def test_api_reports_unknown_institution_422():
+    resp = client.get("/api/reports?institution=bonk")
+    assert resp.status_code == 422
+
+
+def test_api_holdings_unknown_institution_422(signals_db):
+    resp = client.get("/api/holdings/2026-Q1?institution=bonk")
+    assert resp.status_code == 422
+
+
+def test_institution_report_route(tmp_path, monkeypatch):
+    monkeypatch.setattr("src.web.REPORT_OUTPUT_DIR", tmp_path)
+    jpm_dir = tmp_path / "jpm"
+    jpm_dir.mkdir()
+    (jpm_dir / "2026-Q2.html").write_text("<html>JPM Q2</html>", encoding="utf-8")
+
+    ok = client.get("/reports/jpm/2026-Q2.html")
+    assert ok.status_code == 200
+    assert "JPM Q2" in ok.text
+    assert client.get("/reports/jpm/2026-Q9.html").status_code == 422
+    assert client.get("/reports/bonk/2026-Q2.html").status_code == 422
+    assert client.get("/reports/jpm/2026-Q1.html").status_code == 404
+
+
 def test_api_reports_sorted_newest_first(tmp_path, monkeypatch):
     """Dashboard badges reports[0] as latest, so the API must return newest first."""
     monkeypatch.setattr("src.web.REPORT_OUTPUT_DIR", tmp_path)
@@ -314,7 +358,7 @@ def test_pipeline_run_returns_202_and_completes(reset_pipeline_state, monkeypatc
             "source_status": {}, "errors": [],
         })
 
-    monkeypatch.setattr("src.main.run_pipeline_stream", lambda: fake_stream())
+    monkeypatch.setattr("src.main.run_pipeline_stream", lambda institution_id="gs": fake_stream())
 
     response = client.post("/api/pipeline/run")
     assert response.status_code == 202
@@ -347,7 +391,7 @@ def test_pipeline_run_records_error(reset_pipeline_state, monkeypatch):
         raise RuntimeError("API key missing")
         yield  # pragma: no cover — makes this an async generator
 
-    monkeypatch.setattr("src.main.run_pipeline_stream", lambda: failing_stream())
+    monkeypatch.setattr("src.main.run_pipeline_stream", lambda institution_id="gs": failing_stream())
 
     job = src.web._PipelineJob()
     asyncio.run(src.web._pipeline_job_runner(job))

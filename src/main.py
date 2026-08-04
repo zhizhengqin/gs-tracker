@@ -362,13 +362,25 @@ async def run_daily_intel() -> dict:
     return summary
 
 
-async def run_pipeline_stream():
-    """Async generator: full pipeline with per-step/per-source progress (SSE)."""
+async def run_pipeline_stream(institution_id: str = "gs"):
+    """Async generator: full pipeline with per-step/per-source progress (SSE).
+
+    institution_id selects which institution's 13F/8-K data to pull;
+    CIK and display label are resolved from the institutions table.
+    """
     ensure_directories()
     init_db()
 
+    from src.storage import get_institutions
+    inst_map = {i["id"]: i for i in get_institutions()}
+    inst = inst_map.get(institution_id)
+    if inst is None:
+        raise ValueError(f"未知机构: {institution_id}")
+    cik = inst["cik"] or "0000886982"
+    inst_label = inst["display_name"]
+    inst_label_en = f"{inst['display_name']}({inst['name']})"
+
     quarter = "2026-Q1"
-    cik = "0000886982"
 
     source_names = ["13F", "8-K"] + (["news"] if RSS_FEEDS else [])
     yield json.dumps({"event": "start", "sources": source_names})
@@ -384,7 +396,7 @@ async def run_pipeline_stream():
 
     yield _step("holdings", "running", "抓取 13F 持仓")
     filing_info: dict[str, str] = {}
-    async with SEC13FFetcher() as fetcher:
+    async with SEC13FFetcher(cik=cik) as fetcher:
         df = await fetcher.fetch_latest_holdings(filing_info)
         if filing_info.get("report_date"):
             quarter = SEC13FFetcher.report_date_to_quarter(filing_info["report_date"])
@@ -393,7 +405,14 @@ async def run_pipeline_stream():
     yield _step("holdings", "done", "抓取 13F 持仓", f"{quarter} · {len(df)} 条持仓")
 
     yield _step("analysis", "running", "AI 持仓分析")
-    analyzer = GSAnalyzer()
+    llm_cfg = resolve_llm_config(get_default_llm_model())
+    analyzer = GSAnalyzer(
+        api_key=llm_cfg["api_key"],
+        auth_token=llm_cfg["auth_token"],
+        base_url=llm_cfg["base_url"],
+        model=llm_cfg["model"],
+        institution_label=inst_label_en,
+    )
     analysis = await analyzer.analyze_holdings(df)
     yield _step("analysis", "done", "AI 持仓分析")
 
@@ -425,8 +444,16 @@ async def run_pipeline_stream():
     aggregation_status = {}
     aggregation_ok = False
     aggregator = SignalAggregator(
-        news_source=NewsSource(rss_urls=RSS_FEEDS) if RSS_FEEDS else None,
-        sec8k_source=Sec8kSource(),
+        news_source=(
+            NewsSource(
+                rss_urls=RSS_FEEDS,
+                source_name="news" if institution_id == "gs" else f"news_{institution_id}",
+                filter_policy="gs_only" if institution_id == "gs" else f"{institution_id}_only",
+                institution_id=institution_id,
+            )
+            if RSS_FEEDS else None
+        ),
+        sec8k_source=Sec8kSource(cik=cik),
     )
     try:
         # Bridge the aggregator's sync progress callback into this async
@@ -493,6 +520,8 @@ async def run_pipeline_stream():
         signals=aggregation_signals,
         signal_errors=aggregation_errors,
         source_status=aggregation_status,
+        institution_id=institution_id,
+        institution_label=inst_label,
     )
     logger.info("Report generated at %s", report_path)
     yield _step("report", "done", "生成季度报告")
@@ -532,9 +561,9 @@ async def run_pipeline_stream():
     })
 
 
-async def run_pipeline() -> None:
+async def run_pipeline(institution_id: str = "gs") -> None:
     """Run the full fetch-analyze-report pipeline once (non-streaming wrapper)."""
-    async for _event_json in run_pipeline_stream():
+    async for _event_json in run_pipeline_stream(institution_id):
         pass
 
 
