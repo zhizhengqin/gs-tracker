@@ -1,11 +1,18 @@
 """Test storage layer institution_id support."""
 from datetime import datetime, timezone
+
+import pytest
 from src.signals.base import Signal, SignalStrength
 from src.storage import init_db, save_signals_incremental, get_recent_signals, get_signals_by_date, get_institutions
 
 
 class TestStorageInstitution:
-    def setup_method(self):
+    @pytest.fixture(autouse=True)
+    def fresh_db(self, tmp_path, monkeypatch):
+        # Redirect storage to a throwaway DB so test rows never land in
+        # the production database.
+        db_file = tmp_path / "test.db"
+        monkeypatch.setattr("src.storage.DATABASE_URL", f"sqlite:///{db_file}")
         init_db()
 
     def test_institutions_table_created(self):
