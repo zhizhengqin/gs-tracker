@@ -98,6 +98,10 @@ def _build_daily_sources() -> list:
         sources.append(("13D/13G", ThirteenDGSource()))
     if "research_view" in enabled:
         sources.append(("research_view", ResearchViewSource()))
+    if "qfii" in enabled:
+        sources.append(("qfii", QFIISource(institution_id=institution_id)))
+    if "northbound" in enabled:
+        sources.append(("northbound", NorthboundSource()))
     if "news" in enabled:
         feeds = list(RSS_FEEDS)
         if feeds:
