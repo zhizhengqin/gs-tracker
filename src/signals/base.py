@@ -28,6 +28,18 @@ def smart_truncate(text: str, max_len: int = SUMMARY_MAX_LEN) -> str:
     return window.rstrip() + "…"
 
 
+INSTITUTION_DISPLAY_NAMES = {
+    "gs": "高盛",
+    "jpm": "摩根大通",
+    "all": "外资",
+}
+
+
+def institution_display(institution_id: str) -> str:
+    """Return the Chinese display name for an institution id."""
+    return INSTITUTION_DISPLAY_NAMES.get(institution_id, institution_id)
+
+
 class SignalStrength(Enum):
     HIGH = "high"
     MEDIUM = "medium"
@@ -47,6 +59,7 @@ class Signal:
     url: Optional[str] = None
     institution_id: str = "gs"
     cross_refs: List[str] = field(default_factory=list)
+    cross_institutional: bool = False
     id: str = field(default_factory=lambda: str(uuid.uuid4())[:8])
 
     @property

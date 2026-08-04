@@ -59,13 +59,14 @@ async def generate_daily_report(date: str) -> dict:
         return {"date": date, "report": "该日期暂无情报数据。", "signal_count": 0, "cached": False}
 
     # Build LLM prompt from signals (HTML-stripped — legacy rows may carry tags)
+    from src.signals.base import institution_display
     from src.signals.news_source import clean_html_text
 
     signal_texts = []
     inst_ids = set()
     for s in signals[:30]:
         inst = getattr(s, 'institution_id', 'gs')
-        tag = {'gs':'高盛','jpm':'摩根大通','all':'外资'}.get(inst, inst)
+        tag = institution_display(inst)
         inst_ids.add(tag)
         signal_texts.append(f"[{tag}] [{s.source}] {clean_html_text(s.title)}: {clean_html_text(s.summary)[:120]}")
     combined = "\n".join(signal_texts)
@@ -101,7 +102,7 @@ async def generate_daily_report(date: str) -> dict:
             f"{combined}\n\n"
             "请按以下三段式输出：\n\n"
             "## 今日机构观点\n"
-            f"（概括{inst_list}研究/分析师当日主要观点，如有多个机构请分别说明，3-5句话）\n\n"
+            f"（概括{inst_list}研究/分析师当日主要观点，如有多个机构请分别说明，并指出他们对A股看法的一致点与分歧点，3-5句话）\n\n"
             "## 披露与资金动向\n"
             "（概括当日重要披露、持仓变动、QFII/北向资金动向，2-3句话）\n\n"
             "## 一句话投资启示\n"

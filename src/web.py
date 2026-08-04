@@ -365,6 +365,7 @@ def _signal_to_dict(signal: Signal) -> dict:
         "url": signal.url,
         "cross_refs": signal.cross_refs,
         "institution_id": getattr(signal, 'institution_id', 'gs'),
+        "cross_institutional": getattr(signal, 'cross_institutional', False),
     }
 
 

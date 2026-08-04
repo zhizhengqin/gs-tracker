@@ -961,3 +961,11 @@ def test_pipeline_job_attach_or_start(reset_pipeline_job, monkeypatch):
         assert job4 is not job1
 
     asyncio.run(scenario())
+
+
+def test_signal_to_dict_includes_cross_institutional(make_signal):
+    from src.web import _signal_to_dict
+    d = _signal_to_dict(make_signal(cross_institutional=True))
+    assert d["cross_institutional"] is True
+    d2 = _signal_to_dict(make_signal())
+    assert d2["cross_institutional"] is False

@@ -85,6 +85,10 @@ HOLDING_KEYWORDS = [
     "amazon", "amzn", "meta", "googl", "google", "tesla", "tsla",
     "berkshire", "jpmorgan", "jpm", "visa",
     "unitedhealth", "unh", "mastercard",
+    # A-share majors — CJK keywords match as plain substrings.
+    "宁德时代", "贵州茅台", "比亚迪", "招商银行", "中国平安",
+    "五粮液", "美的", "隆基绿能", "中芯国际", "药明康德",
+    "腾讯", "阿里巴巴", "美团", "小米",
 ]
 
 
@@ -206,16 +210,17 @@ class NewsSource:
             if published_at < cutoff:
                 continue
 
+            # Company extraction runs for every policy — cross-institution
+            # matching depends on JPM signals carrying the companies they mention.
+            companies: List[str] = []
+            for kw, rx in _HOLDING_RE:
+                if rx.search(text_lower):
+                    companies.append(kw.upper())
             if self.filter_policy == "gs_only":
-                companies: List[str] = []
-                for kw, rx in _HOLDING_RE:
-                    if rx.search(text_lower):
-                        companies.append(kw.upper())
                 # Viewpoint keywords → HIGH (GS-authored analysis, the core value)
                 # Basic GS mention → MEDIUM (news about GS)
                 strength = SignalStrength.HIGH if has_viewpoint else SignalStrength.MEDIUM
             else:
-                companies = []
                 strength = SignalStrength.LOW
 
             signals.append(Signal(
@@ -223,7 +228,7 @@ class NewsSource:
                 source=self.source_name,
                 published_at=published_at,
                 summary=smart_truncate(summary_text) if summary_text else title,
-                companies=companies if companies else ["GS"],
+                companies=companies if companies else [self.institution_id.upper()],
                 strength=strength,
                 url=item.get("link") or None,
                 institution_id=self.institution_id,

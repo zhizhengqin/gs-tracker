@@ -31,6 +31,7 @@ from src.signals.news_source import NewsSource
 from src.signals.jpm_research_source import JPMResearchSource
 from src.signals.topic_source import TopicSource
 from src.signals.webpage_source import WebpageSource
+from src.signals.base import institution_display
 from src.signals.scorer import SignalScorer
 from src.signals.sec_8k_source import Sec8kSource
 from src.signals.research_view_source import ResearchViewSource
@@ -271,11 +272,13 @@ async def run_daily_intel_stream():
         for sc in scored:
             sig = sc.signal
             sig.cross_refs = [
+                f"[{institution_display(getattr(id_to_signal[rid], 'institution_id', 'gs'))}] "
                 f"{id_to_signal[rid].source}:{id_to_signal[rid].title}"
                 for rid in sc.cross_refs
                 if rid in id_to_signal
             ]
             sig.strength = sc.final_strength
+            sig.cross_institutional = sc.cross_institutional
 
     now = datetime.now(timezone.utc)
     quarter = f"{now.year}-Q{(now.month - 1) // 3 + 1}"

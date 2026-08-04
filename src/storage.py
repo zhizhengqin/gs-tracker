@@ -292,6 +292,7 @@ def init_db() -> None:
 
         # Add institution_id to signals table (safe ALTER, no PK rebuild).
         _add_column_if_not_exists(conn, "signals", "institution_id", "TEXT DEFAULT 'gs'")
+        _add_column_if_not_exists(conn, "signals", "cross_institutional", "INTEGER DEFAULT 0")
         _create_index_if_columns_exist(conn, "idx_signals_q_inst_id", "signals", ["quarter", "institution_id", "id"])
 
         # Create institutions table and seed defaults.
@@ -524,8 +525,8 @@ _INSERT_SIGNAL_SQL = """
     INSERT INTO signals (
         id, quarter, institution_id, source, title, published_at,
         summary, companies, strength, url, cross_refs,
-        signal_fingerprint, relevance_score
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        signal_fingerprint, relevance_score, cross_institutional
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 """
 
 
@@ -533,14 +534,15 @@ _UPSERT_SIGNAL_SQL = """
     INSERT INTO signals (
         id, quarter, institution_id, source, title, published_at,
         summary, companies, strength, url, cross_refs,
-        signal_fingerprint, relevance_score
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        signal_fingerprint, relevance_score, cross_institutional
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(signal_fingerprint) DO UPDATE SET
         strength=excluded.strength,
         cross_refs=excluded.cross_refs,
         relevance_score=excluded.relevance_score,
         institution_id=excluded.institution_id,
-        quarter=excluded.quarter
+        quarter=excluded.quarter,
+        cross_institutional=excluded.cross_institutional
 """
 
 _UPSERT_SIGNAL_RUN_SQL = """
@@ -569,6 +571,7 @@ def _signal_row(quarter: str, s: Signal, fingerprint: str = "", score: float = 0
         json.dumps(s.cross_refs, ensure_ascii=False),
         fingerprint or compute_fingerprint(s),
         score,
+        int(getattr(s, 'cross_institutional', False)),
     )
 
 
@@ -654,7 +657,8 @@ def get_signals(quarter: str) -> List[Signal]:
         cursor = conn.execute(
             """
             SELECT id, source, title, published_at, summary,
-                   companies, strength, url, cross_refs
+                   companies, strength, url, cross_refs, institution_id,
+                   cross_institutional
             FROM signals
             WHERE quarter = ?
             ORDER BY rowid
@@ -676,6 +680,7 @@ def get_signals(quarter: str) -> List[Signal]:
                         url=row["url"],
                         cross_refs=json.loads(row["cross_refs"]) if row["cross_refs"] else [],
                         institution_id=row["institution_id"] if "institution_id" in row.keys() else "gs",
+                        cross_institutional=bool(row["cross_institutional"]) if "cross_institutional" in row.keys() else False,
                     )
                 )
             except (ValueError, TypeError, KeyError) as exc:
@@ -825,7 +830,8 @@ def get_recent_signals(
         cursor = conn.execute(
             f"""
             SELECT id, source, title, published_at, summary,
-                   companies, strength, url, cross_refs, institution_id
+                   companies, strength, url, cross_refs, institution_id,
+                   cross_institutional
             FROM signals
             WHERE published_at >= ? {inst_filter}
             ORDER BY published_at DESC
@@ -847,6 +853,7 @@ def get_recent_signals(
                         url=row["url"],
                         cross_refs=json.loads(row["cross_refs"]) if row["cross_refs"] else [],
                         institution_id=row["institution_id"] if "institution_id" in row.keys() else "gs",
+                        cross_institutional=bool(row["cross_institutional"]) if "cross_institutional" in row.keys() else False,
                     )
                 )
             except (ValueError, TypeError, KeyError) as exc:
@@ -1190,7 +1197,8 @@ def get_signals_by_date(date_str: str, institution_id: Optional[str] = None) -> 
         cursor = conn.execute(
             f"""
             SELECT id, source, title, published_at, summary,
-                   companies, strength, url, cross_refs, institution_id
+                   companies, strength, url, cross_refs, institution_id,
+                   cross_institutional
             FROM signals
             WHERE DATE(published_at, '+8 hours') = ? {inst_filter}
             ORDER BY published_at DESC
@@ -1212,6 +1220,7 @@ def get_signals_by_date(date_str: str, institution_id: Optional[str] = None) -> 
                         url=row["url"],
                         cross_refs=json.loads(row["cross_refs"]) if row["cross_refs"] else [],
                         institution_id=row["institution_id"] if "institution_id" in row.keys() else "gs",
+                        cross_institutional=bool(row["cross_institutional"]) if "cross_institutional" in row.keys() else False,
                     )
                 )
             except (ValueError, TypeError, KeyError) as exc:

@@ -76,3 +76,53 @@ class TestNewsSourceJPM:
         titles = [s.title for s in signals]
         assert "摩根大通CEO访华" in titles
         assert not any("上调中国股市评级" in t for t in titles)
+
+
+def _jpm_source_with_rss(rss: str) -> NewsSource:
+    class _Resp:
+        text = rss
+        def raise_for_status(self):
+            pass
+
+    class _Client:
+        async def get(self, url):
+            return _Resp()
+        async def aclose(self):
+            pass
+
+    ns = NewsSource(
+        rss_urls=["https://example.com/rss"],
+        source_name="news_jpm",
+        institution_id="jpm",
+        filter_policy="jpm_only",
+    )
+    ns.client = _Client()
+    return ns
+
+
+class TestJpmCompanyExtraction:
+    """JPM news signals must carry their own institution marker and extract
+    mentioned companies (including A-share names) for cross-institution matching."""
+
+    @pytest.mark.asyncio
+    async def test_fallback_marker_is_jpm_not_gs(self):
+        rss = """<?xml version="1.0"?>
+        <rss version="2.0"><channel>
+        <item><title>摩根大通宣布人事调整</title>
+        <link>https://example.com/1</link><description>摩根大通今日宣布</description></item>
+        </channel></rss>"""
+        signals = await _jpm_source_with_rss(rss).fetch("")
+        assert signals, "expected at least one signal"
+        assert "GS" not in signals[0].companies
+        assert signals[0].companies == ["JPM"]
+
+    @pytest.mark.asyncio
+    async def test_extracts_a_share_company_mentions(self):
+        rss = """<?xml version="1.0"?>
+        <rss version="2.0"><channel>
+        <item><title>摩根大通上调宁德时代评级</title>
+        <link>https://example.com/2</link><description>摩根大通看好宁德时代</description></item>
+        </channel></rss>"""
+        signals = await _jpm_source_with_rss(rss).fetch("")
+        assert signals
+        assert any("宁德时代" in c for c in signals[0].companies)

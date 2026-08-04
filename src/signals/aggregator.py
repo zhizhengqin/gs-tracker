@@ -4,7 +4,7 @@ import logging
 from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, List, Optional
 
-from src.signals.base import Signal, SignalStrength
+from src.signals.base import Signal, SignalStrength, institution_display
 from src.signals.scorer import SignalScorer
 from src.signals.thirteenf_adapter import ThirteenthFSignalAdapter
 from src.signals.news_source import NewsSource
@@ -111,11 +111,13 @@ class SignalAggregator:
         for sc in scored:
             sig = sc.signal
             sig.cross_refs = [
+                f"[{institution_display(getattr(id_to_signal[rid], 'institution_id', 'gs'))}] "
                 f"{id_to_signal[rid].source}:{id_to_signal[rid].title}"
                 for rid in sc.cross_refs
                 if rid in id_to_signal
             ]
             sig.strength = sc.final_strength
+            sig.cross_institutional = sc.cross_institutional
 
         # Re-sort by scored relevance (may differ from naive strength ordering)
         scored.sort(key=lambda x: x.relevance_score, reverse=True)

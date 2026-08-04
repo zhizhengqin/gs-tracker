@@ -70,6 +70,10 @@
             <label><input type="checkbox" checked onchange="onFilterChange()" class="filter-strength" value="medium"> <span class="dot dot-medium"></span>中优先级</label>
             <label><input type="checkbox" checked onchange="onFilterChange()" class="filter-strength" value="low"> <span class="dot dot-low"></span>低优先级</label>
         </div>
+        <h3 class="mt-24">信号特征</h3>
+        <div class="signal-filter">
+            <label><input type="checkbox" id="filterCrossOnly" onchange="onFilterChange()"> 只看交叉信号</label>
+        </div>
     
     </div>
 
@@ -1135,9 +1139,11 @@ function renderSignals() {
     const activeSources = [...document.querySelectorAll('.filter-source:checked')].map(cb => cb.value);
     const activeStrengths = [...document.querySelectorAll('.filter-strength:checked')].map(cb => cb.value);
 
+    const crossOnly = document.getElementById('filterCrossOnly')?.checked;
     let filtered = reportData.signals.filter(s => {
         const srcMatch = activeSources.includes(s.source);
         const strMatch = activeStrengths.includes(s.strength);
+        if (crossOnly && !(s.cross_refs && s.cross_refs.length)) return false;
         return srcMatch && strMatch;
     });
 
@@ -1189,6 +1195,9 @@ function safeHttpUrl(u) {
 function renderSignalCard(s) {
     const date = formatSignalDate(s.published_at);
     const hasCrossRefs = s.cross_refs && s.cross_refs.length > 0;
+    const crossBadge = s.cross_institutional
+        ? '<span class="cross-badge">跨机构共识</span>'
+        : (hasCrossRefs ? '<span class="cross-badge">交叉信号</span>' : '');
     const strength = ['high', 'medium', 'low'].includes(s.strength) ? s.strength : 'low';
     const link = safeHttpUrl(s.url);
     const companies = Array.isArray(s.companies) ? s.companies : [];
@@ -1203,9 +1212,10 @@ function renderSignalCard(s) {
             <button type="button" class="sig-expand-btn" style="display:none" onclick="toggleSummary(this)">展开全文 ▾</button>
             <div class="sig-meta">
                 ${companies.length ? `<span>${companies.map(esc).join(', ')}</span>` : ''}
-                ${hasCrossRefs ? '<span class="cross-badge">交叉信号</span>' : ''}
+                ${crossBadge}
                 ${link ? `<a href="${esc(link)}" target="_blank" rel="noopener" class="sig-link">查看原文 →</a>` : ''}
             </div>
+            ${hasCrossRefs ? `<div class="sig-cross-refs">${s.cross_refs.map(r => `<div class="sig-cross-ref">↔ ${esc(r)}</div>`).join('')}</div>` : ''}
         </div>
     `;
 }
@@ -1434,7 +1444,12 @@ function renderTodayFeed() {
 function filterSignalsBy(data) {
     const activeSources = [...document.querySelectorAll('.filter-source:checked')].map(cb => cb.value);
     const activeStrengths = [...document.querySelectorAll('.filter-strength:checked')].map(cb => cb.value);
-    return data.filter(s => activeSources.includes(s.source) && activeStrengths.includes(s.strength));
+    const crossOnly = document.getElementById('filterCrossOnly')?.checked;
+    return data.filter(s => {
+        if (!activeSources.includes(s.source) || !activeStrengths.includes(s.strength)) return false;
+        if (crossOnly && !(s.cross_refs && s.cross_refs.length)) return false;
+        return true;
+    });
 }
 
 async function toggleEarlier() {

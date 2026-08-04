@@ -749,3 +749,32 @@ class TestSignalsByDateBeijingGrouping:
         # upsert overwrites
         storage.save_ticker_profiles("2026-Q1", '[{"ticker": "B"}]')
         assert storage.get_ticker_profiles("2026-Q1")["profiles_json"] == '[{"ticker": "B"}]'
+
+
+class TestCrossInstitutionalStorage:
+    def test_round_trip_true(self, fresh_db, make_signal):
+        storage.save_signals("2026-Q1", [make_signal(cross_institutional=True)])
+        loaded = storage.get_signals("2026-Q1")[0]
+        assert loaded.cross_institutional is True
+
+    def test_round_trip_default_false(self, fresh_db, make_signal):
+        storage.save_signals("2026-Q1", [make_signal()])
+        loaded = storage.get_signals("2026-Q1")[0]
+        assert loaded.cross_institutional is False
+
+    def test_upsert_updates_flag(self, fresh_db, make_signal):
+        storage.save_signals_incremental("2026-Q1", [make_signal()])
+        storage.save_signals_incremental(
+            "2026-Q1", [make_signal(cross_institutional=True)]
+        )
+        loaded = storage.get_signals("2026-Q1")[0]
+        assert loaded.cross_institutional is True
+
+    def test_recent_signals_carries_flag(self, fresh_db, make_signal):
+        from datetime import datetime, timezone
+        storage.save_signals_incremental("2026-Q1", [make_signal(
+            published_at=datetime.now(timezone.utc),
+            cross_institutional=True,
+        )])
+        loaded = storage.get_recent_signals(days=7)
+        assert loaded[0].cross_institutional is True
