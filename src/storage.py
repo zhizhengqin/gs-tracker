@@ -1211,6 +1211,7 @@ def get_signals_by_date(date_str: str, institution_id: Optional[str] = None) -> 
                         strength=SignalStrength(row["strength"]),
                         url=row["url"],
                         cross_refs=json.loads(row["cross_refs"]) if row["cross_refs"] else [],
+                        institution_id=row["institution_id"] if "institution_id" in row.keys() else "gs",
                     )
                 )
             except (ValueError, TypeError, KeyError) as exc:
