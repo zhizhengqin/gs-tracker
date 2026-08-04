@@ -194,7 +194,7 @@
         </ul>
         <h4>季度报告</h4>
         <ul>
-            <li>页面顶部下拉框选择季度，下方标签栏可切换：<strong>全部</strong>（一屏到底的长页面，依次为：AI 季度洞察 → 重点标的分析 → 持仓变化 → 高优先级信号 → 前十大持仓）、<strong>概览</strong>（关键数据）、<strong>AI 分析</strong>（含 AI 季度洞察：调仓解读、A 股题材映射、宏观看点）、<strong>持仓变化</strong>（与上一季度对比：新建仓/增持/减持/清仓）、<strong>多源信号</strong>（当季相关情报）、<strong>持仓明细</strong>（默认按公司汇总，可切换"原始明细"）。</li>
+            <li>页面顶部下拉框选择季度，下方标签栏可切换：<strong>全部</strong>（一屏到底的长页面，依次为：AI 季度洞察 → 重点标的分析 → 持仓变化 → 前十大持仓）、<strong>概览</strong>（关键数据）、<strong>AI 分析</strong>（含 AI 季度洞察：调仓解读、A 股题材映射、宏观看点）、<strong>持仓变化</strong>（与上一季度对比：新建仓/增持/减持/清仓）、<strong>持仓明细</strong>（默认按公司汇总，可切换"原始明细"）。</li>
             <li><strong>AI 季度洞察</strong>和<strong>重点标的分析</strong>都可以点「重新生成」刷新内容。</li>
         </ul>
         <h4>设置</h4>
@@ -347,12 +347,9 @@ async function loadQuarter(quarter) {
     const inst = quarterInst();
     const reportUrl = inst === 'gs' ? `/reports/${quarter}.html` : `/reports/${inst}/${quarter}.html`;
     try {
-        // JPM quarterly signals are out of scope (daily pipeline covers JPM);
-        // only GS has a quarterly signal run to fetch.
-        const [reportResp, signalsResp] = await Promise.all([
-            fetch(reportUrl),
-            inst === 'gs' ? fetch(`/api/signals/${quarter}`) : Promise.resolve(null),
-        ]);
+        // Quarterly view no longer embeds a signals panel — daily intel
+        // covers signal browsing with better filters.
+        const reportResp = await fetch(reportUrl);
         if (reportResp.status === 404) {
             if (seq !== loadSeq) return;
             const label = inst === 'gs' ? '高盛' : '摩根大通';
@@ -363,18 +360,6 @@ async function loadQuarter(quarter) {
         const html = await reportResp.text();
         const parser = new DOMParser();
         const doc = parser.parseFromString(html, 'text/html');
-
-        // Signals come from the JSON API (404 = this quarter has no signal run yet)
-        let signals = [];
-        let sourceStatus = {};
-        let signalsError = false;
-        if (signalsResp && signalsResp.ok) {
-            const signalData = await signalsResp.json();
-            signals = Array.isArray(signalData.signals) ? signalData.signals : [];
-            sourceStatus = signalData.source_status || {};
-        } else if (signalsResp && signalsResp.status !== 404) {
-            signalsError = true;
-        }
 
         // Ignore stale responses if the user clicked another quarter meanwhile
         if (seq !== loadSeq) return;
@@ -395,9 +380,6 @@ async function loadQuarter(quarter) {
                 retail: extractSection(doc, '散户可借鉴思路'),
             },
             keyTickers: extractTickers(doc),
-            signals: signals,
-            sourceStatus: sourceStatus,
-            signalsError: signalsError,
             holdings: extractHoldings(doc),
             holdingsTotal: extractHoldingsTotal(doc),
         };
@@ -786,7 +768,6 @@ const QUARTER_TABS = [
     ['overview', '概览'],
     ['analysis', 'AI 分析'],
     ['changes', '持仓变化'],
-    ['signals', '多源信号'],
     ['holdings', '持仓明细'],
 ];
 
@@ -850,10 +831,6 @@ function renderQuarterPanel() {
             el.innerHTML = '<div class="loading">加载中...</div>';
             loadQuarterChanges(d, el);
             break;
-        case 'signals':
-            el.innerHTML = renderSignalsPanel(d);
-            renderSignals();
-            break;
         case 'holdings':
             el.innerHTML = renderHoldingsPanel(d);
             break;
@@ -862,7 +839,6 @@ function renderQuarterPanel() {
             el.innerHTML = '<div id="insightSlot"><div class="loading">AI 季度洞察生成中...</div></div>'
                 + '<div id="tickerSlot"><div class="loading">重点标的分析生成中...</div></div>'
                 + '<div id="changesSlot"><div class="loading">加载中...</div></div>'
-                + renderHighSignalsCard(d)
                 + renderTopHoldingsCard(d);
             loadQuarterInsight(d);
             loadTickerProfiles(d);
@@ -959,20 +935,6 @@ function renderTickerProfiles(quarter, profiles, error) {
     `;
 }
 
-// ====== High-priority signals only (for the stacked "all" view) ======
-function renderHighSignalsCard(d) {
-    const high = d.signals.filter(s => s.strength === 'high');
-    return `
-        <div class="page-header">
-            <h2>高优先级信号</h2>
-            <span class="meta">共 ${high.length} 条 · ${d.quarter}</span>
-        </div>
-        <div class="card">
-            ${high.length ? high.map(s => renderSignalCard(s)).join('') : '<p class="muted">本季度无高优先级信号</p>'}
-        </div>
-    `;
-}
-
 // ====== Top-10 holdings with portfolio share (for the stacked "all" view) ======
 function renderTopHoldingsCard(d) {
     const companies = aggregateHoldingsByName(d.holdings);
@@ -1057,8 +1019,6 @@ async function loadQuarterChanges(d, el) {
 }
 
 function renderOverview(d) {
-    const sigCount = d.signals.length;
-    const highCount = d.signals.filter(s => s.strength === 'high').length;
     const confidence = parseConfidence(d.confidence);
     const sentiment = cleanSentiment(d.sentiment);
 
@@ -1077,30 +1037,11 @@ function renderOverview(d) {
                 <div class="label">重点标的</div>
             </div>
             <div class="stat-card">
-                <div class="num">${sigCount}</div>
-                <div class="label">多源信号</div>
-            </div>
-            <div class="stat-card">
-                <div class="num">${highCount}</div>
-                <div class="label">高优先级信号</div>
-            </div>
-            <div class="stat-card">
                 <span class="sentiment-tag ${sentimentClass}">${sentiment}</span>
                 <div class="label ai-conf">AI 情绪判断
                     <span class="confidence-bar"><span class="fill" style="width:${confidence * 100}%"></span></span>
                     ${(confidence * 100).toFixed(0)}%
                 </div>
-            </div>
-        </div>
-
-        <div class="card">
-            <h3>信号源状态</h3>
-            <div class="chip-row">
-                ${Object.entries(d.sourceStatus).map(([src, status]) => `
-                    <span class="src-status ${status === 'ok' ? 'ok' : 'warn'}">
-                        ${src}: ${status === 'ok' ? '正常' : '暂不可用'}
-                    </span>
-                `).join('')}
             </div>
         </div>
 
@@ -1111,13 +1052,6 @@ function renderOverview(d) {
             </div>
         </div>
 
-        ${d.signals.length > 0 ? `
-        <div class="card">
-            <h3>最新高优先级信号</h3>
-            ${d.signals.filter(s => s.strength === 'high').slice(0, 3).map(s => renderSignalCard(s)).join('')}
-            ${d.signals.filter(s => s.strength === 'high').length === 0 ? '<p class="muted">本季度无高优先级信号</p>' : ''}
-        </div>
-        ` : ''}
     `;
 }
 
@@ -1137,55 +1071,6 @@ function renderAnalysis(d) {
         <div class="card"><h3>风险提示</h3><p class="analysis-text danger">${a.risks}</p></div>
         <div class="card"><h3>散户可借鉴思路</h3><p class="analysis-text">${a.retail}</p></div>
     `;
-}
-
-function renderSignalsPanel(d) {
-    return `
-        <div class="page-header">
-            <h2>多源信号</h2>
-            <span class="meta">共 ${d.signals.length} 条信号 · ${d.quarter}</span>
-        </div>
-        ${d.signalsError ? '<div class="card card-error"><p>信号数据加载失败，请稍后重试</p></div>' : ''}
-        <div id="signalsContainer"></div>
-    `;
-}
-
-function renderSignals() {
-    const container = document.getElementById('signalsContainer');
-    if (!container || !reportData) return;
-
-    const activeSources = [...document.querySelectorAll('.filter-source:checked')].map(cb => cb.value);
-    const activeStrengths = [...document.querySelectorAll('.filter-strength:checked')].map(cb => cb.value);
-
-    const crossOnly = document.getElementById('filterCrossOnly')?.checked;
-    let filtered = reportData.signals.filter(s => {
-        const srcMatch = activeSources.includes(s.source);
-        const strMatch = activeStrengths.includes(s.strength);
-        if (crossOnly && !(s.cross_refs && s.cross_refs.length)) return false;
-        return srcMatch && strMatch;
-    });
-
-    if (filtered.length === 0) {
-        container.innerHTML = '<div class="empty-state"><p>没有匹配的信号，试试调整筛选条件</p></div>';
-        return;
-    }
-
-    const grouped = { high: [], medium: [], low: [] };
-    filtered.forEach(s => {
-        const key = Object.prototype.hasOwnProperty.call(grouped, s.strength) ? s.strength : 'low';
-        grouped[key].push(s);
-    });
-
-    let html = '';
-    for (const [level, signals] of Object.entries(grouped)) {
-        if (signals.length === 0) continue;
-        const dotClass = level === 'high' ? 'dot-high' : level === 'medium' ? 'dot-medium' : 'dot-low';
-        const label = level === 'high' ? '高优先级' : level === 'medium' ? '中优先级' : '低优先级';
-        html += `<div class="card"><h3><span class="dot ${dotClass}"></span>${label}信号 (${signals.length})</h3>`;
-        signals.forEach(s => { html += renderSignalCard(s); });
-        html += '</div>';
-    }
-    container.innerHTML = html;
 }
 
 // Escape external content (RSS/SEC-derived) before injecting into innerHTML
@@ -1667,8 +1552,6 @@ function onFilterChange() {
         } else {
             renderDailyIntel();
         }
-    } else {
-        renderSignals();
     }
 }
 
