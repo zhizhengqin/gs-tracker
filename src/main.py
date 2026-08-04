@@ -88,7 +88,7 @@ def _custom_source_configs() -> list:
     return []
 
 
-def _build_daily_sources() -> list:
+def _build_daily_sources(institution_id: str = "gs") -> list:
     """Instantiate daily-intel sources, honoring per-source enable switches."""
     enabled = _enabled_source_names()
     sources: list[tuple[str, object]] = []
@@ -99,7 +99,7 @@ def _build_daily_sources() -> list:
     if "research_view" in enabled:
         sources.append(("research_view", ResearchViewSource()))
     if "qfii" in enabled:
-        sources.append(("qfii", QFIISource(institution_id=institution_id)))
+        sources.append(("qfii", QFIISource()))
     if "northbound" in enabled:
         sources.append(("northbound", NorthboundSource()))
     if "news" in enabled:

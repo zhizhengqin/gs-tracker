@@ -30,9 +30,9 @@ class QFIISource:
 
     source_name = "qfii"
 
-    def __init__(self, institution_id: str = "gs", max_items: int = 10) -> None:
-        self.institution_id = institution_id
+    def __init__(self, max_items: int = 10) -> None:
         self.max_items = max_items
+        self.institution_id = "all"
         self.client = httpx.AsyncClient(
             timeout=15.0,
             headers={"User-Agent": "BridgeIQ/1.0 (market research)"},
@@ -61,7 +61,7 @@ class QFIISource:
 
         signals: List[Signal] = []
         now = datetime.now(timezone.utc)
-        inst_name = "高盛" if self.institution_id == "gs" else "摩根大通"
+
         new_watermark = now.strftime("%Y-%m-%d")
 
         for item in items[: self.max_items]:
@@ -83,13 +83,13 @@ class QFIISource:
 
             signals.append(
                 Signal(
-                    title=f"{inst_name} QFII持仓: {name}",
+                    title=f"外资 QFII持仓: {name}",
                     source="qfii",
                     published_at=now,
                     summary=summary,
                     companies=[name],
                     strength=SignalStrength.HIGH if abs(pct - prev_pct) > 1 else SignalStrength.MEDIUM,
-                    institution_id=self.institution_id,
+                    institution_id="all",
                 )
             )
 

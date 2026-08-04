@@ -57,3 +57,4 @@ Thumbs.db
 *.bak
 *.tar.gz
 .gstack/
+data/gs_tracker.db
