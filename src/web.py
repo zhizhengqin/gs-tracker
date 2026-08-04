@@ -34,6 +34,7 @@ from src.signal_analysis import (
 from src.signals.ai_triage import AiTriage
 from src.signals.base import Signal
 from src.storage import (
+    get_institutions,
     add_llm_model,
     create_user,
     delete_daily_report,
@@ -367,11 +368,12 @@ def _signal_to_dict(signal: Signal) -> dict:
 
 
 @app.get("/api/signals/recent")
-async def api_signals_recent(days: int = 30) -> dict:
+async def api_signals_recent(days: int = 30, institution: str = "") -> dict:
     """Return signals from the last N days, ordered by published_at descending."""
     if days < 1 or days > 365:
         raise HTTPException(status_code=422, detail="days 参数必须在 1 到 365 之间")
-    signals = await asyncio.to_thread(get_recent_signals, days)
+    inst = institution.strip() or None
+    signals = await asyncio.to_thread(get_recent_signals, days, institution_id=inst)
     return {
         "days": days,
         "count": len(signals),
@@ -400,6 +402,12 @@ async def api_signals(
 async def health() -> dict:
     """Health check endpoint."""
     return {"status": "ok"}
+
+
+@app.get("/api/institutions")
+async def api_institutions() -> list:
+    """Return all configured institutions (GS, JPM, etc.)."""
+    return await asyncio.to_thread(get_institutions)
 
 
 @app.get("/api/holdings/{quarter}")
@@ -1057,7 +1065,7 @@ async def api_signals_by_date(date: str) -> dict:
     import re
     if not re.match(r"^\d{4}-\d{2}-\d{2}$", date):
         raise HTTPException(status_code=422, detail="日期格式必须为 YYYY-MM-DD")
-    signals = await asyncio.to_thread(get_signals_by_date, date)
+    signals = await asyncio.to_thread(get_signals_by_date, date, institution.strip() or None)
     return {
         "date": date,
         "count": len(signals),

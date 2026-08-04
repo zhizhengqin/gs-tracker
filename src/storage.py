@@ -290,6 +290,26 @@ def init_db() -> None:
             conn, "idx_holdings_cik_quarter", "holdings", ["cik", "quarter"]
         )
 
+        # Add institution_id to signals table (safe ALTER, no PK rebuild).
+        _add_column_if_not_exists(conn, "signals", "institution_id", "TEXT DEFAULT 'gs'")
+        _create_index_if_columns_exist(conn, "idx_signals_q_inst_id", "signals", ["quarter", "institution_id", "id"])
+
+        # Create institutions table and seed defaults.
+        conn.executescript("""
+            CREATE TABLE IF NOT EXISTS institutions (
+                id TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
+                display_name TEXT NOT NULL,
+                cik TEXT,
+                enabled INTEGER DEFAULT 1,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+            INSERT OR IGNORE INTO institutions (id, name, display_name, cik)
+            VALUES ('gs', 'Goldman Sachs', '高盛', '0000886982');
+            INSERT OR IGNORE INTO institutions (id, name, display_name, cik)
+            VALUES ('jpm', 'J.P. Morgan', '摩根大通', '0000019617');
+        """)
+
         # Migrate signal_runs PK from quarter to (quarter, job) if still on old schema.
         _migrate_signal_runs_pk(conn)
 
@@ -502,19 +522,19 @@ def dedupe_signals_by_url() -> int:
 
 _INSERT_SIGNAL_SQL = """
     INSERT INTO signals (
-        id, quarter, source, title, published_at,
+        id, quarter, institution_id, source, title, published_at,
         summary, companies, strength, url, cross_refs,
         signal_fingerprint, relevance_score
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 """
 
 
 _UPSERT_SIGNAL_SQL = """
     INSERT INTO signals (
-        id, quarter, source, title, published_at,
+        id, quarter, institution_id, source, title, published_at,
         summary, companies, strength, url, cross_refs,
         signal_fingerprint, relevance_score
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(signal_fingerprint) DO UPDATE SET
         strength=excluded.strength,
         cross_refs=excluded.cross_refs,
@@ -537,6 +557,7 @@ def _signal_row(quarter: str, s: Signal, fingerprint: str = "", score: float = 0
     return (
         s.id,
         quarter,
+        getattr(s, 'institution_id', 'gs'),
         s.source,
         s.title,
         s.published_at.isoformat(),
@@ -653,6 +674,7 @@ def get_signals(quarter: str) -> List[Signal]:
                         strength=SignalStrength(row["strength"]),
                         url=row["url"],
                         cross_refs=json.loads(row["cross_refs"]) if row["cross_refs"] else [],
+                        institution_id=row["institution_id"] if "institution_id" in row.keys() else "gs",
                     )
                 )
             except (ValueError, TypeError, KeyError) as exc:
@@ -787,21 +809,27 @@ def delete_user_sessions(username: str) -> None:
 
 
 def get_recent_signals(
-    days: int = 30, reference_date: Optional[datetime] = None
+    days: int = 30, reference_date: Optional[datetime] = None,
+    institution_id: Optional[str] = None,
 ) -> List[Signal]:
     """Load signals published within the last N days, ordered by published_at DESC."""
     ref = reference_date or datetime.now(timezone.utc)
     cutoff = ref - timedelta(days=days)
+    params: list = [cutoff.isoformat()]
+    inst_filter = ""
+    if institution_id:
+        inst_filter = "AND institution_id = ? "
+        params.append(institution_id)
     with get_connection() as conn:
         cursor = conn.execute(
-            """
+            f"""
             SELECT id, source, title, published_at, summary,
-                   companies, strength, url, cross_refs
+                   companies, strength, url, cross_refs, institution_id
             FROM signals
-            WHERE published_at >= ?
+            WHERE published_at >= ? {inst_filter}
             ORDER BY published_at DESC
             """,
-            (cutoff.isoformat(),),
+            params,
         )
         signals: List[Signal] = []
         for row in cursor.fetchall():
@@ -817,6 +845,7 @@ def get_recent_signals(
                         strength=SignalStrength(row["strength"]),
                         url=row["url"],
                         cross_refs=json.loads(row["cross_refs"]) if row["cross_refs"] else [],
+                        institution_id=row["institution_id"] if "institution_id" in row.keys() else "gs",
                     )
                 )
             except (ValueError, TypeError, KeyError) as exc:
@@ -954,6 +983,18 @@ def get_all_settings() -> dict:
     with get_connection() as conn:
         rows = conn.execute("SELECT key, value FROM app_settings").fetchall()
         return {r["key"]: r["value"] for r in rows}
+
+
+# ====== Institutions ======
+
+def get_institutions() -> list:
+    """Return all institutions ordered by created_at."""
+    with get_connection() as conn:
+        rows = conn.execute(
+            "SELECT id, name, display_name, cik, enabled, created_at "
+            "FROM institutions ORDER BY created_at ASC"
+        ).fetchall()
+        return [dict(r) for r in rows]
 
 
 # ====== LLM model management ======
@@ -1132,23 +1173,28 @@ def save_ticker_profiles(quarter: str, profiles_json: str) -> None:
 
 # ====== Signals by date ======
 
-def get_signals_by_date(date_str: str) -> List[Signal]:
+def get_signals_by_date(date_str: str, institution_id: Optional[str] = None) -> List[Signal]:
     """Return all signals published on a specific date (YYYY-MM-DD).
 
     published_at is stored as UTC ISO text, but the dashboard thinks in
     Asia/Shanghai days — group by UTC+8 so a signal published at 01:00
     Beijing time shows up under its Beijing date, not the UTC day before.
     """
+    params: list = [date_str]
+    inst_filter = ""
+    if institution_id:
+        inst_filter = "AND institution_id = ? "
+        params.append(institution_id)
     with get_connection() as conn:
         cursor = conn.execute(
-            """
+            f"""
             SELECT id, source, title, published_at, summary,
-                   companies, strength, url, cross_refs
+                   companies, strength, url, cross_refs, institution_id
             FROM signals
-            WHERE DATE(published_at, '+8 hours') = ?
+            WHERE DATE(published_at, '+8 hours') = ? {inst_filter}
             ORDER BY published_at DESC
             """,
-            (date_str,),
+            params,
         )
         signals: List[Signal] = []
         for row in cursor.fetchall():

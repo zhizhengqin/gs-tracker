@@ -45,6 +45,7 @@ class Signal:
     companies: List[str]
     strength: SignalStrength
     url: Optional[str] = None
+    institution_id: str = "gs"
     cross_refs: List[str] = field(default_factory=list)
     id: str = field(default_factory=lambda: str(uuid.uuid4())[:8])
 

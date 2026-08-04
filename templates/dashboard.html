@@ -43,6 +43,12 @@
 <!-- ====== LEFT RAIL ====== -->
 <aside class="left-rail" id="leftRail">
     <div class="rail-section" id="signalFilterSection" style="display:none;">
+        <h3>追踪机构</h3>
+        <div class="signal-filter" id="institutionFilterBox">
+            <label><input type="radio" name="institution" checked onchange="onInstitutionChange()" value=""> 全部机构</label>
+            <label><input type="radio" name="institution" onchange="onInstitutionChange()" value="gs"> 高盛</label>
+            <label><input type="radio" name="institution" onchange="onInstitutionChange()" value="jpm"> 摩根大通</label>
+        </div>
         <h3>信号来源</h3>
         <div class="signal-filter">
             <span id="sourceFilterBox">
@@ -248,6 +254,7 @@ let currentQuarter = null;
 let reportData = null;
 let reports = [];
 let currentQuarterTab = 'all'; // 'all' = stacked long page
+let currentInstitution = '';
 let dailyData = [];       // signals from /api/signals/recent (earlier range view)
 let todayData = [];       // today's signals (today view)
 let dailyDays = 30;       // current day range
@@ -1372,7 +1379,7 @@ async function loadTodayView() {
     document.getElementById('mainContent').innerHTML = '<div class="loading">加载中...</div>';
     const today = new Date().toISOString().slice(0, 10);
     try {
-        const resp = await fetch(`/api/signals/date/${today}`);
+        const resp = await fetch(`/api/signals/date/${today}?institution=${currentInstitution}`);
         if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
         const json = await resp.json();
         todayData = json.signals || [];
@@ -1442,6 +1449,16 @@ async function toggleEarlier() {
     }
 }
 
+function onInstitutionChange() {
+    const sel = document.querySelector('input[name="institution"]:checked');
+    currentInstitution = sel ? sel.value : '';
+    loadDailyIntel(3);
+}
+function instBadge(instId) {
+    if (instId === 'gs') return '<span class="inst-tag inst-gs">高盛</span>';
+    if (instId === 'jpm') return '<span class="inst-tag inst-jpm">摩根大通</span>';
+    return '';
+}
 async function loadDailyIntel(days) {
     dailyDays = days;
     const target = document.getElementById('earlierBody') || document.getElementById('mainContent');
@@ -1453,7 +1470,7 @@ async function loadDailyIntel(days) {
     });
 
     try {
-        const resp = await fetch(`/api/signals/recent?days=${days}`);
+        const resp = await fetch(`/api/signals/recent?days=${days}&institution=${currentInstitution}`);
         if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
         const json = await resp.json();
         dailyData = json.signals || [];
