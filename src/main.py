@@ -34,6 +34,8 @@ from src.signals.scorer import SignalScorer
 from src.signals.sec_8k_source import Sec8kSource
 from src.signals.research_view_source import ResearchViewSource
 from src.signals.thirteen_dg_source import ThirteenDGSource
+from src.signals.qfii_source import QFIISource
+from src.signals.northbound_source import NorthboundSource
 from src.storage import (
     cleanup_expired_signals,
     get_default_llm_model,
@@ -164,7 +166,7 @@ async def run_daily_intel_stream():
         note = getattr(src, "fetch_note", "")
         return note if isinstance(note, str) else ""
 
-    sources = _build_daily_sources()
+    sources = _build_daily_sources(institution_id)
     source_names = [n for n, _ in sources]
     yield json.dumps({"event": "start", "sources": source_names})
 
