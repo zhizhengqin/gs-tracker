@@ -1457,9 +1457,10 @@ function onInstitutionChange() {
     loadDailyIntel(3);
 }
 function instBadge(instId) {
-    if (instId === 'gs') return '<span class="inst-tag inst-gs">高盛</span>';
-    if (instId === 'jpm') return '<span class="inst-tag inst-jpm">摩根大通</span>';
-    return '';
+    if (!instId || instId === 'all') return '<span class="inst-tag">公共</span>';
+    if (instId === 'gs') return '<span class="inst-tag">高盛</span>';
+    if (instId === 'jpm') return '<span class="inst-tag">摩根大通</span>';
+    return '<span class="inst-tag">' + esc(instId) + '</span>';
 }
 async function loadDailyIntel(days) {
     dailyDays = days;
