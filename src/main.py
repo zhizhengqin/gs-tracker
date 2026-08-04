@@ -62,7 +62,7 @@ logger = logging.getLogger(__name__)
 BEIJING_TZ = timezone(timedelta(hours=8))
 
 
-ALL_SOURCE_NAMES = ("13F", "8-K", "13D/13G", "research_view", "news", "macro_view")
+ALL_SOURCE_NAMES = ("13F", "8-K", "13D/13G", "research_view", "news", "macro_view", "qfii", "northbound")
 
 
 def _enabled_source_names() -> set:
