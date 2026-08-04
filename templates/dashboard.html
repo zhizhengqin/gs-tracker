@@ -1557,7 +1557,17 @@ async function onInstitutionChange() {
     } else if (currentView === 'quarter') {
         await refreshReports();
     } else {
-        loadDailyIntel(3);
+        // Daily view: reload whatever mode is active so the feed matches the
+        // selected institution (today, custom date, or N-day range).
+        const picker = document.getElementById('dailyDatePicker');
+        const today = new Date().toISOString().slice(0, 10);
+        if (picker && picker.value && picker.value !== today) {
+            await loadDateSignals(picker.value);
+        } else if (dailyDays === null) {
+            await loadTodayView();
+        } else {
+            await loadDailyIntel(dailyDays);
+        }
     }
 }
 function instBadge(instId) {
@@ -2211,7 +2221,7 @@ async function loadDateSignals(dateStr) {
     dailyDays = null;  // custom date mode
     document.getElementById('mainContent').innerHTML = '<div class="loading">加载中...</div>';
     try {
-        const resp = await fetch(`/api/signals/date/${dateStr}`);
+        const resp = await fetch(`/api/signals/date/${dateStr}?institution=${currentInstitution}`);
         if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
         const json = await resp.json();
         dailyData = json.signals || [];
