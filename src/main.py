@@ -114,9 +114,14 @@ def _build_daily_sources(institution_id: str = "gs") -> list:
         if feeds:
             # Distinct source_name so JPM-tagged items never fingerprint-collide
             # with the GS-tagged copy of the same article.
-            sources.append(("news_jpm", NewsSource(rss_urls=feeds, source_name="news_jpm", institution_id="jpm")))
+            sources.append(("news_jpm", NewsSource(
+                rss_urls=feeds, source_name="news_jpm", institution_id="jpm",
+                exclude_viewpoint=True,
+            )))
     if "jpm_research" in enabled:
-        sources.append(("jpm_research", JPMResearchSource()))
+        feeds = list(RSS_FEEDS)
+        if feeds:
+            sources.append(("jpm_research", JPMResearchSource(rss_urls=feeds)))
     # Custom sources from the settings page (one instance per source)
     for entry in _custom_source_configs():
         if entry.get("name") not in enabled:

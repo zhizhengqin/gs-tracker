@@ -36,7 +36,10 @@ GS_KEYWORDS = [
 
 JPM_KEYWORDS = [
     "j.p. morgan", "jpmorgan", "jpmorgan chase", "jpm",
-    "摩根大通", "摩根",
+    "摩根大通", "小摩",
+    # NOTE: bare "摩根" deliberately excluded — it also matches 摩根士丹利
+    # (Morgan Stanley, "大摩"), a different bank. "小摩" is the common
+    # Chinese-media shorthand for JPMorgan.
 ]
 
 # Viewpoint/analysis keywords — GS-authored or GS-attributed content.
@@ -130,14 +133,18 @@ class NewsSource:
         source_name: str = "news",
         filter_policy: str = "gs_only",
         institution_id: str = "gs",
+        exclude_viewpoint: bool = False,
     ) -> None:
         """rss_urls: feeds to poll. source_name: Signal.source tag (custom
         sources pass their own name). filter_policy: 'gs_only' keeps only
-        GS-related items (default), 'all' keeps everything as LOW."""
+        institution-related items (default), 'all' keeps everything as LOW.
+        exclude_viewpoint: skip viewpoint-type articles — used by news_jpm
+        so JPM analysis pieces land only in the jpm_research source."""
         self.rss_urls = rss_urls or []
         self.source_name = source_name
         self.filter_policy = filter_policy
         self.institution_id = institution_id
+        self.exclude_viewpoint = exclude_viewpoint
         self.client = httpx.AsyncClient(
             timeout=20.0,
             headers={"User-Agent": SEC_USER_AGENT},
@@ -183,6 +190,9 @@ class NewsSource:
             # gs_only: GS angle required (user feedback 2026-07).
             # all: custom-source policy — keep everything as LOW.
             if self.filter_policy == "gs_only" and not (has_gs or has_viewpoint):
+                continue
+            if self.exclude_viewpoint and has_viewpoint:
+                # Viewpoint pieces belong to the jpm_research source.
                 continue
 
             published_at = datetime.now(timezone.utc)

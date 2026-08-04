@@ -228,14 +228,16 @@ class TestDailyIntel:
 
     @pytest.fixture
     def _mock_sources(self):
-        """Patch all four source classes; yields the mock classes dict."""
+        """Patch all source classes (hermetic — no live HTTP); yields mocks."""
         mocks = {}
         with patch("src.main.NewsSource") as mock_news, \
              patch("src.main.Sec8kSource") as mock_8k, \
              patch("src.main.ResearchViewSource") as mock_rv, \
              patch("src.main.JPMResearchSource") as mock_jpmr, \
+             patch("src.main.QFIISource") as mock_qfii, \
+             patch("src.main.NorthboundSource") as mock_nb, \
              patch("src.main.ThirteenDGSource") as mock_dg:
-            for cls in (mock_news, mock_rv, mock_dg, mock_jpmr):
+            for cls in (mock_news, mock_rv, mock_dg, mock_jpmr, mock_qfii, mock_nb):
                 cls.return_value.fetch_since = AsyncMock(return_value=([], None))
                 cls.return_value.close = AsyncMock()
             mock_8k.return_value.fetch = AsyncMock(return_value=[])
@@ -307,9 +309,10 @@ class TestDailyIntel:
 
         assert events[0]["event"] == "start"
         done_events = [e for e in events if e["event"] == "source_done"]
-        # RSS_FEEDS empty → no news sources; 8-K + 13D/13G + research_view + jpm_research + A-share sources remain
-        assert len(done_events) == 6
-        assert {e["source"] for e in done_events} == {"8-K", "13D/13G", "research_view", "jpm_research", "northbound", "qfii"}
+        # RSS_FEEDS empty → no news/jpm_research sources (all feed-based);
+        # 8-K + 13D/13G + research_view + A-share sources remain
+        assert len(done_events) == 5
+        assert {e["source"] for e in done_events} == {"8-K", "13D/13G", "research_view", "northbound", "qfii"}
         assert events[-1]["event"] == "complete"
         assert not any(e["event"] == "triage_note" for e in events)
 
