@@ -1192,6 +1192,7 @@ function renderSignalCard(s) {
         <div class="signal-card ${strength}" data-signal-id="${esc(s.id || '')}">
             <div class="sig-header">
                 <span class="sig-source ${srcClass(s.source)}">${esc(s.source)}</span>
+                ${s.institution_id ? instBadge(s.institution_id) : ''}
                 <span class="sig-date">${esc(date)}</span>
             </div>
             <h4>${esc(s.title)}</h4>
