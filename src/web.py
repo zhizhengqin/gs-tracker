@@ -1062,7 +1062,7 @@ async def api_delete_llm_model(model_id: str) -> dict:
 # ====== Signals by date ======
 
 @app.get("/api/signals/date/{date}")
-async def api_signals_by_date(date: str) -> dict:
+async def api_signals_by_date(date: str, institution: str = "") -> dict:
     """Return signals published on a specific date (YYYY-MM-DD)."""
     import re
     if not re.match(r"^\d{4}-\d{2}-\d{2}$", date):
