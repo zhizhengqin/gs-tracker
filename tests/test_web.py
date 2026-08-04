@@ -453,25 +453,6 @@ def test_seed_default_llm_skips_without_env(signals_db, monkeypatch):
     assert storage.get_llm_models() == []
 
 
-def test_purge_non_gs_news_signals(signals_db, make_signal):
-    """One-time purge drops news without a GS angle, keeps GS news & other sources."""
-    from src.storage import get_signals, save_signals_incremental
-
-    gs_news = make_signal(id="gs1", source="news", title="高盛研报：看好A股", summary="高盛认为…")
-    off_topic = make_signal(id="oth1", source="news", title="A股三大股指跌超1%", summary="市场概述…")
-    other_source = make_signal(id="k1", source="8-K", title="Goldman 8-K filing", summary="…")
-    save_signals_incremental("2026-Q3", [gs_news, off_topic, other_source])
-
-    src.web._purge_non_gs_news_signals()
-
-    remaining = {s.id for s in get_signals("2026-Q3")}
-    assert "gs1" in remaining
-    assert "oth1" not in remaining
-    assert "k1" in remaining
-    assert storage.get_setting("news_gs_purge_v1") == "1"
-
-
-# ====== Signal AI analysis caching behavior ======
 
 class _EmptyFakeClient:
     """LLM client whose completions are always empty (transient gateway hiccup)."""

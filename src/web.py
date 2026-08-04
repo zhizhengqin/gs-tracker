@@ -71,36 +71,7 @@ async def lifespan(app: FastAPI):
     init_db()
     ensure_default_admin()
     _seed_default_llm_from_env()
-    # _purge_non_gs_news_signals()  # DISABLED: deletes JPM/non-GS news
     yield
-
-
-def _purge_non_gs_news_signals() -> None:
-    """One-time cleanup (flag-guarded): delete news signals with no GS angle.
-
-    The news source used to keep items matching only holding-company keywords
-    (e.g. a Visa headline with zero Goldman content). Policy changed to
-    GS-focused on 2026-07; this purges the backlog so the dashboard stops
-    showing off-topic market news. Runs once per database.
-    """
-    if get_setting("news_gs_purge_v1", ""):
-        return
-    try:
-        with get_connection() as conn:
-            cur = conn.execute(
-                "DELETE FROM signals WHERE source = 'news' "
-                "AND LOWER(title || ' ' || COALESCE(summary, '')) NOT LIKE '%goldman%' "
-                "AND (title || ' ' || COALESCE(summary, '')) NOT LIKE '%高盛%' "
-                "AND LOWER(title || ' ' || COALESCE(summary, '')) NOT LIKE '%hatzius%' "
-                "AND LOWER(title || ' ' || COALESCE(summary, '')) NOT LIKE '%kostin%'"
-            )
-            deleted = cur.rowcount
-            conn.commit()
-        set_setting("news_gs_purge_v1", "1")
-        if deleted:
-            logger.info("Purged %d non-GS news signals", deleted)
-    except Exception:
-        logger.exception("Non-GS news purge failed")
 
 
 def _seed_default_llm_from_env() -> None:
