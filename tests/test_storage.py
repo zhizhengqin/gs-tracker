@@ -709,6 +709,20 @@ class TestQuarterInsights:
         storage.save_quarter_insight("2026-Q1", "新版")
         assert storage.get_quarter_insight("2026-Q1")["report_text"] == "新版"
 
+    def test_quarter_insight_institution_scoped(self, fresh_db):
+        storage.save_quarter_insight("2026-Q1", "高盛版", institution="gs")
+        storage.save_quarter_insight("2026-Q1", "摩根大通版", institution="jpm")
+        assert storage.get_quarter_insight("2026-Q1", "gs")["report_text"] == "高盛版"
+        assert storage.get_quarter_insight("2026-Q1", "jpm")["report_text"] == "摩根大通版"
+        assert storage.get_quarter_insight("2026-Q1")["report_text"] == "高盛版"  # 默认 gs
+
+    def test_ticker_profiles_institution_scoped(self, fresh_db):
+        storage.save_ticker_profiles("2026-Q1", '[{"ticker":"GS-T"}]', institution="gs")
+        storage.save_ticker_profiles("2026-Q1", '[{"ticker":"JPM-T"}]', institution="jpm")
+        assert "GS-T" in storage.get_ticker_profiles("2026-Q1", "gs")["profiles_json"]
+        assert "JPM-T" in storage.get_ticker_profiles("2026-Q1", "jpm")["profiles_json"]
+        assert storage.get_ticker_profiles("2026-Q2", "jpm") is None
+
 
 class TestSignalsByDateBeijingGrouping:
     """get_signals_by_date groups by Asia/Shanghai day (UTC+8), not UTC day."""

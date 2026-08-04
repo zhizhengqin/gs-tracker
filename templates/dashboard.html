@@ -308,7 +308,7 @@ async function init() {
 
     // Preload report list in background
     try {
-        const resp = await fetch('/api/reports');
+        const resp = await fetch('/api/reports?institution=' + quarterInst());
         reports = await resp.json();
         if (reports.length > 0) currentQuarter = reports[0].quarter;
     } catch(e) { console.error('Failed to load reports', e); }
@@ -343,11 +343,22 @@ async function loadQuarter(quarter) {
     const seq = ++loadSeq;
     document.getElementById('mainContent').innerHTML = '<div class="loading">加载中...</div>';
 
+    const inst = quarterInst();
+    const reportUrl = inst === 'gs' ? `/reports/${quarter}.html` : `/reports/${inst}/${quarter}.html`;
     try {
+        // JPM quarterly signals are out of scope (daily pipeline covers JPM);
+        // only GS has a quarterly signal run to fetch.
         const [reportResp, signalsResp] = await Promise.all([
-            fetch(`/reports/${quarter}.html`),
-            fetch(`/api/signals/${quarter}`),
+            fetch(reportUrl),
+            inst === 'gs' ? fetch(`/api/signals/${quarter}`) : Promise.resolve(null),
         ]);
+        if (reportResp.status === 404) {
+            if (seq !== loadSeq) return;
+            const label = inst === 'gs' ? '高盛' : '摩根大通';
+            document.getElementById('mainContent').innerHTML =
+                `<div class="loading">${label} ${quarter} 季度报告尚未生成，点击「运行季度对账」生成</div>`;
+            return;
+        }
         const html = await reportResp.text();
         const parser = new DOMParser();
         const doc = parser.parseFromString(html, 'text/html');
@@ -356,11 +367,11 @@ async function loadQuarter(quarter) {
         let signals = [];
         let sourceStatus = {};
         let signalsError = false;
-        if (signalsResp.ok) {
+        if (signalsResp && signalsResp.ok) {
             const signalData = await signalsResp.json();
             signals = Array.isArray(signalData.signals) ? signalData.signals : [];
             sourceStatus = signalData.source_status || {};
-        } else if (signalsResp.status !== 404) {
+        } else if (signalsResp && signalsResp.status !== 404) {
             signalsError = true;
         }
 
@@ -410,7 +421,7 @@ async function runPipeline() {
     btn.disabled = true;
     setRunMsg('正在启动…', 'info');
     try {
-        const resp = await fetch('/api/pipeline/run', {method: 'POST'});
+        const resp = await fetch('/api/pipeline/run?institution=' + quarterInst(), {method: 'POST'});
         if (resp.status === 409) {
             setRunMsg('流水线正在运行中，请稍候', 'info');
         } else if (!resp.ok) {
@@ -652,12 +663,14 @@ function updateProgressPanel(sourceStates, isComplete, summary) {
 
 async function refreshReports() {
     try {
-        const resp = await fetch('/api/reports');
+        const resp = await fetch('/api/reports?institution=' + quarterInst());
         reports = await resp.json();
         if (reports.length > 0) {
             currentQuarter = reports[0].quarter;  // newest first — a new run may add a quarter
-            await switchMainView('quarter');
+        } else {
+            currentQuarter = null;
         }
+        await switchMainView('quarter');
     } catch (e) { console.error('Failed to refresh reports', e); }
 }
 
@@ -863,7 +876,10 @@ async function loadQuarterInsight(d, force = false) {
     const prev = previousQuarterOf(d.quarter);
     if (force) slot.innerHTML = '<div class="loading">AI 季度洞察重新生成中...</div>';
     try {
-        const query = prev ? `?previous=${prev}` : '';
+        const params = new URLSearchParams();
+        if (prev) params.set('previous', prev);
+        params.set('institution', quarterInst());
+        const query = `?${params.toString()}`;
         const resp = force
             ? await fetch(`/api/quarter-insight/${d.quarter}/regenerate${query}`, { method: 'POST' })
             : await fetch(`/api/quarter-insight/${d.quarter}${query}`);
@@ -889,9 +905,10 @@ async function loadTickerProfiles(d, force = false) {
     if (!slot) return;
     if (force) slot.innerHTML = '<div class="loading">重点标的分析重新生成中...</div>';
     try {
+        const tq = `?institution=${quarterInst()}`;
         const resp = force
-            ? await fetch(`/api/ticker-profiles/${d.quarter}/regenerate`, { method: 'POST' })
-            : await fetch(`/api/ticker-profiles/${d.quarter}`);
+            ? await fetch(`/api/ticker-profiles/${d.quarter}/regenerate${tq}`, { method: 'POST' })
+            : await fetch(`/api/ticker-profiles/${d.quarter}${tq}`);
         const r = await resp.json();
         const profiles = Array.isArray(r.profiles) ? r.profiles : [];
         if (r.message || profiles.length === 0) {
@@ -1311,7 +1328,7 @@ async function loadFullHoldings() {
     if (!reportData) return;
     if (btn) { btn.disabled = true; btn.textContent = '加载中…'; }
     try {
-        const resp = await fetch(`/api/holdings/${reportData.quarter}`);
+        const resp = await fetch(`/api/holdings/${reportData.quarter}?institution=${quarterInst()}`);
         if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
         const data = await resp.json();
         reportData.holdings = (data.holdings || []).map(h => ({
@@ -1363,6 +1380,15 @@ async function switchMainView(view) {
         await loadTodayView();
     } else if (view === 'quarter') {
         if (filterSection) filterSection.style.display = 'block';
+        // The preloaded report list may belong to another institution —
+        // refetch for the current one before choosing a quarter.
+        try {
+            const resp = await fetch('/api/reports?institution=' + quarterInst());
+            reports = await resp.json();
+            if (!reports.some(r => r.quarter === currentQuarter)) {
+                currentQuarter = reports.length > 0 ? reports[0].quarter : null;
+            }
+        } catch(e) { console.error('Failed to refresh quarter list', e); }
         if (currentQuarter) {
             await loadQuarter(currentQuarter);
         } else {
@@ -1469,10 +1495,19 @@ async function toggleEarlier() {
     }
 }
 
-function onInstitutionChange() {
+function quarterInst() {
+    // '' means "all" in the daily view; quarterly reports are per-institution,
+    // so fall back to GS unless a specific institution is selected.
+    return (currentInstitution === 'jpm') ? 'jpm' : 'gs';
+}
+async function onInstitutionChange() {
     const sel = document.querySelector('input[name="institution"]:checked');
     currentInstitution = sel ? sel.value : '';
-    loadDailyIntel(3);
+    if (currentView === 'quarter') {
+        await refreshReports();
+    } else {
+        loadDailyIntel(3);
+    }
 }
 function instBadge(instId) {
     if (!instId || instId === 'all') return '<span class="inst-tag">公共</span>';

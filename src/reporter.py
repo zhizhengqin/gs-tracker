@@ -40,10 +40,20 @@ class ReportGenerator:
         signals: Optional[list] = None,
         signal_errors: Optional[list] = None,
         source_status: Optional[dict] = None,
+        institution_id: str = "gs",
+        institution_label: str = "高盛",
     ) -> Path:
-        """Render a single quarter HTML report."""
+        """Render a single quarter HTML report.
+
+        GS reports keep the legacy flat path (2026-Q1.html); other
+        institutions go into a per-institution subdirectory so
+        /api/reports can list them independently.
+        """
         if output_path is None:
-            output_path = REPORT_OUTPUT_DIR / f"{quarter}.html"
+            if institution_id == "gs":
+                output_path = REPORT_OUTPUT_DIR / f"{quarter}.html"
+            else:
+                output_path = REPORT_OUTPUT_DIR / institution_id / f"{quarter}.html"
         output_path.parent.mkdir(parents=True, exist_ok=True)
 
         template = self.env.get_template("report.html")
@@ -53,6 +63,7 @@ class ReportGenerator:
         ).head(HOLDINGS_PREVIEW_LIMIT)
         rendered = template.render(
             quarter=quarter,
+            institution_label=institution_label,
             holdings=preview_df.to_dict(orient="records"),
             holdings_total=holdings_total,
             analysis=analysis,

@@ -141,11 +141,16 @@ async def auth_middleware(request: Request, call_next):
     return await call_next(request)
 
 
-def _list_report_files() -> List[Path]:
-    """Return HTML report files sorted newest-first (quarter names sort lexically)."""
-    if not REPORT_OUTPUT_DIR.exists():
+def _list_report_files(institution_id: str = "gs") -> List[Path]:
+    """Return HTML report files sorted newest-first (quarter names sort lexically).
+
+    GS reports live flat in REPORT_OUTPUT_DIR (legacy layout); other
+    institutions live in a per-institution subdirectory.
+    """
+    base = REPORT_OUTPUT_DIR if institution_id == "gs" else REPORT_OUTPUT_DIR / institution_id
+    if not base.exists():
         return []
-    return sorted(REPORT_OUTPUT_DIR.glob("*.html"), reverse=True)
+    return sorted(base.glob("*.html"), reverse=True)
 
 
 # ====== Auth: login page + session endpoints ======
@@ -298,23 +303,45 @@ async def get_report(quarter: str, request: Request) -> Response:
     return HTMLResponse(report_path.read_text(encoding="utf-8"), headers=headers)
 
 
+def _validate_institution(institution_id: str) -> str:
+    """Raise 422 for unknown institution ids."""
+    for inst in get_institutions():
+        if inst["id"] == institution_id:
+            return institution_id
+    raise HTTPException(status_code=422, detail=f"未知机构: {institution_id}")
+
+
+def _institution_cik(institution_id: str) -> str:
+    """Resolve an institution id ('' means GS) to its SEC CIK."""
+    inst = (institution_id or "gs").strip() or "gs"
+    _validate_institution(inst)
+    for row in get_institutions():
+        if row["id"] == inst:
+            return row["cik"] or GOLDMAN_CIK
+    return GOLDMAN_CIK  # unreachable: _validate_institution raised already
+
+
 _QUARTER_STEM_RE = re.compile(r"^\d{4}-Q[1-4]$")
 
 
 @app.get("/api/reports")
-async def api_reports() -> List[dict]:
+async def api_reports(institution: str = "") -> List[dict]:
     """Return metadata for all generated reports.
 
     Only files named exactly YYYY-QN.html are listed: anything else
     (e.g. a stray hand-made file) would produce malformed downstream
     API calls like /api/signals/2026-Q1_jpm.
     """
-    files = [f for f in _list_report_files() if _QUARTER_STEM_RE.match(f.stem)]
+    inst = institution.strip() or "gs"
+    _validate_institution(inst)
+    files = [f for f in _list_report_files(inst) if _QUARTER_STEM_RE.match(f.stem)]
+    prefix = "/reports" if inst == "gs" else f"/reports/{inst}"
     return [
         {
             "quarter": file_path.stem,
+            "institution": inst,
             "title": f"BridgeIQ 季度报告 — {file_path.stem}",
-            "path": f"/reports/{file_path.name}",
+            "path": f"{prefix}/{file_path.name}",
         }
         for file_path in files
     ]
@@ -394,13 +421,14 @@ async def api_institutions() -> list:
 @app.get("/api/holdings/{quarter}")
 async def api_holdings(
     quarter: str = PathParam(pattern=r"^\d{4}-Q[1-4]$"),
+    institution: str = "",
 ) -> dict:
     """Return the full holdings list for a quarter as JSON.
 
     The static report only embeds the top positions; the dashboard fetches
     the complete list from here on demand ("加载全部持仓").
     """
-    holdings = await asyncio.to_thread(get_holdings, GOLDMAN_CIK, quarter)
+    holdings = await asyncio.to_thread(get_holdings, _institution_cik(institution), quarter)
     if not holdings:
         raise HTTPException(status_code=404, detail="该季度暂无持仓数据")
     holdings.sort(key=lambda h: h.get("value") or 0, reverse=True)
@@ -432,11 +460,28 @@ _PIPELINE_JOB_GRACE_SECONDS = 120  # finished job stays replayable this long
 class _PipelineJob:
     """A single quarterly pipeline run with an event log subscribers can replay."""
 
-    def __init__(self) -> None:
+    def __init__(self, institution_id: str = "gs") -> None:
         self.events: List[str] = []
         self.done = False
         self.finished_at: Optional[datetime] = None
         self.cond = asyncio.Condition()
+        self.institution_id = institution_id
+
+@app.get("/reports/{institution}/{quarter}.html", response_class=HTMLResponse)
+async def get_institution_report(institution: str, quarter: str, request: Request) -> Response:
+    """Return a quarter report for a non-GS institution (per-institution subdir)."""
+    _validate_institution(institution)
+    if not _QUARTER_STEM_RE.match(quarter):
+        raise HTTPException(status_code=422, detail="季度格式必须为 YYYY-QN")
+    report_path = REPORT_OUTPUT_DIR / institution / f"{quarter}.html"
+    if not report_path.exists():
+        raise HTTPException(status_code=404, detail="未找到该机构该季度报告")
+    stat = report_path.stat()
+    etag = f'"{stat.st_mtime_ns:x}-{stat.st_size:x}"'
+    headers = {"Cache-Control": "no-cache", "ETag": etag}
+    if request.headers.get("if-none-match") == etag:
+        return Response(status_code=304, headers=headers)
+    return HTMLResponse(report_path.read_text(encoding="utf-8"), headers=headers)
 
 
 _pipeline_job: Optional[_PipelineJob] = None
@@ -449,7 +494,7 @@ async def _pipeline_job_runner(job: _PipelineJob) -> None:
     from src.main import run_pipeline_stream
 
     try:
-        async for event_json in run_pipeline_stream():
+        async for event_json in run_pipeline_stream(job.institution_id):
             async with job.cond:
                 job.events.append(event_json)
                 job.cond.notify_all()
@@ -471,10 +516,10 @@ async def _pipeline_job_runner(job: _PipelineJob) -> None:
             job.cond.notify_all()
 
 
-def _start_pipeline_job() -> _PipelineJob:
+def _start_pipeline_job(institution_id: str = "gs") -> _PipelineJob:
     """Start a brand-new pipeline job, replacing any finished one."""
     global _pipeline_job
-    job = _PipelineJob()
+    job = _PipelineJob(institution_id)
     _pipeline_job = job
     asyncio.create_task(_pipeline_job_runner(job))
     return job
@@ -495,8 +540,10 @@ def _get_or_start_pipeline_job() -> _PipelineJob:
 
 
 @app.post("/api/pipeline/run", status_code=202)
-async def api_pipeline_run() -> dict:
+async def api_pipeline_run(institution: str = "") -> dict:
     """Trigger a full pipeline run in the background (409 if already running)."""
+    inst = institution.strip() or "gs"
+    _validate_institution(inst)
     if _pipeline_state["running"]:
         raise HTTPException(status_code=409, detail="流水线正在运行中，请稍候")
     # Mark running synchronously so the first status poll never sees a stale idle state
@@ -506,8 +553,8 @@ async def api_pipeline_run() -> dict:
         last_started_at=datetime.now(timezone.utc).isoformat(),
     )
     # Explicit user trigger always starts a NEW run (never replays a finished job)
-    _start_pipeline_job()
-    return {"status": "已启动"}
+    _start_pipeline_job(inst)
+    return {"status": "已启动", "institution": inst}
 
 
 @app.get("/api/pipeline/run/stream")
@@ -1158,38 +1205,52 @@ def _validate_quarter_format(quarter: str) -> None:
 
 
 @app.get("/api/quarter-insight/{quarter}")
-async def api_get_quarter_insight(quarter: str, previous: str = "") -> dict:
+async def api_get_quarter_insight(
+    quarter: str, previous: str = "", institution: str = ""
+) -> dict:
     """Return (or generate) the AI insight report for the given quarter."""
     _validate_quarter_format(quarter)
-    task = await ensure_quarter_insight(quarter, previous or None)
+    inst = institution.strip() or "gs"
+    _validate_institution(inst)
+    task = await ensure_quarter_insight(quarter, previous or None, inst)
     if task is not None:
         await task
-    return await generate_quarter_insight(quarter, previous or None)
+    return await generate_quarter_insight(quarter, previous or None, institution=inst)
 
 
 @app.post("/api/quarter-insight/{quarter}/regenerate")
-async def api_regenerate_quarter_insight(quarter: str, previous: str = "") -> dict:
+async def api_regenerate_quarter_insight(
+    quarter: str, previous: str = "", institution: str = ""
+) -> dict:
     """Force-regenerate the AI insight report, bypassing the cache."""
     _validate_quarter_format(quarter)
-    return await generate_quarter_insight(quarter, previous or None, force=True)
+    inst = institution.strip() or "gs"
+    _validate_institution(inst)
+    return await generate_quarter_insight(
+        quarter, previous or None, force=True, institution=inst
+    )
 
 
 @app.get("/api/ticker-profiles/{quarter}")
-async def api_get_ticker_profiles(quarter: str) -> dict:
+async def api_get_ticker_profiles(quarter: str, institution: str = "") -> dict:
     """Return (or generate) AI profiles for the quarter's top-10 holdings."""
     from src.ticker_profiles import generate_ticker_profiles
 
     _validate_quarter_format(quarter)
-    return await generate_ticker_profiles(quarter)
+    inst = institution.strip() or "gs"
+    _validate_institution(inst)
+    return await generate_ticker_profiles(quarter, institution=inst)
 
 
 @app.post("/api/ticker-profiles/{quarter}/regenerate")
-async def api_regenerate_ticker_profiles(quarter: str) -> dict:
+async def api_regenerate_ticker_profiles(quarter: str, institution: str = "") -> dict:
     """Force-regenerate ticker profiles, bypassing the cache."""
     from src.ticker_profiles import generate_ticker_profiles
 
     _validate_quarter_format(quarter)
-    return await generate_ticker_profiles(quarter, force=True)
+    inst = institution.strip() or "gs"
+    _validate_institution(inst)
+    return await generate_ticker_profiles(quarter, force=True, institution=inst)
 
 
 @app.get("/api/quarters/comparison")

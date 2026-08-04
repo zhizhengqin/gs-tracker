@@ -52,6 +52,7 @@ class GSAnalyzer:
         auth_token: Optional[str] = None,
         base_url: Optional[str] = None,
         model: Optional[str] = None,
+        institution_label: str = "高盛(Goldman Sachs)",
     ) -> None:
         self.client = anthropic.AsyncAnthropic(
             api_key=api_key or ANTHROPIC_API_KEY or None,
@@ -59,13 +60,14 @@ class GSAnalyzer:
             base_url=base_url or ANTHROPIC_BASE_URL or None,
         )
         self.model = model or GS_LLM_MODEL
+        self.institution_label = institution_label
 
     def _build_prompt(
         self,
         holdings_df: pd.DataFrame,
         previous_df: Optional[pd.DataFrame] = None,
     ) -> str:
-        """Build a Chinese prompt asking Claude to analyze Goldman Sachs 13F holdings."""
+        """Build a Chinese prompt asking Claude to analyze the institution's 13F holdings."""
         if holdings_df.empty:
             holdings_summary = "本期无持仓数据。"
         else:
@@ -89,7 +91,7 @@ class GSAnalyzer:
             previous_hint = "同时提供了上一季度持仓数据，请结合进行环比分析。"
 
         prompt = (
-            "你是一位资深对冲基金持仓分析师。请基于以下高盛(Goldman Sachs)最新 13F "
+            f"你是一位资深对冲基金持仓分析师。请基于以下{self.institution_label}最新 13F "
             "持仓数据，生成一份面向普通投资者的中文分析报告。\n\n"
             f"{previous_hint}\n"
             "持仓汇总（按价值排序前 10）：\n"

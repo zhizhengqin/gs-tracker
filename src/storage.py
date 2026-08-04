@@ -131,6 +131,34 @@ def _migrate_signal_runs_pk(conn: sqlite3.Connection) -> None:
     logger.info("Migrated signal_runs PK to (quarter, job)")
 
 
+def _migrate_quarter_cache_institution_pk(
+    conn: sqlite3.Connection, table: str, payload_col: str
+) -> None:
+    """Migrate quarter-keyed AI cache tables to a (quarter, institution) PK.
+
+    Same 4-step recipe as _migrate_signal_runs_pk: existing rows are
+    attributed to GS (the only institution before this column existed).
+    """
+    if _column_exists(conn, table, "institution"):
+        return
+    conn.execute(f"""
+        CREATE TABLE {table}_new (
+            quarter TEXT NOT NULL,
+            institution TEXT NOT NULL DEFAULT 'gs',
+            {payload_col} TEXT NOT NULL,
+            generated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (quarter, institution)
+        )
+    """)
+    conn.execute(f"""
+        INSERT INTO {table}_new (quarter, institution, {payload_col}, generated_at)
+        SELECT quarter, 'gs', {payload_col}, generated_at FROM {table}
+    """)
+    conn.execute(f"DROP TABLE {table}")
+    conn.execute(f"ALTER TABLE {table}_new RENAME TO {table}")
+    logger.info("Migrated %s PK to (quarter, institution)", table)
+
+
 def init_db() -> None:
     """Initialize the database schema."""
     with get_connection() as conn:
@@ -230,15 +258,19 @@ def init_db() -> None:
             );
 
             CREATE TABLE IF NOT EXISTS quarter_insights (
-                quarter TEXT PRIMARY KEY,
+                quarter TEXT NOT NULL,
+                institution TEXT NOT NULL DEFAULT 'gs',
                 report_text TEXT NOT NULL,
-                generated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                generated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (quarter, institution)
             );
 
             CREATE TABLE IF NOT EXISTS ticker_profiles (
-                quarter TEXT PRIMARY KEY,
+                quarter TEXT NOT NULL,
+                institution TEXT NOT NULL DEFAULT 'gs',
                 profiles_json TEXT NOT NULL,
-                generated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                generated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (quarter, institution)
             );
 
             CREATE TABLE IF NOT EXISTS users (
@@ -313,6 +345,8 @@ def init_db() -> None:
 
         # Migrate signal_runs PK from quarter to (quarter, job) if still on old schema.
         _migrate_signal_runs_pk(conn)
+        _migrate_quarter_cache_institution_pk(conn, "quarter_insights", "report_text")
+        _migrate_quarter_cache_institution_pk(conn, "ticker_profiles", "profiles_json")
 
         conn.commit()
 
@@ -1005,6 +1039,17 @@ def get_institutions() -> list:
         return [dict(r) for r in rows]
 
 
+def get_institution(institution_id: str) -> Optional[dict]:
+    """Return one institution row by id, or None."""
+    with get_connection() as conn:
+        row = conn.execute(
+            "SELECT id, name, display_name, cik, enabled, created_at "
+            "FROM institutions WHERE id = ?",
+            (institution_id,),
+        ).fetchone()
+        return dict(row) if row else None
+
+
 # ====== LLM model management ======
 
 def get_llm_models() -> List[dict]:
@@ -1128,26 +1173,28 @@ def delete_daily_report(date_str: str) -> None:
 # ====== Quarter insights ======
 
 
-def get_quarter_insight(quarter: str) -> Optional[dict]:
-    """Return cached AI quarter insight for a quarter, or None."""
+def get_quarter_insight(quarter: str, institution: str = "gs") -> Optional[dict]:
+    """Return cached AI quarter insight for a quarter + institution, or None."""
     with get_connection() as conn:
         row = conn.execute(
-            "SELECT quarter, report_text, generated_at "
-            "FROM quarter_insights WHERE quarter = ?",
-            (quarter,),
+            "SELECT quarter, institution, report_text, generated_at "
+            "FROM quarter_insights WHERE quarter = ? AND institution = ?",
+            (quarter, institution),
         ).fetchone()
         return dict(row) if row else None
 
 
-def save_quarter_insight(quarter: str, report_text: str) -> None:
+def save_quarter_insight(
+    quarter: str, report_text: str, institution: str = "gs"
+) -> None:
     """Cache an AI quarter insight report (idempotent upsert)."""
     with get_connection() as conn:
         conn.execute(
-            "INSERT INTO quarter_insights (quarter, report_text, generated_at) "
-            "VALUES (?, ?, CURRENT_TIMESTAMP) "
-            "ON CONFLICT(quarter) DO UPDATE SET "
+            "INSERT INTO quarter_insights (quarter, institution, report_text, generated_at) "
+            "VALUES (?, ?, ?, CURRENT_TIMESTAMP) "
+            "ON CONFLICT(quarter, institution) DO UPDATE SET "
             "report_text=excluded.report_text, generated_at=CURRENT_TIMESTAMP",
-            (quarter, report_text),
+            (quarter, institution, report_text),
         )
         conn.commit()
 
@@ -1155,26 +1202,28 @@ def save_quarter_insight(quarter: str, report_text: str) -> None:
 # ====== Ticker profiles ======
 
 
-def get_ticker_profiles(quarter: str) -> Optional[dict]:
-    """Return cached AI ticker profiles for a quarter, or None."""
+def get_ticker_profiles(quarter: str, institution: str = "gs") -> Optional[dict]:
+    """Return cached AI ticker profiles for a quarter + institution, or None."""
     with get_connection() as conn:
         row = conn.execute(
-            "SELECT quarter, profiles_json, generated_at "
-            "FROM ticker_profiles WHERE quarter = ?",
-            (quarter,),
+            "SELECT quarter, institution, profiles_json, generated_at "
+            "FROM ticker_profiles WHERE quarter = ? AND institution = ?",
+            (quarter, institution),
         ).fetchone()
         return dict(row) if row else None
 
 
-def save_ticker_profiles(quarter: str, profiles_json: str) -> None:
+def save_ticker_profiles(
+    quarter: str, profiles_json: str, institution: str = "gs"
+) -> None:
     """Cache AI ticker profiles for a quarter (idempotent upsert)."""
     with get_connection() as conn:
         conn.execute(
-            "INSERT INTO ticker_profiles (quarter, profiles_json, generated_at) "
-            "VALUES (?, ?, CURRENT_TIMESTAMP) "
-            "ON CONFLICT(quarter) DO UPDATE SET "
+            "INSERT INTO ticker_profiles (quarter, institution, profiles_json, generated_at) "
+            "VALUES (?, ?, ?, CURRENT_TIMESTAMP) "
+            "ON CONFLICT(quarter, institution) DO UPDATE SET "
             "profiles_json=excluded.profiles_json, generated_at=CURRENT_TIMESTAMP",
-            (quarter, profiles_json),
+            (quarter, institution, profiles_json),
         )
         conn.commit()
 

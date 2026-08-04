@@ -47,7 +47,7 @@ def test_merge_profiles_matches_by_ticker():
 @pytest.mark.asyncio
 async def test_cache_hit_returns_cached_profiles(monkeypatch):
     cached = {"profiles_json": json.dumps([{"ticker": "A", "intro": "旧缓存"}])}
-    monkeypatch.setattr(tp, "get_ticker_profiles", lambda q: cached)
+    monkeypatch.setattr(tp, "get_ticker_profiles", lambda q, inst="gs": cached)
     result = await tp.generate_ticker_profiles("2026-Q1")
     assert result["cached"] is True
     assert result["profiles"][0]["intro"] == "旧缓存"
@@ -55,7 +55,7 @@ async def test_cache_hit_returns_cached_profiles(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_no_holdings_returns_message(monkeypatch):
-    monkeypatch.setattr(tp, "get_ticker_profiles", lambda q: None)
+    monkeypatch.setattr(tp, "get_ticker_profiles", lambda q, inst="gs": None)
     monkeypatch.setattr(tp, "get_holdings", lambda cik, q: [])
     result = await tp.generate_ticker_profiles("2026-Q1")
     assert result["profiles"] == []
@@ -64,7 +64,7 @@ async def test_no_holdings_returns_message(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_no_llm_returns_base_profiles_with_error(monkeypatch):
-    monkeypatch.setattr(tp, "get_ticker_profiles", lambda q: None)
+    monkeypatch.setattr(tp, "get_ticker_profiles", lambda q, inst="gs": None)
     monkeypatch.setattr(tp, "get_holdings", lambda cik, q: _holdings())
     monkeypatch.setattr(tp, "get_default_llm_model", lambda: None)
     monkeypatch.setattr(
@@ -96,14 +96,14 @@ def _fake_anthropic(reply_text):
 @pytest.mark.asyncio
 async def test_llm_success_merges_and_caches(monkeypatch):
     saved = {}
-    monkeypatch.setattr(tp, "get_ticker_profiles", lambda q: None)
+    monkeypatch.setattr(tp, "get_ticker_profiles", lambda q, inst="gs": None)
     monkeypatch.setattr(tp, "get_holdings", lambda cik, q: _holdings())
     monkeypatch.setattr(tp, "get_default_llm_model", lambda: None)
     monkeypatch.setattr(
         tp, "resolve_llm_config",
         lambda m: {"api_key": "k", "auth_token": None, "base_url": None, "model": "x"},
     )
-    monkeypatch.setattr(tp, "save_ticker_profiles", lambda q, payload: saved.setdefault("json", payload))
+    monkeypatch.setattr(tp, "save_ticker_profiles", lambda q, payload, inst="gs": saved.setdefault("json", payload))
     reply = json.dumps([
         {"ticker": "NVIDIA CORP", "cn_name": "英伟达", "sector": "半导体",
          "themes": ["AI算力", "GPU"], "intro": "全球 GPU 龙头。"},
@@ -121,7 +121,7 @@ async def test_llm_success_merges_and_caches(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_llm_unparseable_falls_back_to_base(monkeypatch):
-    monkeypatch.setattr(tp, "get_ticker_profiles", lambda q: None)
+    monkeypatch.setattr(tp, "get_ticker_profiles", lambda q, inst="gs": None)
     monkeypatch.setattr(tp, "get_holdings", lambda cik, q: _holdings())
     monkeypatch.setattr(tp, "get_default_llm_model", lambda: None)
     monkeypatch.setattr(

@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>高盛动向情报板 — {{ quarter }}</title>
+    <title>{{ institution_label | default('高盛') }}动向情报板 — {{ quarter }}</title>
     <style>
         /* 杂志风（内联自包含，与 static/css/magazine.css 同源） */
         :root {
@@ -66,12 +66,12 @@
 </head>
 <body>
     <div class="topbar">
-        <span>GS-Tracker 季度特刊</span>
+        <span>BridgeIQ 金桥智讯 · 季度特刊</span>
         <span>仅供学习参考 · 不构成投资建议</span>
     </div>
     <header class="masthead">
         <div class="mark">◉</div>
-        <div class="title">高盛动向情报板 — {{ quarter }}</div>
+        <div class="title">{{ institution_label | default("高盛") }}动向情报板 — {{ quarter }}</div>
         <div class="sub">报告生成时间：{{ generated_at }} · 数据来源 SEC EDGAR</div>
     </header>
     <div class="container">
@@ -196,6 +196,6 @@
             </table>
         </div>
     </div>
-    <footer class="footer">GS-Tracker · 本内容仅供学习参考，不构成投资建议</footer>
+    <footer class="footer">BridgeIQ 金桥智讯 · 本内容仅供学习参考，不构成投资建议</footer>
 </body>
 </html>
