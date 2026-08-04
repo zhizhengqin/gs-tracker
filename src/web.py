@@ -298,14 +298,22 @@ async def get_report(quarter: str, request: Request) -> Response:
     return HTMLResponse(report_path.read_text(encoding="utf-8"), headers=headers)
 
 
+_QUARTER_STEM_RE = re.compile(r"^\d{4}-Q[1-4]$")
+
+
 @app.get("/api/reports")
 async def api_reports() -> List[dict]:
-    """Return metadata for all generated reports."""
-    files = _list_report_files()
+    """Return metadata for all generated reports.
+
+    Only files named exactly YYYY-QN.html are listed: anything else
+    (e.g. a stray hand-made file) would produce malformed downstream
+    API calls like /api/signals/2026-Q1_jpm.
+    """
+    files = [f for f in _list_report_files() if _QUARTER_STEM_RE.match(f.stem)]
     return [
         {
             "quarter": file_path.stem,
-            "title": f"高盛动向情报板 — {file_path.stem}",
+            "title": f"BridgeIQ 季度报告 — {file_path.stem}",
             "path": f"/reports/{file_path.name}",
         }
         for file_path in files

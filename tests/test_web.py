@@ -100,13 +100,16 @@ def test_dashboard_holdings_aggregation(tmp_path, monkeypatch):
 def test_api_reports(tmp_path, monkeypatch):
     monkeypatch.setattr("src.web.REPORT_OUTPUT_DIR", tmp_path)
     (tmp_path / "2026-Q1.html").write_text("<html>Q1</html>", encoding="utf-8")
+    # Stray hand-made files must not surface as selectable quarters —
+    # "2026-Q1_jpm" would produce malformed /api/signals/2026-Q1_jpm calls.
+    (tmp_path / "2026-Q1_jpm.html").write_text("<html>fake</html>", encoding="utf-8")
 
     response = client.get("/api/reports")
     assert response.status_code == 200
     data = response.json()
     assert len(data) == 1
     assert data[0]["quarter"] == "2026-Q1"
-    assert data[0]["title"] == "高盛动向情报板 — 2026-Q1"
+    assert data[0]["title"] == "BridgeIQ 季度报告 — 2026-Q1"
     assert data[0]["path"] == "/reports/2026-Q1.html"
 
 
