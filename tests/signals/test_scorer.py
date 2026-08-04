@@ -71,6 +71,29 @@ class TestSignalScorer:
         # At least one should have cross_refs populated (both mention AAPL)
         assert any(s.cross_refs for s in scored)
 
+    def test_self_company_mentions_create_no_cross_refs(self):
+        # A GS news item tagged "GS" must not pull in GS's own 8-K filings
+        # as cross-references; self-mentions are noise, not shared views.
+        scorer = SignalScorer(reference_date=NOW)
+        s1 = Signal(
+            title="GS outlook on S&P 500",
+            source="news",
+            published_at=NOW - timedelta(days=1),
+            summary="macro view",
+            companies=["GS"],
+            strength=SignalStrength.MEDIUM,
+        )
+        s2 = Signal(
+            title="GS 8-K filing",
+            source="8-K",
+            published_at=NOW - timedelta(days=2),
+            summary="routine filing",
+            companies=["GS"],
+            strength=SignalStrength.MEDIUM,
+        )
+        scored = scorer.score([s1, s2])
+        assert all(sc.cross_refs == [] for sc in scored)
+
     def test_score_single_signal_no_cross_ref(self):
         scorer = SignalScorer(reference_date=NOW)
         signals = [make_signal("Only Signal", "news", days_ago=1)]

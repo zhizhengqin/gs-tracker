@@ -112,7 +112,13 @@ class SignalScorer:
         """Find other signals that mention the same companies (cross-source validation)."""
         refs: set = set()
         for company in signal.companies:
-            related = company_index.get(company.lower(), [])
+            company_lower = company.lower()
+            # An institution mentioning itself (e.g. a GS article tagged
+            # "GS") must not pull in that institution's own filings as
+            # cross-references -- that is noise, not a shared view.
+            if company_lower in SELF_COMPANY_TOKENS:
+                continue
+            related = company_index.get(company_lower, [])
             for other in related:
                 if other.id != signal.id and other.source != signal.source:
                     refs.add(other.id)
