@@ -1147,6 +1147,22 @@ async def api_signals_by_date(date: str, institution: str = "") -> dict:
 _ANALYSIS_FAILURE_SENTINEL = ANALYSIS_FAILURE_SENTINEL
 
 
+@app.post("/api/signals/analyses")
+async def api_bulk_signal_analyses(body: dict = Body(default={})) -> dict:
+    """Return cached AI analyses for many signals in one request.
+
+    Replaces per-signal GETs whose 404s flooded the browser console when
+    high-priority cards prefetched analyses that were never generated.
+    """
+    ids = body.get("ids")
+    if not isinstance(ids, list) or not all(isinstance(i, str) for i in ids):
+        raise HTTPException(status_code=422, detail="ids 必须是字符串数组")
+    from src.storage import get_signal_analyses
+
+    analyses = await asyncio.to_thread(get_signal_analyses, ids[:200])
+    return {"analyses": analyses}
+
+
 @app.get("/api/signals/{signal_id}/cross-analysis")
 async def api_get_cross_analysis(signal_id: str) -> dict:
     """Return cached cross-institution analysis for a signal."""

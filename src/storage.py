@@ -1129,6 +1129,24 @@ def get_signal_analysis(signal_id: str) -> Optional[str]:
         return row["analysis_text"] if row else None
 
 
+def get_signal_analyses(signal_ids: List[str]) -> dict:
+    """Return {signal_id: analysis_text} for cached analyses, skipping failures."""
+    if not signal_ids:
+        return {}
+    placeholders = ",".join("?" for _ in signal_ids)
+    with get_connection() as conn:
+        rows = conn.execute(
+            f"SELECT signal_id, analysis_text FROM signal_analysis "
+            f"WHERE signal_id IN ({placeholders})",
+            tuple(signal_ids),
+        ).fetchall()
+        return {
+            row["signal_id"]: row["analysis_text"]
+            for row in rows
+            if row["analysis_text"] and row["analysis_text"] != "AI 未生成有效解读"
+        }
+
+
 def save_signal_analysis(signal_id: str, analysis_text: str) -> None:
     """Cache AI analysis for a signal (idempotent upsert)."""
     with get_connection() as conn:

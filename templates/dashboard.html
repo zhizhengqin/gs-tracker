@@ -2071,23 +2071,6 @@ async function analyzeCross(panel, signalId) {
     } catch(e) { panel.innerHTML = '<span class="c-danger">网络错误</span>'; }
 }
 
-// Auto-show cached AI analysis on high-priority cards (the pipeline generates
-// it at fetch time). 404 = not generated yet (e.g. older signals) — collapse
-// back and leave the manual button; never auto-POST here so browsing history
-// can't spend LLM quota unexpectedly.
-async function autoLoadHighAnalysis(panel, signalId) {
-    if (!panel) return;
-    panel.classList.add('open');
-    panel.innerHTML = '<span class="c-muted">AI 解读加载中...</span>';
-    try {
-        const resp = await fetch(`/api/signals/${signalId}/analysis`);
-        if (!resp.ok) { panel.classList.remove('open'); panel.innerHTML = ''; return; }
-        const r = await resp.json();
-        panel.innerHTML = formatMd(r.analysis);
-        panel.dataset.loaded = 'true';
-    } catch(e) { panel.classList.remove('open'); panel.innerHTML = ''; }
-}
-
 async function loadDailyReport(dateStr, force) {
     const container = document.getElementById('dailyReportContainer');
     if (!container) return;
@@ -2162,6 +2145,7 @@ summaryToggleObserver.observe(document.body, { childList: true, subtree: true })
 
 // Add AI-analysis toggles to every signal card under a root element.
 function addAiToggles(rootEl) {
+    const highPanels = [];
     (rootEl || document).querySelectorAll('.signal-card').forEach(card => {
         const titleEl = card.querySelector('h4');
         if (!titleEl) return;
@@ -2189,8 +2173,8 @@ function addAiToggles(rootEl) {
         panel.id = 'ai-' + sigId;
         card.appendChild(panel);
 
-        // High-priority cards: show the pipeline-generated analysis directly.
-        if (card.classList.contains('high')) autoLoadHighAnalysis(panel, sigId);
+        // High-priority cards: collect for one bulk prefetch (not N GETs).
+        if (card.classList.contains('high')) highPanels.push({ panel, sigId });
 
         // Cross-institutional cards: offer the GS-vs-JPM divergence read.
         const crossBadgeEl = card.querySelector('.cross-badge');
@@ -2206,6 +2190,30 @@ function addAiToggles(rootEl) {
             card.appendChild(crossPanel);
         }
     });
+    prefetchHighAnalyses(highPanels);
+}
+
+// One bulk request for all high-priority cards' cached analyses; panels for
+// signals without a cached analysis stay collapsed (manual toggle remains).
+async function prefetchHighAnalyses(items) {
+    if (!items.length) return;
+    try {
+        const resp = await fetch('/api/signals/analyses', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ids: items.map(i => i.sigId) }),
+        });
+        if (!resp.ok) return;
+        const r = await resp.json();
+        const map = r.analyses || {};
+        items.forEach(({ panel, sigId }) => {
+            const text = map[sigId];
+            if (!text) return;
+            panel.classList.add('open');
+            panel.innerHTML = formatMd(text);
+            panel.dataset.loaded = 'true';
+        });
+    } catch (e) { /* prefetch is best-effort; manual toggle still works */ }
 }
 
 // Override renderDailyIntel (earlier range view) to add AI toggles.
