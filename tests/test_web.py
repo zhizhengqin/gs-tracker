@@ -53,9 +53,8 @@ def test_root_serves_dashboard(tmp_path, monkeypatch):
     monkeypatch.setattr("src.web.REPORT_OUTPUT_DIR", tmp_path)
     response = client.get("/")
     assert response.status_code == 200
-    # Dashboard renders with GS-Tracker branding
-    assert "GS-Tracker" in response.text
-    assert "高盛动向情报系统" in response.text
+    # Dashboard renders with BridgeIQ branding
+    assert "BridgeIQ" in response.text or "金桥智讯" in response.text
     # Dashboard has sidebar navigation
     assert "sidebar" in response.text
 
@@ -101,13 +100,16 @@ def test_dashboard_holdings_aggregation(tmp_path, monkeypatch):
 def test_api_reports(tmp_path, monkeypatch):
     monkeypatch.setattr("src.web.REPORT_OUTPUT_DIR", tmp_path)
     (tmp_path / "2026-Q1.html").write_text("<html>Q1</html>", encoding="utf-8")
+    # Stray hand-made files must not surface as selectable quarters —
+    # "2026-Q1_jpm" would produce malformed /api/signals/2026-Q1_jpm calls.
+    (tmp_path / "2026-Q1_jpm.html").write_text("<html>fake</html>", encoding="utf-8")
 
     response = client.get("/api/reports")
     assert response.status_code == 200
     data = response.json()
     assert len(data) == 1
     assert data[0]["quarter"] == "2026-Q1"
-    assert data[0]["title"] == "高盛动向情报板 — 2026-Q1"
+    assert data[0]["title"] == "BridgeIQ 季度报告 — 2026-Q1"
     assert data[0]["path"] == "/reports/2026-Q1.html"
 
 
@@ -454,25 +456,6 @@ def test_seed_default_llm_skips_without_env(signals_db, monkeypatch):
     assert storage.get_llm_models() == []
 
 
-def test_purge_non_gs_news_signals(signals_db, make_signal):
-    """One-time purge drops news without a GS angle, keeps GS news & other sources."""
-    from src.storage import get_signals, save_signals_incremental
-
-    gs_news = make_signal(id="gs1", source="news", title="高盛研报：看好A股", summary="高盛认为…")
-    off_topic = make_signal(id="oth1", source="news", title="A股三大股指跌超1%", summary="市场概述…")
-    other_source = make_signal(id="k1", source="8-K", title="Goldman 8-K filing", summary="…")
-    save_signals_incremental("2026-Q3", [gs_news, off_topic, other_source])
-
-    src.web._purge_non_gs_news_signals()
-
-    remaining = {s.id for s in get_signals("2026-Q3")}
-    assert "gs1" in remaining
-    assert "oth1" not in remaining
-    assert "k1" in remaining
-    assert storage.get_setting("news_gs_purge_v1") == "1"
-
-
-# ====== Signal AI analysis caching behavior ======
 
 class _EmptyFakeClient:
     """LLM client whose completions are always empty (transient gateway hiccup)."""
@@ -962,3 +945,11 @@ def test_pipeline_job_attach_or_start(reset_pipeline_job, monkeypatch):
         assert job4 is not job1
 
     asyncio.run(scenario())
+
+
+def test_signal_to_dict_includes_cross_institutional(make_signal):
+    from src.web import _signal_to_dict
+    d = _signal_to_dict(make_signal(cross_institutional=True))
+    assert d["cross_institutional"] is True
+    d2 = _signal_to_dict(make_signal())
+    assert d2["cross_institutional"] is False

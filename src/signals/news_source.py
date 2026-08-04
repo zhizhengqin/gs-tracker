@@ -34,6 +34,14 @@ GS_KEYWORDS = [
     "goldman sachs", "goldman", "高盛",
 ]
 
+JPM_KEYWORDS = [
+    "j.p. morgan", "jpmorgan", "jpmorgan chase", "jpm",
+    "摩根大通", "小摩",
+    # NOTE: bare "摩根" deliberately excluded — it also matches 摩根士丹利
+    # (Morgan Stanley, "大摩"), a different bank. "小摩" is the common
+    # Chinese-media shorthand for JPMorgan.
+]
+
 # Viewpoint/analysis keywords — GS-authored or GS-attributed content.
 # Matching these indicates a signal where GS is the *source* of analysis,
 # not just mentioned in passing.
@@ -61,11 +69,26 @@ GS_VIEWPOINT_KEYWORDS = [
     "高盛 警告",
 ]
 
+JPM_VIEWPOINT_KEYWORDS = [
+    "dimon", "jamie dimon",
+    "jpmorgan says", "jpmorgan expects", "jpmorgan upgrades",
+    "jpmorgan downgrades", "jpmorgan forecast", "jpmorgan predicts",
+    "jpmorgan warns", "jpmorgan sees", "jpmorgan strategists",
+    "jpmorgan analysts", "jpmorgan economists",
+    "摩根大通 研报", "摩根大通 观点", "摩根大通 预计",
+    "摩根大通 预测", "摩根大通 上调", "摩根大通 下调",
+    "摩根大通 维持", "摩根大通 警告",
+]
+
 HOLDING_KEYWORDS = [
     "apple", "aapl", "microsoft", "msft", "nvidia", "nvda",
     "amazon", "amzn", "meta", "googl", "google", "tesla", "tsla",
     "berkshire", "jpmorgan", "jpm", "visa",
     "unitedhealth", "unh", "mastercard",
+    # A-share majors — CJK keywords match as plain substrings.
+    "宁德时代", "贵州茅台", "比亚迪", "招商银行", "中国平安",
+    "五粮液", "美的", "隆基绿能", "中芯国际", "药明康德",
+    "腾讯", "阿里巴巴", "美团", "小米",
 ]
 
 
@@ -80,7 +103,9 @@ def _kw_regex(kw: str) -> "re.Pattern":
 
 
 _GS_RE = [_kw_regex(k) for k in GS_KEYWORDS]
+_JPM_RE = [_kw_regex(k) for k in JPM_KEYWORDS]
 _VIEWPOINT_RE = [_kw_regex(k) for k in GS_VIEWPOINT_KEYWORDS]
+_JPM_VIEWPOINT_RE = [_kw_regex(k) for k in JPM_VIEWPOINT_KEYWORDS]
 _HOLDING_RE = [(k, _kw_regex(k)) for k in HOLDING_KEYWORDS]
 
 
@@ -111,13 +136,19 @@ class NewsSource:
         rss_urls: Optional[List[str]] = None,
         source_name: str = "news",
         filter_policy: str = "gs_only",
+        institution_id: str = "gs",
+        exclude_viewpoint: bool = False,
     ) -> None:
         """rss_urls: feeds to poll. source_name: Signal.source tag (custom
         sources pass their own name). filter_policy: 'gs_only' keeps only
-        GS-related items (default), 'all' keeps everything as LOW."""
+        institution-related items (default), 'all' keeps everything as LOW.
+        exclude_viewpoint: skip viewpoint-type articles — used by news_jpm
+        so JPM analysis pieces land only in the jpm_research source."""
         self.rss_urls = rss_urls or []
         self.source_name = source_name
         self.filter_policy = filter_policy
+        self.institution_id = institution_id
+        self.exclude_viewpoint = exclude_viewpoint
         self.client = httpx.AsyncClient(
             timeout=20.0,
             headers={"User-Agent": SEC_USER_AGENT},
@@ -156,11 +187,16 @@ class NewsSource:
             summary_text = clean_html_text(item.get("summary", ""))
             text_lower = (title + " " + summary_text).lower()
 
-            has_gs = any(rx.search(text_lower) for rx in _GS_RE)
-            has_viewpoint = any(rx.search(text_lower) for rx in _VIEWPOINT_RE)
+            kw_re = _JPM_RE if self.institution_id == "jpm" else _GS_RE
+            vp_re = _JPM_VIEWPOINT_RE if self.institution_id == "jpm" else _VIEWPOINT_RE
+            has_gs = any(rx.search(text_lower) for rx in kw_re)
+            has_viewpoint = any(rx.search(text_lower) for rx in vp_re)
             # gs_only: GS angle required (user feedback 2026-07).
             # all: custom-source policy — keep everything as LOW.
             if self.filter_policy == "gs_only" and not (has_gs or has_viewpoint):
+                continue
+            if self.exclude_viewpoint and has_viewpoint:
+                # Viewpoint pieces belong to the jpm_research source.
                 continue
 
             published_at = datetime.now(timezone.utc)
@@ -174,16 +210,17 @@ class NewsSource:
             if published_at < cutoff:
                 continue
 
+            # Company extraction runs for every policy — cross-institution
+            # matching depends on JPM signals carrying the companies they mention.
+            companies: List[str] = []
+            for kw, rx in _HOLDING_RE:
+                if rx.search(text_lower):
+                    companies.append(kw.upper())
             if self.filter_policy == "gs_only":
-                companies: List[str] = []
-                for kw, rx in _HOLDING_RE:
-                    if rx.search(text_lower):
-                        companies.append(kw.upper())
                 # Viewpoint keywords → HIGH (GS-authored analysis, the core value)
                 # Basic GS mention → MEDIUM (news about GS)
                 strength = SignalStrength.HIGH if has_viewpoint else SignalStrength.MEDIUM
             else:
-                companies = []
                 strength = SignalStrength.LOW
 
             signals.append(Signal(
@@ -191,9 +228,10 @@ class NewsSource:
                 source=self.source_name,
                 published_at=published_at,
                 summary=smart_truncate(summary_text) if summary_text else title,
-                companies=companies if companies else ["GS"],
+                companies=companies if companies else [self.institution_id.upper()],
                 strength=strength,
                 url=item.get("link") or None,
+                institution_id=self.institution_id,
             ))
 
         return signals

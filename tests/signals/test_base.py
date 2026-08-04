@@ -110,3 +110,28 @@ class TestSignal:
             strength=SignalStrength.LOW,
         )
         assert s.dedupe_key == ("news", "Test")
+
+
+class TestCrossInstitutionalField:
+    def test_default_is_false(self):
+        from src.signals.base import Signal, SignalStrength
+        from datetime import datetime, timezone
+        s = Signal(
+            title="t", source="news",
+            published_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
+            summary="s", companies=[], strength=SignalStrength.LOW,
+        )
+        assert s.cross_institutional is False
+
+
+class TestInstitutionDisplay:
+    def test_known_institutions(self):
+        from src.signals.base import institution_display
+        assert institution_display("gs") == "高盛"
+        assert institution_display("jpm") == "摩根大通"
+        assert institution_display("all") == "外资"
+
+    def test_unknown_falls_back_to_id(self):
+        from src.signals.base import institution_display
+        assert institution_display("ms") == "ms"
+        assert institution_display("") == ""

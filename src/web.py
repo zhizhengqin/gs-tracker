@@ -34,6 +34,7 @@ from src.signal_analysis import (
 from src.signals.ai_triage import AiTriage
 from src.signals.base import Signal
 from src.storage import (
+    get_institutions,
     add_llm_model,
     create_user,
     delete_daily_report,
@@ -70,36 +71,7 @@ async def lifespan(app: FastAPI):
     init_db()
     ensure_default_admin()
     _seed_default_llm_from_env()
-    _purge_non_gs_news_signals()
     yield
-
-
-def _purge_non_gs_news_signals() -> None:
-    """One-time cleanup (flag-guarded): delete news signals with no GS angle.
-
-    The news source used to keep items matching only holding-company keywords
-    (e.g. a Visa headline with zero Goldman content). Policy changed to
-    GS-focused on 2026-07; this purges the backlog so the dashboard stops
-    showing off-topic market news. Runs once per database.
-    """
-    if get_setting("news_gs_purge_v1", ""):
-        return
-    try:
-        with get_connection() as conn:
-            cur = conn.execute(
-                "DELETE FROM signals WHERE source = 'news' "
-                "AND LOWER(title || ' ' || COALESCE(summary, '')) NOT LIKE '%goldman%' "
-                "AND (title || ' ' || COALESCE(summary, '')) NOT LIKE '%高盛%' "
-                "AND LOWER(title || ' ' || COALESCE(summary, '')) NOT LIKE '%hatzius%' "
-                "AND LOWER(title || ' ' || COALESCE(summary, '')) NOT LIKE '%kostin%'"
-            )
-            deleted = cur.rowcount
-            conn.commit()
-        set_setting("news_gs_purge_v1", "1")
-        if deleted:
-            logger.info("Purged %d non-GS news signals", deleted)
-    except Exception:
-        logger.exception("Non-GS news purge failed")
 
 
 def _seed_default_llm_from_env() -> None:
@@ -326,14 +298,22 @@ async def get_report(quarter: str, request: Request) -> Response:
     return HTMLResponse(report_path.read_text(encoding="utf-8"), headers=headers)
 
 
+_QUARTER_STEM_RE = re.compile(r"^\d{4}-Q[1-4]$")
+
+
 @app.get("/api/reports")
 async def api_reports() -> List[dict]:
-    """Return metadata for all generated reports."""
-    files = _list_report_files()
+    """Return metadata for all generated reports.
+
+    Only files named exactly YYYY-QN.html are listed: anything else
+    (e.g. a stray hand-made file) would produce malformed downstream
+    API calls like /api/signals/2026-Q1_jpm.
+    """
+    files = [f for f in _list_report_files() if _QUARTER_STEM_RE.match(f.stem)]
     return [
         {
             "quarter": file_path.stem,
-            "title": f"高盛动向情报板 — {file_path.stem}",
+            "title": f"BridgeIQ 季度报告 — {file_path.stem}",
             "path": f"/reports/{file_path.name}",
         }
         for file_path in files
@@ -363,15 +343,18 @@ def _signal_to_dict(signal: Signal) -> dict:
         "strength": signal.strength.value,
         "url": signal.url,
         "cross_refs": signal.cross_refs,
+        "institution_id": getattr(signal, 'institution_id', 'gs'),
+        "cross_institutional": getattr(signal, 'cross_institutional', False),
     }
 
 
 @app.get("/api/signals/recent")
-async def api_signals_recent(days: int = 30) -> dict:
+async def api_signals_recent(days: int = 30, institution: str = "") -> dict:
     """Return signals from the last N days, ordered by published_at descending."""
     if days < 1 or days > 365:
         raise HTTPException(status_code=422, detail="days 参数必须在 1 到 365 之间")
-    signals = await asyncio.to_thread(get_recent_signals, days)
+    inst = institution.strip() or None
+    signals = await asyncio.to_thread(get_recent_signals, days, institution_id=inst)
     return {
         "days": days,
         "count": len(signals),
@@ -400,6 +383,12 @@ async def api_signals(
 async def health() -> dict:
     """Health check endpoint."""
     return {"status": "ok"}
+
+
+@app.get("/api/institutions")
+async def api_institutions() -> list:
+    """Return all configured institutions (GS, JPM, etc.)."""
+    return await asyncio.to_thread(get_institutions)
 
 
 @app.get("/api/holdings/{quarter}")
@@ -744,7 +733,7 @@ async def api_update_settings(settings: dict = Body(...)) -> dict:
     return {"status": "ok"}
 
 
-BUILTIN_SOURCE_NAMES = {"13F", "8-K", "13D/13G", "research_view", "news", "macro_view"}
+BUILTIN_SOURCE_NAMES = {"13F", "8-K", "13D/13G", "research_view", "news", "news_jpm", "jpm_research", "macro_view", "qfii", "northbound"}
 
 
 def _default_source_entries() -> list:
@@ -754,8 +743,12 @@ def _default_source_entries() -> list:
         {"name": "8-K", "label": "SEC 8-K", "description": "高盛重大事件即时披露", "enabled": True, "builtin": True},
         {"name": "13D/13G", "label": "13D/13G", "description": "大股东权益变动披露", "enabled": True, "builtin": True},
         {"name": "research_view", "label": "高盛研究", "description": "官方 Insights 研究文章", "enabled": True, "builtin": True},
-        {"name": "news", "label": "新闻", "description": "RSS 新闻关键词匹配", "enabled": True, "builtin": True},
+        {"name": "news", "label": "高盛新闻", "description": "RSS 新闻中高盛相关报道", "enabled": True, "builtin": True},
+        {"name": "news_jpm", "label": "摩根大通新闻", "description": "RSS 新闻中摩根大通相关报道", "enabled": True, "builtin": True},
+        {"name": "jpm_research", "label": "摩根大通研究", "description": "J.P. Morgan 官方研究观点", "enabled": True, "builtin": True},
         {"name": "macro_view", "label": "宏观指标", "description": "FRED 宏观数据（利率/VIX/美元）", "enabled": True, "builtin": True},
+        {"name": "qfii", "label": "QFII 持仓", "description": "外资 QFII A 股持仓数据", "enabled": True, "builtin": True},
+        {"name": "northbound", "label": "北向资金", "description": "沪深港通资金流向", "enabled": True, "builtin": True},
     ]
 
 
@@ -1052,12 +1045,12 @@ async def api_delete_llm_model(model_id: str) -> dict:
 # ====== Signals by date ======
 
 @app.get("/api/signals/date/{date}")
-async def api_signals_by_date(date: str) -> dict:
+async def api_signals_by_date(date: str, institution: str = "") -> dict:
     """Return signals published on a specific date (YYYY-MM-DD)."""
     import re
     if not re.match(r"^\d{4}-\d{2}-\d{2}$", date):
         raise HTTPException(status_code=422, detail="日期格式必须为 YYYY-MM-DD")
-    signals = await asyncio.to_thread(get_signals_by_date, date)
+    signals = await asyncio.to_thread(get_signals_by_date, date, institution.strip() or None)
     return {
         "date": date,
         "count": len(signals),

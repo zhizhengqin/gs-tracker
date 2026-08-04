@@ -49,6 +49,7 @@ gs-tracker/
 - Goldman Sachs CIK: `0000886982`
 - 13F 截止日: Q1(5/15), Q2(8/14), Q3(11/14), Q4(2/14)
 - 信号去重指纹: 有 URL 按 (source,title,url)，无 URL 按 (source,title,日期)；同一 URL 跨天重现只更新原行，不产生新行
+- 跨机构共识: scorer 对同一公司被 ≥2 家真实机构（排除 "all" 聚合源与机构自指词 GS/JPM/高盛/摩根大通）覆盖的信号标记 `cross_institutional` 并加分升优先级；新闻信号 companies 兜底为自身机构标记（GS/JPM），`HOLDING_KEYWORDS` 含 A 股主要公司中文名
 - 日期分组按北京时间（UTC+8）：`get_signals_by_date` 用 `DATE(published_at, '+8 hours')` 归组，日报"今日"判断同理，勿回退到 UTC
 
 ## 语言规范

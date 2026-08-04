@@ -228,20 +228,23 @@ class TestDailyIntel:
 
     @pytest.fixture
     def _mock_sources(self):
-        """Patch all four source classes; yields the mock classes dict."""
+        """Patch all source classes (hermetic — no live HTTP); yields mocks."""
         mocks = {}
         with patch("src.main.NewsSource") as mock_news, \
              patch("src.main.Sec8kSource") as mock_8k, \
              patch("src.main.ResearchViewSource") as mock_rv, \
+             patch("src.main.JPMResearchSource") as mock_jpmr, \
+             patch("src.main.QFIISource") as mock_qfii, \
+             patch("src.main.NorthboundSource") as mock_nb, \
              patch("src.main.ThirteenDGSource") as mock_dg:
-            for cls in (mock_news, mock_rv, mock_dg):
+            for cls in (mock_news, mock_rv, mock_dg, mock_jpmr, mock_qfii, mock_nb):
                 cls.return_value.fetch_since = AsyncMock(return_value=([], None))
                 cls.return_value.close = AsyncMock()
             mock_8k.return_value.fetch = AsyncMock(return_value=[])
             mock_8k.return_value.close = AsyncMock()
             # 8-K source doesn't have fetch_since — delete auto-created MagicMock attr
             del mock_8k.return_value.fetch_since
-            mocks.update(news=mock_news, sec8k=mock_8k, research=mock_rv, dg=mock_dg)
+            mocks.update(news=mock_news, sec8k=mock_8k, research=mock_rv, dg=mock_dg, jpm_research=mock_jpmr)
             yield mocks
 
     @pytest.fixture
@@ -306,9 +309,10 @@ class TestDailyIntel:
 
         assert events[0]["event"] == "start"
         done_events = [e for e in events if e["event"] == "source_done"]
-        # RSS_FEEDS empty → no news source; 8-K + 13D/13G + research_view remain
-        assert len(done_events) == 3
-        assert {e["source"] for e in done_events} == {"8-K", "13D/13G", "research_view"}
+        # RSS_FEEDS empty → no news/jpm_research sources (all feed-based);
+        # 8-K + 13D/13G + research_view + A-share sources remain
+        assert len(done_events) == 5
+        assert {e["source"] for e in done_events} == {"8-K", "13D/13G", "research_view", "northbound", "qfii"}
         assert events[-1]["event"] == "complete"
         assert not any(e["event"] == "triage_note" for e in events)
 
@@ -427,7 +431,7 @@ class TestDailyIntel:
                 pass
 
         monkeypatch.setattr(
-            "src.main._build_daily_sources", lambda: [("gs_page", _NoteSource())]
+            "src.main._build_daily_sources", lambda *_a, **_k: [("gs_page", _NoteSource())]
         )
 
         from src.main import run_daily_intel_stream
@@ -448,6 +452,10 @@ class TestDailyIntel:
         sig2 = make_signal(id="n2", source="news", title="无关新闻B")
         _mock_sources["news"].return_value.fetch_since = AsyncMock(
             return_value=([sig1, sig2], None)
+        )
+        monkeypatch.setattr(
+            "src.main._build_daily_sources",
+            lambda *_a, **_k: [("news", _mock_sources["news"].return_value)],
         )
 
         with patch("src.main.AiTriage") as MockTriage, \
@@ -508,7 +516,7 @@ async def test_stream_schedules_daily_report(monkeypatch):
         return None
 
     monkeypatch.setattr(main_mod, "ensure_daily_report", _fake_ensure)
-    monkeypatch.setattr(main_mod, "_build_daily_sources", lambda: [])
+    monkeypatch.setattr(main_mod, "_build_daily_sources", lambda *_a, **_k: [])
     monkeypatch.setattr(main_mod, "get_recent_signals", lambda days=30: [])
     monkeypatch.setattr(main_mod, "save_signals_incremental", lambda *a, **kw: None)
     monkeypatch.setattr(main_mod, "save_signal_run", lambda *a, **kw: None)
@@ -549,7 +557,7 @@ async def test_stream_refreshes_daily_report_when_new_signals(monkeypatch, make_
 
     monkeypatch.setattr(main_mod, "refresh_daily_report", _fake_refresh)
     monkeypatch.setattr(main_mod, "ensure_daily_report", _fake_ensure)
-    monkeypatch.setattr(main_mod, "_build_daily_sources", lambda: [("8-K", _Src())])
+    monkeypatch.setattr(main_mod, "_build_daily_sources", lambda *_a, **_k: [("8-K", _Src())])
     monkeypatch.setattr(main_mod, "get_recent_signals", lambda days=30: [])
     monkeypatch.setattr(main_mod, "save_signals_incremental", lambda *a, **kw: None)
     monkeypatch.setattr(main_mod, "save_signal_run", lambda *a, **kw: None)
@@ -591,7 +599,7 @@ async def test_stream_auto_analyzes_new_signals_before_complete(monkeypatch, mak
     monkeypatch.setattr(main_mod, "auto_analyze_high_signals", _fake_auto)
     monkeypatch.setattr(main_mod, "refresh_daily_report", _noop)
     monkeypatch.setattr(main_mod, "ensure_daily_report", _noop)
-    monkeypatch.setattr(main_mod, "_build_daily_sources", lambda: [("8-K", _Src())])
+    monkeypatch.setattr(main_mod, "_build_daily_sources", lambda *_a, **_k: [("8-K", _Src())])
     monkeypatch.setattr(main_mod, "get_recent_signals", lambda days=30: [])
     monkeypatch.setattr(main_mod, "save_signals_incremental", lambda *a, **kw: None)
     monkeypatch.setattr(main_mod, "save_signal_run", lambda *a, **kw: None)
@@ -627,7 +635,7 @@ async def test_stream_auto_analyze_failure_does_not_break_pipeline(monkeypatch, 
     monkeypatch.setattr(main_mod, "auto_analyze_high_signals", _boom)
     monkeypatch.setattr(main_mod, "refresh_daily_report", _noop)
     monkeypatch.setattr(main_mod, "ensure_daily_report", _noop)
-    monkeypatch.setattr(main_mod, "_build_daily_sources", lambda: [("8-K", _Src())])
+    monkeypatch.setattr(main_mod, "_build_daily_sources", lambda *_a, **_k: [("8-K", _Src())])
     monkeypatch.setattr(main_mod, "get_recent_signals", lambda days=30: [])
     monkeypatch.setattr(main_mod, "save_signals_incremental", lambda *a, **kw: None)
     monkeypatch.setattr(main_mod, "save_signal_run", lambda *a, **kw: None)
@@ -662,7 +670,7 @@ async def test_run_daily_intel_awaits_report_task(monkeypatch):
         return _task
 
     monkeypatch.setattr(main_mod, "ensure_daily_report", _fake_ensure)
-    monkeypatch.setattr(main_mod, "_build_daily_sources", lambda: [])
+    monkeypatch.setattr(main_mod, "_build_daily_sources", lambda *_a, **_k: [])
     monkeypatch.setattr(main_mod, "get_recent_signals", lambda days=30: [])
     monkeypatch.setattr(main_mod, "save_signals_incremental", lambda *a, **kw: None)
     monkeypatch.setattr(main_mod, "save_signal_run", lambda *a, **kw: None)

@@ -59,11 +59,16 @@ async def generate_daily_report(date: str) -> dict:
         return {"date": date, "report": "该日期暂无情报数据。", "signal_count": 0, "cached": False}
 
     # Build LLM prompt from signals (HTML-stripped — legacy rows may carry tags)
+    from src.signals.base import institution_display
     from src.signals.news_source import clean_html_text
 
     signal_texts = []
-    for s in signals[:20]:
-        signal_texts.append(f"- [{s.source}] {clean_html_text(s.title)}: {clean_html_text(s.summary)[:150]}")
+    inst_ids = set()
+    for s in signals[:30]:
+        inst = getattr(s, 'institution_id', 'gs')
+        tag = institution_display(inst)
+        inst_ids.add(tag)
+        signal_texts.append(f"[{tag}] [{s.source}] {clean_html_text(s.title)}: {clean_html_text(s.summary)[:120]}")
     combined = "\n".join(signal_texts)
 
     try:
@@ -87,21 +92,22 @@ async def generate_daily_report(date: str) -> dict:
             base_url=llm["base_url"],
             timeout=60.0,
         )
+        inst_list = '、'.join(sorted(inst_ids)) if inst_ids else '高盛'
         prompt = (
-            "你是一位资深的高盛情报分析师。请基于以下今日高盛相关情报信号，"
+            f"你是一位机构情报分析师。请基于以下今日{inst_list}相关情报信号，"
             "生成一份面向中国普通投资者的每日情报摘要。\n\n"
             f"今日日期：{date}\n"
-            f"信号总数：{len(signals)}\n\n"
+            f"信号总数：{len(signals)}条（{inst_list}）\n\n"
             "=== 今日情报信号 ===\n"
             f"{combined}\n\n"
             "请按以下三段式输出：\n\n"
-            "## 今日高盛观点\n"
-            "（概括高盛研究/分析师当日主要观点，2-4句话）\n\n"
-            "## 今日披露变动\n"
-            "（概括当日 SEC 文件/持仓变动等重要披露，2-3句话）\n\n"
+            "## 今日机构观点\n"
+            f"（概括{inst_list}研究/分析师当日主要观点，如有多个机构请分别说明，并指出他们对A股看法的一致点与分歧点，3-5句话）\n\n"
+            "## 披露与资金动向\n"
+            "（概括当日重要披露、持仓变动、QFII/北向资金动向，2-3句话）\n\n"
             "## 一句话投资启示\n"
-            "（用通俗语言写一句话，帮助普通投资者理解今日信息的意义）\n\n"
-            "合规要求：所有评级/目标价必须署名来源（如'高盛'），禁止以本系统名义给出买卖建议。全部使用中文输出，控制在500字以内。"
+            "（用通俗语言写一句话，帮助普通投资者理解今日信息对A股的意义）\n\n"
+            f"合规要求：所有评级/目标价必须署名来源（如'{inst_list}'），禁止以本系统名义给出买卖建议。全部使用中文输出，控制在600字以内。"
         )
         resp = await client.messages.create(
             model=llm["model"],
@@ -134,7 +140,7 @@ async def generate_daily_report(date: str) -> dict:
         return {"date": date, "report": report, "signal_count": len(signals), "cached": False}
     except Exception as exc:
         logger.exception("Daily report generation failed for %s", date)
-        fallback = f"## 今日情报概览\n\n今日共收录 {len(signals)} 条高盛相关情报信号。\n\nAI 日报生成失败：{exc}"
+        fallback = f"## 今日情报概览\n\n今日共收录 {len(signals)} 条机构情报信号。\n\nAI 日报生成失败：{exc}"
         return {"date": date, "report": fallback, "signal_count": len(signals), "cached": False, "error": str(exc)}
 
 

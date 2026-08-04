@@ -24,16 +24,20 @@ from src.llm_config import resolve_llm_config
 from src.notifier import Notification, Notifier, _format_summary
 from src.quarter_compare import QuarterComparator
 from src.reporter import ReportGenerator
-from src.signals.aggregator import SignalAggregator
+from src.signals.aggregator import SignalAggregator, dedup_across_institutions
 from src.signals.ai_triage import AiTriage
 from src.signals.base import Signal
 from src.signals.news_source import NewsSource
+from src.signals.jpm_research_source import JPMResearchSource
 from src.signals.topic_source import TopicSource
 from src.signals.webpage_source import WebpageSource
+from src.signals.base import institution_display
 from src.signals.scorer import SignalScorer
 from src.signals.sec_8k_source import Sec8kSource
 from src.signals.research_view_source import ResearchViewSource
 from src.signals.thirteen_dg_source import ThirteenDGSource
+from src.signals.qfii_source import QFIISource
+from src.signals.northbound_source import NorthboundSource
 from src.storage import (
     cleanup_expired_signals,
     get_default_llm_model,
@@ -62,7 +66,7 @@ logger = logging.getLogger(__name__)
 BEIJING_TZ = timezone(timedelta(hours=8))
 
 
-ALL_SOURCE_NAMES = ("13F", "8-K", "13D/13G", "research_view", "news", "macro_view")
+ALL_SOURCE_NAMES = ("13F", "8-K", "13D/13G", "research_view", "news", "news_jpm", "jpm_research", "macro_view", "qfii", "northbound")
 
 
 def _enabled_source_names() -> set:
@@ -88,7 +92,7 @@ def _custom_source_configs() -> list:
     return []
 
 
-def _build_daily_sources() -> list:
+def _build_daily_sources(institution_id: str = "gs") -> list:
     """Instantiate daily-intel sources, honoring per-source enable switches."""
     enabled = _enabled_source_names()
     sources: list[tuple[str, object]] = []
@@ -98,10 +102,27 @@ def _build_daily_sources() -> list:
         sources.append(("13D/13G", ThirteenDGSource()))
     if "research_view" in enabled:
         sources.append(("research_view", ResearchViewSource()))
+    if "qfii" in enabled:
+        sources.append(("qfii", QFIISource()))
+    if "northbound" in enabled:
+        sources.append(("northbound", NorthboundSource()))
     if "news" in enabled:
         feeds = list(RSS_FEEDS)
         if feeds:
             sources.append(("news", NewsSource(rss_urls=feeds)))
+    if "news_jpm" in enabled:
+        feeds = list(RSS_FEEDS)
+        if feeds:
+            # Distinct source_name so JPM-tagged items never fingerprint-collide
+            # with the GS-tagged copy of the same article.
+            sources.append(("news_jpm", NewsSource(
+                rss_urls=feeds, source_name="news_jpm", institution_id="jpm",
+                exclude_viewpoint=True,
+            )))
+    if "jpm_research" in enabled:
+        feeds = list(RSS_FEEDS)
+        if feeds:
+            sources.append(("jpm_research", JPMResearchSource(rss_urls=feeds)))
     # Custom sources from the settings page (one instance per source)
     for entry in _custom_source_configs():
         if entry.get("name") not in enabled:
@@ -160,7 +181,7 @@ async def run_daily_intel_stream():
         note = getattr(src, "fetch_note", "")
         return note if isinstance(note, str) else ""
 
-    sources = _build_daily_sources()
+    sources = _build_daily_sources("gs")
     source_names = [n for n, _ in sources]
     yield json.dumps({"event": "start", "sources": source_names})
 
@@ -208,14 +229,14 @@ async def run_daily_intel_stream():
     # AI pre-ingest triage: news-type sources only (builtin "news" + custom
     # sources). Authoritative SEC/research sources bypass triage entirely.
     custom_entries = _custom_source_configs()
-    triageable_names = {"news"} | {e.get("name", "") for e in custom_entries}
+    triageable_names = {"news", "news_jpm"} | {e.get("name", "") for e in custom_entries}
     triage_groups: dict[str, list[int]] = {}
     for idx, sig in enumerate(new_signals):
         if sig.source in triageable_names:
             triage_groups.setdefault(sig.source, []).append(idx)
 
     if triage_groups:
-        policy_by_source = {"news": "gs_only"}
+        policy_by_source = {"news": "gs_only", "news_jpm": "jpm_only"}
         policy_by_source.update(
             {e["name"]: e.get("filter_policy", "gs_only") for e in custom_entries}
         )
@@ -251,11 +272,13 @@ async def run_daily_intel_stream():
         for sc in scored:
             sig = sc.signal
             sig.cross_refs = [
+                f"[{institution_display(getattr(id_to_signal[rid], 'institution_id', 'gs'))}] "
                 f"{id_to_signal[rid].source}:{id_to_signal[rid].title}"
                 for rid in sc.cross_refs
                 if rid in id_to_signal
             ]
             sig.strength = sc.final_strength
+            sig.cross_institutional = sc.cross_institutional
 
     now = datetime.now(timezone.utc)
     quarter = f"{now.year}-Q{(now.month - 1) // 3 + 1}"

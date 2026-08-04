@@ -306,7 +306,9 @@ body {
     margin-top: 10px; display: flex; gap: 12px; flex-wrap: wrap;
     align-items: center; font-size: 0.74rem; color: var(--ink-muted);
 }
-.cross-badge { background: var(--paper-dark); border: 1px solid var(--rule); color: var(--ink-muted); padding: 2px 8px; border-radius: 3px; font-weight: 600; }
+.cross-badge { background: var(--accent-soft); border: 1px solid transparent; color: var(--accent); padding: 2px 8px; border-radius: 3px; font-weight: 600; }
+.sig-cross-refs { margin-top: 6px; font-size: 11px; color: var(--ink-muted); line-height: 1.7; }
+.sig-cross-ref { overflow-wrap: anywhere; }
 .sig-link { color: var(--accent); text-decoration: none; font-weight: 600; }
 .sig-link:hover { text-decoration: underline; }
 .daily-feed .day-divider {
@@ -694,3 +696,6 @@ tr:hover td { background: var(--paper); }
     .stat-card .num { font-size: 1.4rem; }
     .daily-report-card { padding: 20px; }
 }
+
+/* Institution tag on signal cards */
+.inst-tag{display:inline;padding:2px 6px;border-radius:3px;font-size:10px;font-weight:600;background:var(--accent-soft);color:var(--accent);margin-left:6px;white-space:nowrap;vertical-align:middle}

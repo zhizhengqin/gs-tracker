@@ -288,3 +288,44 @@ class TestSignalAggregator:
         # Cross-ref bonus (2.0) pushes LOW (base ~1.8) past MEDIUM threshold (3.0)
         assert s2_out.strength == SignalStrength.MEDIUM
         assert len(s2_out.cross_refs) >= 1
+
+
+class TestCrossInstitutionDedup:
+    def test_same_article_two_institutions_keeps_subject(self):
+        from src.signals.aggregator import dedup_across_institutions
+        now = datetime.now(timezone.utc)
+        gs_copy = Signal(
+            title="摩根大通上调美国长期国债收益率预期，华尔街各大行利率观点一览",
+            source="news",
+            published_at=now,
+            summary="摩根大通上调预测，高盛与摩根士丹利也发表看法",
+            companies=["JPM"],
+            strength=SignalStrength.MEDIUM,
+            url="https://example.com/article-1",
+            institution_id="gs",
+        )
+        jpm_copy = Signal(
+            title="摩根大通上调美国长期国债收益率预期，华尔街各大行利率观点一览",
+            source="news_jpm",
+            published_at=now,
+            summary="摩根大通上调预测，高盛与摩根士丹利也发表看法",
+            companies=["JPM"],
+            strength=SignalStrength.MEDIUM,
+            url="https://example.com/article-1",
+            institution_id="jpm",
+        )
+        result = dedup_across_institutions([gs_copy, jpm_copy])
+        assert len(result) == 1
+        assert result[0].institution_id == "jpm"
+
+    def test_distinct_articles_untouched(self):
+        from src.signals.aggregator import dedup_across_institutions
+        now = datetime.now(timezone.utc)
+        a = Signal(title="高盛看好A股", source="news", published_at=now,
+                   summary="", companies=["GS"], strength=SignalStrength.MEDIUM,
+                   url="https://example.com/a", institution_id="gs")
+        b = Signal(title="摩根大通上调评级", source="news_jpm", published_at=now,
+                   summary="", companies=["JPM"], strength=SignalStrength.MEDIUM,
+                   url="https://example.com/b", institution_id="jpm")
+        result = dedup_across_institutions([a, b])
+        assert len(result) == 2

@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>GS-Tracker 高盛动向情报系统</title>
+    <title>BridgeIQ 金桥智讯</title>
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=Noto+Serif+SC:ital,wght@0,400;0,600;0,700;1,400;1,600&family=Noto+Sans+SC:wght@400;500;700&family=JetBrains+Mono:wght@500&display=swap" media="print" onload="this.media='all'">
     <link rel="stylesheet" href="/static/css/magazine.css">
@@ -19,15 +19,15 @@
 
 <!-- ====== TOP BAR ====== -->
 <div class="topbar">
-    <span>GS-Tracker 情报专刊</span>
+    <span>BridgeIQ 情报专刊</span>
     <span class="user-chip"><span id="currentUser">…</span><button class="logout-btn" onclick="logout()">退出登录</button></span>
 </div>
 
 <!-- ====== MASTHEAD ====== -->
 <header class="masthead">
     <div class="mark">◉</div>
-    <div class="title">高盛动向情报系统</div>
-    <div class="sub">GS-Tracker · Goldman Sachs Intelligence</div>
+    <div class="title">金桥智讯</div>
+    <div class="sub">BridgeIQ · Institutional Intelligence</div>
     <div class="date" id="mastheadDate"></div>
 </header>
 
@@ -43,6 +43,12 @@
 <!-- ====== LEFT RAIL ====== -->
 <aside class="left-rail" id="leftRail">
     <div class="rail-section" id="signalFilterSection" style="display:none;">
+        <h3>追踪机构</h3>
+        <div class="signal-filter" id="institutionFilterBox">
+            <label><input type="radio" name="institution" checked onchange="onInstitutionChange()" value=""> 全部机构</label>
+            <label><input type="radio" name="institution" onchange="onInstitutionChange()" value="gs"> 高盛</label>
+            <label><input type="radio" name="institution" onchange="onInstitutionChange()" value="jpm"> 摩根大通</label>
+        </div>
         <h3>信号来源</h3>
         <div class="signal-filter">
             <span id="sourceFilterBox">
@@ -50,8 +56,12 @@
             <label><input type="checkbox" checked onchange="onFilterChange()" class="filter-source" value="8-K"> SEC 8-K</label>
             <label><input type="checkbox" checked onchange="onFilterChange()" class="filter-source" value="13D/13G"> 13D/13G</label>
             <label><input type="checkbox" checked onchange="onFilterChange()" class="filter-source" value="research_view"> 高盛研究</label>
-            <label><input type="checkbox" checked onchange="onFilterChange()" class="filter-source" value="news"> 新闻</label>
+            <label><input type="checkbox" checked onchange="onFilterChange()" class="filter-source" value="news"> 高盛新闻</label>
+            <label><input type="checkbox" checked onchange="onFilterChange()" class="filter-source" value="news_jpm"> 摩根大通新闻</label>
+            <label><input type="checkbox" checked onchange="onFilterChange()" class="filter-source" value="jpm_research"> 摩根大通研究</label>
             <label><input type="checkbox" checked onchange="onFilterChange()" class="filter-source" value="macro_view"> 宏观指标</label>
+            <label><input type="checkbox" checked onchange="onFilterChange()" class="filter-source" value="qfii"> QFII 持仓</label>
+            <label><input type="checkbox" checked onchange="onFilterChange()" class="filter-source" value="northbound"> 北向资金</label>
             </span>
         </div>
         <h3 class="mt-24">优先级</h3>
@@ -59,6 +69,10 @@
             <label><input type="checkbox" checked onchange="onFilterChange()" class="filter-strength" value="high"> <span class="dot dot-high"></span>高优先级</label>
             <label><input type="checkbox" checked onchange="onFilterChange()" class="filter-strength" value="medium"> <span class="dot dot-medium"></span>中优先级</label>
             <label><input type="checkbox" checked onchange="onFilterChange()" class="filter-strength" value="low"> <span class="dot dot-low"></span>低优先级</label>
+        </div>
+        <h3 class="mt-24">信号特征</h3>
+        <div class="signal-filter">
+            <label><input type="checkbox" id="filterCrossOnly" onchange="onFilterChange()"> 只看交叉信号</label>
         </div>
     
     </div>
@@ -72,7 +86,7 @@
     </div>
 
     <div class="rail-note">
-        GS-Tracker v1.0 · 数据来源 SEC EDGAR / RSS<br>
+        BridgeIQ v1.0 · 数据来源 SEC EDGAR / RSS<br>
         本内容仅供学习参考，不构成投资建议
     </div>
 </aside>
@@ -88,7 +102,7 @@
 <div class="guide-doc">
     <div class="guide-hero">
         <h2>系统使用指南</h2>
-        <p>看完这一页，就能独立使用 GS-Tracker。</p>
+        <p>看完这一页，就能独立使用 BridgeIQ。</p>
         <div class="guide-toc">
             <a href="#g-what">系统是什么</a>
             <a href="#g-start">三分钟上手</a>
@@ -102,7 +116,7 @@
 
     <div class="card" id="g-what">
         <h3>一、这个系统是干什么的？</h3>
-        <p>一句话：<strong>自动盯着高盛（Goldman Sachs）在公开市场上的各种动作，每天汇总成一份中文情报送到你眼前。</strong></p>
+        <p>一句话：<strong>自动盯着高盛、摩根大通等外资机构在公开市场上的各种动作，每天汇总成一份中文情报送到你眼前。</strong></p>
         <p>美国证监会（SEC）要求像高盛这样的大机构定期公开披露大量信息，比如买了哪些股票、公司发生了什么大事。这些信息虽然公开，但分散在不同网站、全是英文、格式晦涩。本系统会自动把它们抓回来，由 AI 筛选出重要内容并翻译成中文，整理成你每天花几分钟就能看完的情报日报。</p>
         <div class="warn">所有信息都来自公开渠道，且存在不同程度的滞后；本系统仅供学习参考，<strong>不构成任何投资建议</strong>。</div>
     </div>
@@ -248,6 +262,7 @@ let currentQuarter = null;
 let reportData = null;
 let reports = [];
 let currentQuarterTab = 'all'; // 'all' = stacked long page
+let currentInstitution = '';
 let dailyData = [];       // signals from /api/signals/recent (earlier range view)
 let todayData = [];       // today's signals (today view)
 let dailyDays = 30;       // current day range
@@ -261,6 +276,7 @@ async function logout() {
 
 // ====== Init ======
 async function init() {
+    onInstitutionChange();
     // Masthead date: today + weekday + issue number (day of year)
     const now = new Date();
     const weekDays = ['星期日', '星期一', '星期二', '星期三', '星期四', '星期五', '星期六'];
@@ -1123,9 +1139,11 @@ function renderSignals() {
     const activeSources = [...document.querySelectorAll('.filter-source:checked')].map(cb => cb.value);
     const activeStrengths = [...document.querySelectorAll('.filter-strength:checked')].map(cb => cb.value);
 
+    const crossOnly = document.getElementById('filterCrossOnly')?.checked;
     let filtered = reportData.signals.filter(s => {
         const srcMatch = activeSources.includes(s.source);
         const strMatch = activeStrengths.includes(s.strength);
+        if (crossOnly && !(s.cross_refs && s.cross_refs.length)) return false;
         return srcMatch && strMatch;
     });
 
@@ -1177,6 +1195,9 @@ function safeHttpUrl(u) {
 function renderSignalCard(s) {
     const date = formatSignalDate(s.published_at);
     const hasCrossRefs = s.cross_refs && s.cross_refs.length > 0;
+    const crossBadge = s.cross_institutional
+        ? '<span class="cross-badge">跨机构共识</span>'
+        : (hasCrossRefs ? '<span class="cross-badge">交叉信号</span>' : '');
     const strength = ['high', 'medium', 'low'].includes(s.strength) ? s.strength : 'low';
     const link = safeHttpUrl(s.url);
     const companies = Array.isArray(s.companies) ? s.companies : [];
@@ -1186,14 +1207,15 @@ function renderSignalCard(s) {
                 <span class="sig-source ${srcClass(s.source)}">${esc(s.source)}</span>
                 <span class="sig-date">${esc(date)}</span>
             </div>
-            <h4>${esc(s.title)}</h4>
+            <h4>${esc(s.title)} ${s.institution_id ? instBadge(s.institution_id) : ''}</h4>
             <p class="sig-summary">${esc(s.summary)}</p>
             <button type="button" class="sig-expand-btn" style="display:none" onclick="toggleSummary(this)">展开全文 ▾</button>
             <div class="sig-meta">
                 ${companies.length ? `<span>${companies.map(esc).join(', ')}</span>` : ''}
-                ${hasCrossRefs ? '<span class="cross-badge">交叉信号</span>' : ''}
+                ${crossBadge}
                 ${link ? `<a href="${esc(link)}" target="_blank" rel="noopener" class="sig-link">查看原文 →</a>` : ''}
             </div>
+            ${hasCrossRefs ? `<div class="sig-cross-refs">${s.cross_refs.map(r => `<div class="sig-cross-ref">↔ ${esc(r)}</div>`).join('')}</div>` : ''}
         </div>
     `;
 }
@@ -1372,7 +1394,7 @@ async function loadTodayView() {
     document.getElementById('mainContent').innerHTML = '<div class="loading">加载中...</div>';
     const today = new Date().toISOString().slice(0, 10);
     try {
-        const resp = await fetch(`/api/signals/date/${today}`);
+        const resp = await fetch(`/api/signals/date/${today}?institution=${currentInstitution}`);
         if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
         const json = await resp.json();
         todayData = json.signals || [];
@@ -1422,7 +1444,12 @@ function renderTodayFeed() {
 function filterSignalsBy(data) {
     const activeSources = [...document.querySelectorAll('.filter-source:checked')].map(cb => cb.value);
     const activeStrengths = [...document.querySelectorAll('.filter-strength:checked')].map(cb => cb.value);
-    return data.filter(s => activeSources.includes(s.source) && activeStrengths.includes(s.strength));
+    const crossOnly = document.getElementById('filterCrossOnly')?.checked;
+    return data.filter(s => {
+        if (!activeSources.includes(s.source) || !activeStrengths.includes(s.strength)) return false;
+        if (crossOnly && !(s.cross_refs && s.cross_refs.length)) return false;
+        return true;
+    });
 }
 
 async function toggleEarlier() {
@@ -1442,6 +1469,17 @@ async function toggleEarlier() {
     }
 }
 
+function onInstitutionChange() {
+    const sel = document.querySelector('input[name="institution"]:checked');
+    currentInstitution = sel ? sel.value : '';
+    loadDailyIntel(3);
+}
+function instBadge(instId) {
+    if (!instId || instId === 'all') return '<span class="inst-tag">公共</span>';
+    if (instId === 'gs') return '<span class="inst-tag">高盛</span>';
+    if (instId === 'jpm') return '<span class="inst-tag">摩根大通</span>';
+    return '<span class="inst-tag">' + esc(instId) + '</span>';
+}
 async function loadDailyIntel(days) {
     dailyDays = days;
     const target = document.getElementById('earlierBody') || document.getElementById('mainContent');
@@ -1453,7 +1491,7 @@ async function loadDailyIntel(days) {
     });
 
     try {
-        const resp = await fetch(`/api/signals/recent?days=${days}`);
+        const resp = await fetch(`/api/signals/recent?days=${days}&institution=${currentInstitution}`);
         if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
         const json = await resp.json();
         dailyData = json.signals || [];
