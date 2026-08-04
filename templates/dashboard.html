@@ -789,6 +789,11 @@ function renderQuarterView() {
         <div class="daily-header">
             <h2>季度报告</h2>
             <div class="date-picker-row">
+                <span>机构：</span>
+                <select id="quarterInstSelect" onchange="onQuarterInstSelect(this.value)">
+                    <option value="gs" ${quarterInst() === 'gs' ? 'selected' : ''}>高盛</option>
+                    <option value="jpm" ${quarterInst() === 'jpm' ? 'selected' : ''}>摩根大通</option>
+                </select>
                 <span>选择季度：</span>
                 <select id="quarterSelect" onchange="loadQuarter(this.value)">${options}</select>
             </div>
@@ -803,6 +808,15 @@ function renderQuarterView() {
     renderQuarterPanel();
 }
 
+// Quarterly header institution dropdown: delegate to the rail radio so all
+// institution-switch logic (reports refetch, profile refresh) stays in one place.
+function onQuarterInstSelect(value) {
+    const radio = document.querySelector(`input[name="institution"][value="${value}"]`);
+    if (!radio) return;
+    radio.checked = true;
+    radio.dispatchEvent(new Event('change', { bubbles: true }));
+}
+
 function switchQuarterTab(tab) {
     currentQuarterTab = tab;
     document.querySelectorAll('.quarter-tab').forEach(b =>
@@ -815,9 +829,6 @@ function renderQuarterPanel() {
     const el = document.getElementById('quarterPanel');
     if (!el || !reportData) return;
     const d = reportData;
-    const filterSection = document.getElementById('signalFilterSection');
-    const showFilter = currentQuarterTab === 'signals';
-    if (filterSection && currentView === 'quarter') filterSection.style.display = showFilter ? 'block' : 'none';
 
     switch (currentQuarterTab) {
         case 'overview':
