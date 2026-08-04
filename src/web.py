@@ -71,7 +71,7 @@ async def lifespan(app: FastAPI):
     init_db()
     ensure_default_admin()
     _seed_default_llm_from_env()
-    _purge_non_gs_news_signals()
+    # _purge_non_gs_news_signals()  # DISABLED: deletes JPM/non-GS news
     yield
 
 
