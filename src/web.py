@@ -375,6 +375,41 @@ def _signal_to_dict(signal: Signal) -> dict:
     }
 
 
+@app.get("/api/institutions/{institution_id}/overview")
+async def api_institution_overview(institution_id: str) -> dict:
+    """Aggregate one institution's profile: stats, recent + cross signals, report."""
+    inst = _validate_institution(institution_id)
+    recent = await asyncio.to_thread(get_recent_signals, 7, None, inst)
+    pool_30d = await asyncio.to_thread(get_recent_signals, 30, None, inst)
+    cross = [s for s in pool_30d if getattr(s, "cross_institutional", False)]
+    high = [s for s in recent if s.strength.value == "high"]
+    last_at = recent[0].published_at if recent else None
+    if last_at is not None and last_at.tzinfo is None:
+        last_at = last_at.replace(tzinfo=timezone.utc)
+
+    reports = [f for f in _list_report_files(inst) if _QUARTER_STEM_RE.match(f.stem)]
+    latest_report = None
+    if reports:
+        prefix = "/reports" if inst == "gs" else f"/reports/{inst}"
+        latest_report = {
+            "quarter": reports[0].stem,
+            "path": f"{prefix}/{reports[0].name}",
+        }
+
+    inst_row = next(i for i in get_institutions() if i["id"] == inst)
+    return {
+        "institution": inst_row,
+        "latest_report": latest_report,
+        "stats": {
+            "signals_7d": len(recent),
+            "high_7d": len(high),
+            "last_signal_at": last_at.isoformat() if last_at else None,
+        },
+        "recent_signals": [_signal_to_dict(s) for s in recent[:50]],
+        "cross_signals": [_signal_to_dict(s) for s in cross[:50]],
+    }
+
+
 @app.get("/api/signals/recent")
 async def api_signals_recent(days: int = 30, institution: str = "") -> dict:
     """Return signals from the last N days, ordered by published_at descending."""

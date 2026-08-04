@@ -324,6 +324,51 @@ def test_api_signals_empty_run_returns_empty_list(signals_db):
     assert data["errors"] == []
 
 
+# ====== Institution overview ======
+
+
+def test_institution_overview_unknown_422():
+    resp = client.get("/api/institutions/nope/overview")
+    assert resp.status_code == 422
+
+
+def test_institution_overview_structure(signals_db, make_signal, tmp_path, monkeypatch):
+    from datetime import datetime, timedelta, timezone
+    from src.signals.base import SignalStrength
+
+    monkeypatch.setattr("src.web.REPORT_OUTPUT_DIR", tmp_path)
+    now = datetime.now(timezone.utc)
+    storage.save_signals("2026-Q3", [
+        make_signal(id="gs-high", title="高盛高优先级",
+                    institution_id="gs", cross_institutional=True,
+                    strength=SignalStrength.HIGH, published_at=now),
+        make_signal(id="gs-low", title="高盛普通",
+                    institution_id="gs", strength=SignalStrength.LOW,
+                    published_at=now),
+        make_signal(id="jpm-1", title="摩根大通情报",
+                    institution_id="jpm", published_at=now),
+        make_signal(id="gs-old", title="高盛旧闻",
+                    institution_id="gs",
+                    published_at=now - timedelta(days=40)),
+    ])
+
+    resp = client.get("/api/institutions/gs/overview")
+    assert resp.status_code == 200
+    data = resp.json()
+
+    assert data["institution"]["id"] == "gs"
+    assert data["institution"]["display_name"] == "高盛"
+    assert data["latest_report"] is None  # tmp_path 里无报告
+    assert data["stats"]["signals_7d"] == 2
+    assert data["stats"]["high_7d"] == 1
+    assert data["stats"]["last_signal_at"] is not None
+
+    recent_ids = {s["id"] for s in data["recent_signals"]}
+    assert recent_ids == {"gs-high", "gs-low"}  # 只有本机构、7 天内
+    cross_ids = {s["id"] for s in data["cross_signals"]}
+    assert cross_ids == {"gs-high"}  # 只有跨机构共识
+
+
 # ====== Pipeline trigger endpoints ======
 
 

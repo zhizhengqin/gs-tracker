@@ -48,6 +48,7 @@
             <label><input type="radio" name="institution" checked onchange="onInstitutionChange()" value=""> 全部机构</label>
             <label><input type="radio" name="institution" onchange="onInstitutionChange()" value="gs"> 高盛</label>
             <label><input type="radio" name="institution" onchange="onInstitutionChange()" value="jpm"> 摩根大通</label>
+            <button type="button" class="btn-sm" style="margin-top:6px" onclick="switchMainView('institution')">机构档案 ›</button>
         </div>
         <h3>信号来源</h3>
         <div class="signal-filter">
@@ -1394,12 +1395,60 @@ async function switchMainView(view) {
         } else {
             document.getElementById('mainContent').innerHTML = '<div class="loading">暂无报告数据，请先运行季度对账</div>';
         }
+    } else if (view === 'institution') {
+        if (filterSection) filterSection.style.display = 'block';
+        await renderInstitutionProfile();
     } else if (view === 'settings') {
         if (filterSection) filterSection.style.display = 'none';
         await renderSettings();
     } else if (view === 'guide') {
         if (filterSection) filterSection.style.display = 'none';
         renderGuide();
+    }
+}
+
+// ====== Institution profile view ======
+async function renderInstitutionProfile() {
+    const main = document.getElementById('mainContent');
+    const inst = quarterInst();  // "全部机构" 时默认高盛（档案必须是单机构）
+    main.innerHTML = '<div class="loading">加载机构档案...</div>';
+    try {
+        const resp = await fetch(`/api/institutions/${inst}/overview`);
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+        const d = await resp.json();
+        const i = d.institution || {};
+        const stats = d.stats || {};
+        const lastAt = stats.last_signal_at
+            ? new Date(stats.last_signal_at).toLocaleString('zh-CN') : '暂无';
+        const reportCard = d.latest_report
+            ? `<div class="daily-report-card"><h3>最新季度报告</h3>
+                 <p><a href="${d.latest_report.path}" target="_blank">${esc(d.latest_report.quarter)} 季度报告 →</a></p></div>`
+            : `<div class="daily-report-card"><h3>最新季度报告</h3>
+                 <p class="muted">暂无，请到「季度报告」页运行季度对账生成</p></div>`;
+        const recentHtml = (d.recent_signals || []).map(renderSignalCard).join('')
+            || '<p class="muted">近 7 天暂无情报</p>';
+        const crossHtml = (d.cross_signals || []).map(renderSignalCard).join('')
+            || '<p class="muted">近 30 天暂无跨机构交叉信号</p>';
+        main.innerHTML = `
+            <h2>${esc(i.display_name || inst)} · 机构档案</h2>
+            <div class="daily-report-card">
+                <p><strong>${esc(i.display_name || '')}</strong>（${esc(i.name || '')}）
+                   · CIK ${esc(i.cik || '—')} · ${i.enabled ? '追踪中' : '已停用'}</p>
+                <p>近 7 天情报 <strong>${stats.signals_7d ?? 0}</strong> 条
+                   · 高优先级 <strong>${stats.high_7d ?? 0}</strong> 条
+                   · 最近更新 ${esc(lastAt)}</p>
+            </div>
+            ${reportCard}
+            <h2>近 7 天情报</h2>
+            <div id="instRecentBox">${recentHtml}</div>
+            <h2>跨机构交叉信号（30 天）</h2>
+            <div id="instCrossBox">${crossHtml}</div>
+        `;
+        addAiToggles(main);
+        main.querySelectorAll('.signal-card').forEach(updateSummaryToggle);
+    } catch (e) {
+        console.error(e);
+        main.innerHTML = '<div class="loading">机构档案加载失败</div>';
     }
 }
 
@@ -1503,7 +1552,9 @@ function quarterInst() {
 async function onInstitutionChange() {
     const sel = document.querySelector('input[name="institution"]:checked');
     currentInstitution = sel ? sel.value : '';
-    if (currentView === 'quarter') {
+    if (currentView === 'institution') {
+        await renderInstitutionProfile();
+    } else if (currentView === 'quarter') {
         await refreshReports();
     } else {
         loadDailyIntel(3);
