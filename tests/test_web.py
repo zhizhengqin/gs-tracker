@@ -53,9 +53,8 @@ def test_root_serves_dashboard(tmp_path, monkeypatch):
     monkeypatch.setattr("src.web.REPORT_OUTPUT_DIR", tmp_path)
     response = client.get("/")
     assert response.status_code == 200
-    # Dashboard renders with GS-Tracker branding
-    assert "GS-Tracker" in response.text
-    assert "高盛动向情报系统" in response.text
+    # Dashboard renders with BridgeIQ branding
+    assert "BridgeIQ" in response.text or "金桥智讯" in response.text
     # Dashboard has sidebar navigation
     assert "sidebar" in response.text
 
