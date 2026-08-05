@@ -32,11 +32,11 @@ ITEM_LABELS: Dict[str, str] = {
 }
 
 
-def _build_8k_summary(filing_date, item_labels, acc_num):
+def _build_8k_summary(display_name, filing_date, item_labels, acc_num):
     """Build a Chinese summary line for an 8-K filing."""
     items_text = ', '.join(item_labels) if item_labels else '待解析'
     return (
-        f"高盛于 {filing_date} 提交 8-K 报告。"
+        f"{display_name}于 {filing_date} 提交 8-K 报告。"
         f"涉及事项: {items_text}。"
         f"SEC 文件编号: {acc_num}。"
     )
@@ -55,9 +55,17 @@ class Sec8kSource:
 
     source_name = "8-K"
 
-    def __init__(self, cik: str = GOLDMAN_CIK, max_items: int = 10) -> None:
+    def __init__(
+        self,
+        cik: str = GOLDMAN_CIK,
+        max_items: int = 10,
+        company_tag: str = "GS",
+        display_name: str = "高盛",
+    ) -> None:
         self.cik = cik.lstrip("0")
         self.max_items = max_items
+        self.company_tag = company_tag
+        self.display_name = display_name
         self.client = httpx.AsyncClient(
             timeout=20.0,
             headers={"User-Agent": SEC_USER_AGENT},
@@ -120,7 +128,7 @@ class Sec8kSource:
             acc_num = acc_nums[i] if i < len(acc_nums) else ""
             doc_name = docs[i] if i < len(docs) else ""
 
-            title = "高盛 8-K: "
+            title = f"{self.display_name} 8-K: "
             if item_labels:
                 title += "、".join(item_labels[:3])
             else:
@@ -132,8 +140,10 @@ class Sec8kSource:
                 title=title,
                 source="8-K",
                 published_at=published_at,
-                summary=_build_8k_summary(filing_date, item_labels, acc_num),
-                companies=["GS"],
+                summary=_build_8k_summary(
+                    self.display_name, filing_date, item_labels, acc_num
+                ),
+                companies=[self.company_tag],
                 strength=(
                     SignalStrength.HIGH if item_labels
                     else SignalStrength.MEDIUM

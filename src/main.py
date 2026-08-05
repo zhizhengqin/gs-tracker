@@ -453,7 +453,11 @@ async def run_pipeline_stream(institution_id: str = "gs"):
             )
             if RSS_FEEDS else None
         ),
-        sec8k_source=Sec8kSource(cik=cik),
+        sec8k_source=Sec8kSource(
+            cik=cik,
+            company_tag=institution_id.upper(),
+            display_name=inst["display_name"],
+        ),
     )
     try:
         # Bridge the aggregator's sync progress callback into this async
