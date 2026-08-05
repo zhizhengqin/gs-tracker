@@ -362,6 +362,10 @@ def init_db() -> None:
         dedupe_signals_by_url()
     except Exception:
         logger.exception("dedupe_signals_by_url failed during init_db")
+    try:
+        refresh_signal_fingerprints()
+    except Exception:
+        logger.exception("refresh_signal_fingerprints failed during init_db")
 
 
 def save_holdings(
@@ -516,12 +520,55 @@ def compute_fingerprint(signal: Signal) -> str:
     return digest
 
 
+def refresh_signal_fingerprints() -> int:
+    """Recompute stored fingerprints with the current scheme.
+
+    Rows written before the URL-based rule carry date-based fingerprints;
+    the daily job recomputes fingerprints when re-saving and would miss the
+    ON CONFLICT match without this repair. Skips rows whose recomputed
+    fingerprint is already taken by another row (cross-day duplicates —
+    dedupe_signals_by_url owns those). Idempotent. Returns updated count.
+    """
+    updated = 0
+    with get_connection() as conn:
+        rows = conn.execute(
+            "SELECT rowid, source, title, url, published_at, signal_fingerprint "
+            "FROM signals"
+        ).fetchall()
+        taken = {r[5] for r in rows}
+        for rowid, source, title, url, published_at, stored_fp in rows:
+            probe = Signal(
+                title=title,
+                source=source,
+                published_at=datetime.fromisoformat(published_at),
+                summary="",
+                companies=[],
+                strength=SignalStrength.MEDIUM,
+                url=url or None,
+            )
+            new_fp = compute_fingerprint(probe)
+            if new_fp == stored_fp or new_fp in taken:
+                continue
+            conn.execute(
+                "UPDATE signals SET signal_fingerprint=? WHERE rowid=?",
+                (new_fp, rowid),
+            )
+            taken.discard(stored_fp)
+            taken.add(new_fp)
+            updated += 1
+        conn.commit()
+    if updated:
+        logger.info("refresh_signal_fingerprints: repaired %d rows", updated)
+    return updated
+
+
 def dedupe_signals_by_url() -> int:
     """Remove legacy cross-day duplicate signals, keeping the earliest row.
 
     Legacy fingerprints included the publish date, so a re-fetched URL
     created one row per day. This keeps the earliest row per
-    (source, title, url) and deletes the later ones; daily_reports cached
+    (source, title, url) and deletes the later ones (same-day ties keep the
+    lowest rowid); daily_reports cached
     for the affected dates are also dropped — they were generated from
     duplicated signals and regenerate honestly on next view.
 
@@ -533,7 +580,13 @@ def dedupe_signals_by_url() -> int:
             SELECT 1 FROM signals s2
             WHERE s2.url = signals.url AND s2.source = signals.source
               AND s2.title = signals.title
-              AND date(s2.published_at) < date(signals.published_at)
+              AND (
+                  date(s2.published_at) < date(signals.published_at)
+                  OR (
+                      date(s2.published_at) = date(signals.published_at)
+                      AND s2.rowid < signals.rowid
+                  )
+              )
         )
     """
     with get_connection() as conn:
@@ -570,19 +623,29 @@ _INSERT_SIGNAL_SQL = """
 """
 
 
-_UPSERT_SIGNAL_SQL = """
+_UPDATE_SIGNAL_BY_FINGERPRINT_SQL = """
+    UPDATE signals SET
+        strength=?, cross_refs=?, relevance_score=?,
+        institution_id=?, quarter=?, cross_institutional=?
+    WHERE signal_fingerprint=?
+"""
+
+# Fallback for rows whose stored fingerprint drifted from the current
+# scheme (e.g. legacy date-based fingerprints): the fingerprint match above
+# misses, so insert and let the (quarter, id) key turn it into an update.
+_INSERT_OR_UPDATE_SIGNAL_BY_ID_SQL = """
     INSERT INTO signals (
         id, quarter, institution_id, source, title, published_at,
         summary, companies, strength, url, cross_refs,
         signal_fingerprint, relevance_score, cross_institutional
     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    ON CONFLICT(signal_fingerprint) DO UPDATE SET
+    ON CONFLICT(quarter, id) DO UPDATE SET
         strength=excluded.strength,
         cross_refs=excluded.cross_refs,
         relevance_score=excluded.relevance_score,
         institution_id=excluded.institution_id,
-        quarter=excluded.quarter,
-        cross_institutional=excluded.cross_institutional
+        cross_institutional=excluded.cross_institutional,
+        signal_fingerprint=excluded.signal_fingerprint
 """
 
 _UPSERT_SIGNAL_RUN_SQL = """
@@ -654,15 +717,29 @@ def _upsert_signals(
     New fingerprints → INSERT. Existing fingerprints → UPDATE scoring
     fields (strength, cross_refs, relevance_score) only; content fields
     (title, summary, url, companies, published_at) are preserved from
-    the first insert.
+    the first insert. Rows whose stored fingerprint drifted from the
+    current scheme fall back to a (quarter, id) upsert, which also
+    re-aligns the stored fingerprint.
 
     This is the path for the daily intelligence job — incremental,
     no quarter-level deletion.
     """
-    conn.executemany(
-        _UPSERT_SIGNAL_SQL,
-        [_signal_row(quarter, s) for s in signals],
-    )
+    for s in signals:
+        row = _signal_row(quarter, s)
+        updated = conn.execute(
+            _UPDATE_SIGNAL_BY_FINGERPRINT_SQL,
+            (
+                row[8],   # strength
+                row[10],  # cross_refs
+                row[12],  # relevance_score
+                row[2],   # institution_id
+                row[1],   # quarter
+                row[13],  # cross_institutional
+                row[11],  # signal_fingerprint (WHERE)
+            ),
+        )
+        if updated.rowcount == 0:
+            conn.execute(_INSERT_OR_UPDATE_SIGNAL_BY_ID_SQL, row)
 
 
 def save_signals(quarter: str, signals: List[Signal]) -> None:
@@ -1024,6 +1101,69 @@ def set_setting(key: str, value: str) -> None:
             (key, value),
         )
         conn.commit()
+
+
+# ====== Signal source configuration ======
+
+BUILTIN_SOURCE_NAMES = {
+    "13F", "8-K", "13D/13G", "research_view", "news", "news_jpm",
+    "jpm_research", "macro_view", "qfii", "northbound",
+}
+
+
+def default_source_entries() -> list:
+    """Built-in signal sources, all enabled, with institution-neutral wording."""
+    return [
+        {"name": "13F", "label": "13F 持仓", "description": "机构季度 13F 持仓报告（高盛/摩根大通）", "enabled": True, "builtin": True},
+        {"name": "8-K", "label": "SEC 8-K", "description": "机构重大事件即时披露（高盛/摩根大通）", "enabled": True, "builtin": True},
+        {"name": "13D/13G", "label": "13D/13G", "description": "大股东权益变动披露（高盛/摩根大通）", "enabled": True, "builtin": True},
+        {"name": "research_view", "label": "高盛研究", "description": "官方 Insights 研究文章", "enabled": True, "builtin": True},
+        {"name": "news", "label": "高盛新闻", "description": "RSS 新闻中高盛相关报道", "enabled": True, "builtin": True},
+        {"name": "news_jpm", "label": "摩根大通新闻", "description": "RSS 新闻中摩根大通相关报道", "enabled": True, "builtin": True},
+        {"name": "jpm_research", "label": "摩根大通研究", "description": "J.P. Morgan 官方研究观点", "enabled": True, "builtin": True},
+        {"name": "macro_view", "label": "宏观指标", "description": "FRED 宏观数据（利率/VIX/美元）", "enabled": True, "builtin": True},
+        {"name": "qfii", "label": "QFII 持仓", "description": "外资 QFII A 股持仓数据", "enabled": True, "builtin": True},
+        {"name": "northbound", "label": "北向资金", "description": "沪深港通北向涨跌宽度", "enabled": True, "builtin": True},
+    ]
+
+
+def get_sources_config() -> list:
+    """Stored sources_config merged with current built-in defaults.
+
+    Installs that saved the config before new built-ins shipped would never
+    see them otherwise: new built-ins are appended enabled, user toggles are
+    preserved, and built-in label/description always follow the code defaults.
+    """
+    defaults = default_source_entries()
+    raw = get_setting("sources_config", "")
+    if raw:
+        try:
+            stored = json.loads(raw)
+        except json.JSONDecodeError:
+            stored = []
+    else:
+        stored = []
+    if not stored:
+        return defaults
+
+    defaults_by_name = {d["name"]: d for d in defaults}
+    merged: list = []
+    seen: set = set()
+    for entry in stored:
+        if not isinstance(entry, dict):
+            continue
+        name = entry.get("name", "")
+        if name in defaults_by_name:
+            # Only the enabled flag is user-owned for built-ins.
+            merged.append({**defaults_by_name[name],
+                           "enabled": entry.get("enabled", True)})
+        else:
+            merged.append(entry)
+        seen.add(name)
+    for d in defaults:
+        if d["name"] not in seen:
+            merged.append(dict(d))
+    return merged
 
 
 def get_all_settings() -> dict:
