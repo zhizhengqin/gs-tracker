@@ -6,8 +6,17 @@ ENV TZ=Asia/Shanghai
 
 WORKDIR /app
 
-# Install build dependencies for pandas/matplotlib
-RUN apt-get update \
+# Install build dependencies for pandas/matplotlib.
+# Default to a China-friendly apt mirror: the deploy server (JD Cloud) pulls
+# from deb.debian.org at KB/s, which blew past the 10-minute SSH deploy
+# timeout. Override with --build-arg APT_MIRROR=deb.debian.org if needed.
+ARG APT_MIRROR=mirrors.tuna.tsinghua.edu.cn
+RUN if [ -f /etc/apt/sources.list.d/debian.sources ]; then \
+        sed -i "s|deb.debian.org|${APT_MIRROR}|g" /etc/apt/sources.list.d/debian.sources; \
+    else \
+        sed -i "s|deb.debian.org|${APT_MIRROR}|g" /etc/apt/sources.list; \
+    fi \
+    && apt-get update \
     && apt-get install -y --no-install-recommends gcc libsqlite3-dev \
     && rm -rf /var/lib/apt/lists/*
 

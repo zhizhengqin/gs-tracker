@@ -16,3 +16,6 @@ jobs:
           username: ${{ secrets.DEPLOY_USER }}
           key: ${{ secrets.DEPLOY_SSH_KEY }}
           script: cd ~/gs-tracker && bash deploy/update.sh
+          # Image rebuilds can exceed the 10m default when the apt/pip
+          # layer cache is invalidated (e.g. base image tag moved).
+          command_timeout: 30m
