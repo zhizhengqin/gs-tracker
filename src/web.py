@@ -60,6 +60,8 @@ from src.storage import (
     set_default_llm_model,
     set_setting,
     update_user,
+    get_sources_config,
+    BUILTIN_SOURCE_NAMES,
 )
 
 logger = logging.getLogger(__name__)
@@ -815,33 +817,8 @@ async def api_update_settings(settings: dict = Body(...)) -> dict:
     return {"status": "ok"}
 
 
-BUILTIN_SOURCE_NAMES = {"13F", "8-K", "13D/13G", "research_view", "news", "news_jpm", "jpm_research", "macro_view", "qfii", "northbound"}
-
-
-def _default_source_entries() -> list:
-    """The six built-in sources, all enabled."""
-    return [
-        {"name": "13F", "label": "13F 持仓", "description": "高盛季度 13F 持仓报告", "enabled": True, "builtin": True},
-        {"name": "8-K", "label": "SEC 8-K", "description": "高盛重大事件即时披露", "enabled": True, "builtin": True},
-        {"name": "13D/13G", "label": "13D/13G", "description": "大股东权益变动披露", "enabled": True, "builtin": True},
-        {"name": "research_view", "label": "高盛研究", "description": "官方 Insights 研究文章", "enabled": True, "builtin": True},
-        {"name": "news", "label": "高盛新闻", "description": "RSS 新闻中高盛相关报道", "enabled": True, "builtin": True},
-        {"name": "news_jpm", "label": "摩根大通新闻", "description": "RSS 新闻中摩根大通相关报道", "enabled": True, "builtin": True},
-        {"name": "jpm_research", "label": "摩根大通研究", "description": "J.P. Morgan 官方研究观点", "enabled": True, "builtin": True},
-        {"name": "macro_view", "label": "宏观指标", "description": "FRED 宏观数据（利率/VIX/美元）", "enabled": True, "builtin": True},
-        {"name": "qfii", "label": "QFII 持仓", "description": "外资 QFII A 股持仓数据", "enabled": True, "builtin": True},
-        {"name": "northbound", "label": "北向资金", "description": "沪深港通资金流向", "enabled": True, "builtin": True},
-    ]
-
-
 def _stored_or_default_sources() -> list:
-    raw = get_setting("sources_config", "")
-    if raw:
-        try:
-            return json.loads(raw)
-        except json.JSONDecodeError:
-            pass
-    return _default_source_entries()
+    return get_sources_config()
 
 
 @app.get("/api/settings/sources")

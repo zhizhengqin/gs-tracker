@@ -61,11 +61,13 @@ class Sec8kSource:
         max_items: int = 10,
         company_tag: str = "GS",
         display_name: str = "高盛",
+        institution_id: str = "gs",
     ) -> None:
         self.cik = cik.lstrip("0")
         self.max_items = max_items
         self.company_tag = company_tag
         self.display_name = display_name
+        self.institution_id = institution_id
         self.client = httpx.AsyncClient(
             timeout=20.0,
             headers={"User-Agent": SEC_USER_AGENT},
@@ -144,6 +146,7 @@ class Sec8kSource:
                     self.display_name, filing_date, item_labels, acc_num
                 ),
                 companies=[self.company_tag],
+                institution_id=self.institution_id,
                 strength=(
                     SignalStrength.HIGH if item_labels
                     else SignalStrength.MEDIUM

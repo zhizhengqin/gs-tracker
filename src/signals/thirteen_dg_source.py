@@ -30,10 +30,12 @@ FORM_LABELS: Dict[str, str] = {
 }
 
 
-def _build_13dg_summary(form: str, filing_date: str, acc_num: str) -> str:
+def _build_13dg_summary(
+    display_name: str, form: str, filing_date: str, acc_num: str
+) -> str:
     label = FORM_LABELS.get(form, form)
     return (
-        f"高盛于 {filing_date} 提交 {label}。"
+        f"{display_name}于 {filing_date} 提交 {label}。"
         f"SEC 文件编号: {acc_num}。"
     )
 
@@ -41,16 +43,26 @@ def _build_13dg_summary(form: str, filing_date: str, acc_num: str) -> str:
 class ThirteenDGSource:
     """Fetch 13D/13G filing signals from SEC EDGAR submissions API.
 
-    Primary path: match Goldman CIK filings by form type.
+    Primary path: match the configured institution's CIK filings by form type.
     Keyword search path (EFTS): planned as secondary path for broader
     coverage — not yet implemented.
     """
 
     source_name = "13D/13G"
 
-    def __init__(self, cik: str = GOLDMAN_CIK, max_items: int = 10) -> None:
+    def __init__(
+        self,
+        cik: str = GOLDMAN_CIK,
+        max_items: int = 10,
+        company_tag: str = "GS",
+        display_name: str = "高盛",
+        institution_id: str = "gs",
+    ) -> None:
         self.cik = cik.lstrip("0")
         self.max_items = max_items
+        self.company_tag = company_tag
+        self.display_name = display_name
+        self.institution_id = institution_id
         self.client = httpx.AsyncClient(
             timeout=20.0,
             headers={"User-Agent": SEC_USER_AGENT},
@@ -113,11 +125,14 @@ class ThirteenDGSource:
 
             signals.append(
                 Signal(
-                    title=f"高盛 {forms[i]}: {FORM_LABELS.get(forms[i], forms[i])}",
+                    title=f"{self.display_name} {forms[i]}: {FORM_LABELS.get(forms[i], forms[i])}",
                     source="13D/13G",
                     published_at=published_at,
-                    summary=_build_13dg_summary(forms[i], filing_date, acc_num),
-                    companies=["GS"],
+                    summary=_build_13dg_summary(
+                        self.display_name, forms[i], filing_date, acc_num
+                    ),
+                    companies=[self.company_tag],
+                    institution_id=self.institution_id,
                     strength=SignalStrength.HIGH,
                     url=(
                         (

@@ -5,6 +5,7 @@ import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from src.data_fetcher import SEC13FFetcher
+from src.storage import default_source_entries
 from src.main import main, run_pipeline, run_pipeline_stream
 
 
@@ -230,12 +231,21 @@ class TestDailyIntel:
     def _mock_sources(self):
         """Patch all source classes (hermetic — no live HTTP); yields mocks."""
         mocks = {}
+        fake_institutions = [
+            {"id": "gs", "name": "Goldman Sachs", "display_name": "高盛",
+             "cik": "0000886982", "enabled": 1},
+            {"id": "jpm", "name": "JPMorgan", "display_name": "摩根大通",
+             "cik": "0000019617", "enabled": 1},
+        ]
         with patch("src.main.NewsSource") as mock_news, \
              patch("src.main.Sec8kSource") as mock_8k, \
              patch("src.main.ResearchViewSource") as mock_rv, \
              patch("src.main.JPMResearchSource") as mock_jpmr, \
              patch("src.main.QFIISource") as mock_qfii, \
              patch("src.main.NorthboundSource") as mock_nb, \
+             patch("src.main.get_institutions", return_value=fake_institutions), \
+             patch("src.main.get_sources_config",
+                   return_value=default_source_entries()), \
              patch("src.main.ThirteenDGSource") as mock_dg:
             for cls in (mock_news, mock_rv, mock_dg, mock_jpmr, mock_qfii, mock_nb):
                 cls.return_value.fetch_since = AsyncMock(return_value=([], None))
@@ -310,9 +320,13 @@ class TestDailyIntel:
         assert events[0]["event"] == "start"
         done_events = [e for e in events if e["event"] == "source_done"]
         # RSS_FEEDS empty → no news/jpm_research sources (all feed-based);
-        # 8-K + 13D/13G + research_view + A-share sources remain
-        assert len(done_events) == 5
-        assert {e["source"] for e in done_events} == {"8-K", "13D/13G", "research_view", "northbound", "qfii"}
+        # 8-K + 13D/13G run per institution, plus research_view + A-share sources
+        assert len(done_events) == 7
+        assert {e["source"] for e in done_events} == {
+            "8-K · 高盛", "8-K · 摩根大通",
+            "13D/13G · 高盛", "13D/13G · 摩根大通",
+            "research_view", "northbound", "qfii",
+        }
         assert events[-1]["event"] == "complete"
         assert not any(e["event"] == "triage_note" for e in events)
 
@@ -326,7 +340,8 @@ class TestDailyIntel:
              "url": "https://custom.test/feed", "filter_policy": "all",
              "enabled": True, "builtin": False},
         ])
-        with patch("src.main.get_setting", return_value=config), \
+        with patch("src.main.get_sources_config", return_value=json.loads(config)), \
+             patch("src.main.get_institutions", return_value=[]), \
              patch("src.main.NewsSource") as MockNews, \
              patch("src.main.ThirteenDGSource"), \
              patch("src.main.Sec8kSource"), \
@@ -348,7 +363,8 @@ class TestDailyIntel:
             {"name": "caixin", "label": "财新网", "type": "rss",
              "url": "https://custom.test/feed", "enabled": False, "builtin": False},
         ])
-        with patch("src.main.get_setting", return_value=config), \
+        with patch("src.main.get_sources_config", return_value=json.loads(config)), \
+             patch("src.main.get_institutions", return_value=[]), \
              patch("src.main.NewsSource"), \
              patch("src.main.ThirteenDGSource"), \
              patch("src.main.Sec8kSource"), \
@@ -369,7 +385,8 @@ class TestDailyIntel:
              "url": "https://example.com/insights", "instruction": "提取高盛观点",
              "filter_policy": "gs_only", "enabled": True, "builtin": False},
         ])
-        with patch("src.main.get_setting", return_value=config), \
+        with patch("src.main.get_sources_config", return_value=json.loads(config)), \
+             patch("src.main.get_institutions", return_value=[]), \
              patch("src.main.WebpageSource") as MockWeb, \
              patch("src.main.NewsSource"), \
              patch("src.main.ThirteenDGSource"), \
@@ -396,7 +413,8 @@ class TestDailyIntel:
              "url": "", "instruction": "高盛对中国股市的最新观点",
              "filter_policy": "gs_only", "enabled": True, "builtin": False},
         ])
-        with patch("src.main.get_setting", return_value=config), \
+        with patch("src.main.get_sources_config", return_value=json.loads(config)), \
+             patch("src.main.get_institutions", return_value=[]), \
              patch("src.main.TopicSource") as MockTopic, \
              patch("src.main.NewsSource"), \
              patch("src.main.ThirteenDGSource"), \
@@ -484,13 +502,20 @@ class TestDailyIntel:
     async def test_build_daily_sources_respects_enabled_flags(self, monkeypatch):
         """Disabled sources in sources_config must be skipped."""
         monkeypatch.setattr("src.main.RSS_FEEDS", ["https://example.test/rss"])
-        config = json.dumps([
+        config = [
             {"name": "8-K", "enabled": False},
             {"name": "13D/13G", "enabled": True},
             {"name": "research_view", "enabled": False},
             {"name": "news", "enabled": True},
-        ])
-        with patch("src.main.get_setting", return_value=config), \
+        ]
+        fake_institutions = [
+            {"id": "gs", "name": "Goldman Sachs", "display_name": "高盛",
+             "cik": "0000886982", "enabled": 1},
+            {"id": "jpm", "name": "JPMorgan", "display_name": "摩根大通",
+             "cik": "0000019617", "enabled": 1},
+        ]
+        with patch("src.main.get_sources_config", return_value=config), \
+             patch("src.main.get_institutions", return_value=fake_institutions), \
              patch("src.main.NewsSource"), \
              patch("src.main.ThirteenDGSource"), \
              patch("src.main.Sec8kSource"), \
@@ -499,7 +524,45 @@ class TestDailyIntel:
 
             sources = _build_daily_sources()
 
-        assert [n for n, _ in sources] == ["13D/13G", "news"]
+        assert [n for n, _ in sources] == ["13D/13G · 高盛", "13D/13G · 摩根大通", "news"]
+
+    @pytest.mark.asyncio
+    async def test_build_daily_sources_sec_sources_per_institution(self, monkeypatch):
+        """8-K and 13D/13G must be built once per enabled institution,
+        parameterized with that institution's CIK/tag/display name."""
+        monkeypatch.setattr("src.main.RSS_FEEDS", [])
+        config = [
+            {"name": "8-K", "enabled": True, "builtin": True},
+            {"name": "13D/13G", "enabled": True, "builtin": True},
+        ]
+        fake_institutions = [
+            {"id": "gs", "name": "Goldman Sachs", "display_name": "高盛",
+             "cik": "0000886982", "enabled": 1},
+            {"id": "jpm", "name": "JPMorgan", "display_name": "摩根大通",
+             "cik": "0000019617", "enabled": 1},
+            {"id": "ms", "name": "Morgan Stanley", "display_name": "摩根士丹利",
+             "cik": "0000895421", "enabled": 0},  # disabled -> skipped
+        ]
+        with patch("src.main.get_sources_config", return_value=config), \
+             patch("src.main.get_institutions", return_value=fake_institutions), \
+             patch("src.main.Sec8kSource") as Mock8k, \
+             patch("src.main.ThirteenDGSource") as MockDG:
+            from src.main import _build_daily_sources
+
+            sources = _build_daily_sources()
+
+        names = [n for n, _ in sources]
+        assert names == [
+            "8-K · 高盛", "8-K · 摩根大通",
+            "13D/13G · 高盛", "13D/13G · 摩根大通",
+        ]
+        by_inst = {c.kwargs["institution_id"]: c.kwargs for c in Mock8k.call_args_list}
+        assert by_inst["jpm"]["cik"] == "0000019617"
+        assert by_inst["jpm"]["company_tag"] == "JPM"
+        assert by_inst["jpm"]["display_name"] == "摩根大通"
+        assert by_inst["gs"]["cik"] == "0000886982"
+        dg_insts = {c.kwargs["institution_id"] for c in MockDG.call_args_list}
+        assert dg_insts == {"gs", "jpm"}
 
 
 @pytest.mark.asyncio

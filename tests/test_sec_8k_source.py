@@ -15,6 +15,10 @@ def test_company_tag_parameterized_for_other_institutions():
     assert src.cik == "19617"
 
 
+def test_institution_id_defaults_to_gs():
+    assert Sec8kSource().institution_id == "gs"
+
+
 def _fake_submissions_payload():
     return {
         "filings": {
@@ -39,7 +43,8 @@ class _FakeResp:
 
 @pytest.mark.asyncio
 async def test_signals_use_configured_company_tag(monkeypatch):
-    src = Sec8kSource(cik="0000019617", company_tag="JPM", display_name="摩根大通")
+    src = Sec8kSource(cik="0000019617", company_tag="JPM",
+                      display_name="摩根大通", institution_id="jpm")
 
     async def _fake_get(url, **kw):
         return _FakeResp()
@@ -50,6 +55,7 @@ async def test_signals_use_configured_company_tag(monkeypatch):
     assert all(s.companies == ["JPM"] for s in signals)
     assert all("摩根大通" in s.title for s in signals)
     assert all("摩根大通" in s.summary for s in signals)
+    assert all(s.institution_id == "jpm" for s in signals)
 
 
 @pytest.mark.asyncio

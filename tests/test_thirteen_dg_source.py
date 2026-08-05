@@ -95,3 +95,41 @@ async def test_fetch_since_handles_http_error(httpx_mock):
     assert signals == []
     assert watermark == "last-acc"  # unchanged on failure
     await source.close()
+
+
+@pytest.mark.asyncio
+async def test_signals_use_configured_institution(httpx_mock):
+    """JPM-parameterized source must tag signals as JPM, not hardcoded GS."""
+    httpx_mock.add_response(
+        url="https://data.sec.gov/submissions/CIK0000019617.json",
+        json={
+            "filings": {
+                "recent": {
+                    "form": ["SC 13G"],
+                    "filingDate": ["2026-07-20"],
+                    "accessionNumber": ["0000019617-26-000100"],
+                    "primaryDocument": ["doc.xml"],
+                }
+            }
+        },
+    )
+    source = ThirteenDGSource(
+        cik="0000019617", company_tag="JPM",
+        display_name="摩根大通", institution_id="jpm",
+    )
+    signals, _ = await source.fetch_since()
+    assert len(signals) == 1
+    sig = signals[0]
+    assert sig.companies == ["JPM"]
+    assert sig.institution_id == "jpm"
+    assert "摩根大通" in sig.title
+    assert "摩根大通" in sig.summary
+    assert "高盛" not in sig.title
+    await source.close()
+
+
+def test_thirteen_dg_defaults_are_gs():
+    src = ThirteenDGSource()
+    assert src.company_tag == "GS"
+    assert src.display_name == "高盛"
+    assert src.institution_id == "gs"

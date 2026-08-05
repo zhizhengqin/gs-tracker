@@ -42,8 +42,10 @@ from src.storage import (
     cleanup_expired_signals,
     get_default_llm_model,
     get_holdings,
+    get_institutions,
     get_recent_signals,
     get_setting,
+    get_sources_config,
     get_source_state,
     init_db,
     is_notification_sent,
@@ -70,23 +72,22 @@ ALL_SOURCE_NAMES = ("13F", "8-K", "13D/13G", "research_view", "news", "news_jpm"
 
 
 def _enabled_source_names() -> set:
-    """Return enabled source names from the sources_config setting (default: all on)."""
+    """Enabled source names from the merged sources_config (default: all on).
+
+    Uses get_sources_config() so built-ins added after an install saved its
+    config still appear (the stored list alone would hide them forever).
+    """
     try:
-        raw = get_setting("sources_config", "")
-        if raw:
-            config = json.loads(raw)
-            return {s.get("name", "") for s in config if s.get("enabled", True)}
+        return {s.get("name", "") for s in get_sources_config() if s.get("enabled", True)}
     except Exception:
         logger.warning("Failed to read sources_config; defaulting to all sources enabled")
     return set(ALL_SOURCE_NAMES)
 
 
 def _custom_source_configs() -> list:
-    """Custom (non-builtin) source entries from sources_config."""
+    """Custom (non-builtin) source entries from the merged sources_config."""
     try:
-        raw = get_setting("sources_config", "")
-        if raw:
-            return [s for s in json.loads(raw) if not s.get("builtin", False)]
+        return [s for s in get_sources_config() if not s.get("builtin", False)]
     except Exception:
         logger.warning("Failed to parse custom sources from sources_config")
     return []
@@ -96,10 +97,31 @@ def _build_daily_sources(institution_id: str = "gs") -> list:
     """Instantiate daily-intel sources, honoring per-source enable switches."""
     enabled = _enabled_source_names()
     sources: list[tuple[str, object]] = []
+    # SEC filing sources run once per enabled institution, labeled
+    # "<source> · <机构名>" so the progress panel shows both clearly.
+    institutions = [i for i in get_institutions() if i.get("enabled", True)]
     if "8-K" in enabled:
-        sources.append(("8-K", Sec8kSource()))
+        for inst in institutions:
+            sources.append((
+                f"8-K · {inst['display_name']}",
+                Sec8kSource(
+                    cik=inst["cik"],
+                    company_tag=inst["id"].upper(),
+                    display_name=inst["display_name"],
+                    institution_id=inst["id"],
+                ),
+            ))
     if "13D/13G" in enabled:
-        sources.append(("13D/13G", ThirteenDGSource()))
+        for inst in institutions:
+            sources.append((
+                f"13D/13G · {inst['display_name']}",
+                ThirteenDGSource(
+                    cik=inst["cik"],
+                    company_tag=inst["id"].upper(),
+                    display_name=inst["display_name"],
+                    institution_id=inst["id"],
+                ),
+            ))
     if "research_view" in enabled:
         sources.append(("research_view", ResearchViewSource()))
     if "qfii" in enabled:
@@ -457,6 +479,7 @@ async def run_pipeline_stream(institution_id: str = "gs"):
             cik=cik,
             company_tag=institution_id.upper(),
             display_name=inst["display_name"],
+            institution_id=institution_id,
         ),
     )
     try:
