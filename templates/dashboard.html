@@ -458,12 +458,7 @@ function attachPipelineStream() {
                 _pipelineEventSource.close();
                 _pipelineEventSource = null;
                 btn.disabled = false;
-                const errCount = (data.errors || []).length;
-                if (errCount) {
-                    setRunMsg('部分完成：' + (data.signal_count || 0) + ' 条信号，' + errCount + ' 个源出错', 'err');
-                } else {
-                    setRunMsg('数据已更新：' + (data.signal_count || 0) + ' 条信号', 'ok');
-                }
+                setRunMsg('季度报告已生成：' + (data.quarter || ''), 'ok');
                 updatePipelinePanel(sourceStates, steps, data);
                 refreshReports();
             } else if (data.event === 'job_error') {
@@ -471,7 +466,7 @@ function attachPipelineStream() {
                 _pipelineEventSource = null;
                 btn.disabled = false;
                 setRunMsg('运行失败：' + data.error, 'err');
-                updatePipelinePanel(sourceStates, steps, {signal_count: 0, errors: [data.error]});
+                updatePipelinePanel(sourceStates, steps, {errors: [data.error]});
             }
         } catch(ex) { console.error('SSE parse error', ex); }
     };
@@ -527,9 +522,8 @@ function updatePipelinePanel(sourceStates, steps, summary) {
         const errCount = (summary.errors || []).length;
         html += `<div class="prog-summary">
             <strong>运行报告</strong><br>
-            <span class="prog-line">对账季度：${esc(summary.quarter || '')}</span><br>
-            <span class="prog-line">信号总数：${summary.signal_count || 0} 条</span><br>
-            <span class="prog-line ${errCount ? 'err' : 'ok'}">${errCount ? errCount + ' 个源出错' : '全部成功'}</span>
+            ${summary.quarter ? `<span class="prog-line">对账季度：${esc(summary.quarter)}</span><br>` : ''}
+            <span class="prog-line ${errCount ? 'err' : 'ok'}">${errCount ? '运行失败' : '季度报告已生成'}</span>
             ${(summary.errors || []).map(e => `<div class="prog-err-line">${esc(String(e)).substring(0, 120)}</div>`).join('')}
         </div>
         <button class="run-btn mt-12" onclick="document.getElementById('progressPanel').style.display='none'">关闭</button>`;

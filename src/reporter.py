@@ -37,9 +37,6 @@ class ReportGenerator:
         holdings_df: pd.DataFrame,
         analysis: AnalysisResult,
         output_path: Optional[Path] = None,
-        signals: Optional[list] = None,
-        signal_errors: Optional[list] = None,
-        source_status: Optional[dict] = None,
         institution_id: str = "gs",
         institution_label: str = "高盛",
     ) -> Path:
@@ -68,9 +65,6 @@ class ReportGenerator:
             holdings_total=holdings_total,
             analysis=analysis,
             generated_at=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-            signals=signals or [],
-            signal_errors=signal_errors or [],
-            source_status=source_status or {},
         )
         output_path.write_text(rendered, encoding="utf-8")
         logger.info("Report generated at %s", output_path)

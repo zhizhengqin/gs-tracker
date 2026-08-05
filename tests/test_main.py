@@ -746,8 +746,8 @@ async def test_run_daily_intel_awaits_report_task(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_run_pipeline_stream_emits_progress_events(tmp_path, monkeypatch):
-    """The streaming pipeline yields start/step/source_done/complete events
-    so the dashboard can render live per-source progress."""
+    """The streaming pipeline yields start/step/complete events so the
+    dashboard can render live per-step progress (13F-only, no signal sources)."""
     monkeypatch.setattr("src.main.REPORT_OUTPUT_DIR", tmp_path)
     monkeypatch.setattr("src.config.REPORT_OUTPUT_DIR", tmp_path)
 
@@ -784,7 +784,6 @@ async def test_run_pipeline_stream_emits_progress_events(tmp_path, monkeypatch):
 
     kinds = [e["event"] for e in events]
     assert kinds[0] == "start"
-    assert "13F" in events[0]["sources"]
     assert kinds[-1] == "complete"
     assert events[-1]["quarter"] == "2026-Q2"
 
@@ -794,9 +793,55 @@ async def test_run_pipeline_stream_emits_progress_events(tmp_path, monkeypatch):
     assert ("analysis", "done") in steps
     assert ("report", "done") in steps
 
-    source_events = [e for e in events if e["event"] == "source_done"]
-    source_names = {e["source"] for e in source_events}
-    assert "13F" in source_names
-    thirteen_f = next(e for e in source_events if e["source"] == "13F")
-    assert thirteen_f["status"] == "ok"
-    assert thirteen_f["count"] >= 1
+
+@pytest.mark.asyncio
+async def test_quarterly_pipeline_skips_signal_aggregation(tmp_path, monkeypatch):
+    """Quarterly reconciliation is 13F-only: no signal sources, no signal panel."""
+    monkeypatch.setattr("src.main.REPORT_OUTPUT_DIR", tmp_path)
+    monkeypatch.setattr("src.config.REPORT_OUTPUT_DIR", tmp_path)
+
+    mock_df = pd.DataFrame(
+        {
+            "cusip": ["A"],
+            "name_of_issuer": ["Apple"],
+            "title_of_class": ["COM"],
+            "value": [1000000.0],
+            "shares": [1000],
+            "investment_discretion": ["SOLE"],
+        }
+    )
+
+    async def fake_fetch(filing_info):
+        filing_info["report_date"] = "2026-06-30"
+        return mock_df
+
+    events = []
+    with patch("src.main.SEC13FFetcher") as MockFetcher:
+        MockFetcher.report_date_to_quarter = SEC13FFetcher.report_date_to_quarter
+        instance = MockFetcher.return_value.__aenter__.return_value
+        instance.fetch_latest_holdings = fake_fetch
+        with patch("src.main.save_holdings"):
+            with patch("src.main.get_holdings", return_value=[]):
+                with patch("src.main.GSAnalyzer") as MockAnalyzer:
+                    analyzer = MockAnalyzer.return_value
+                    analyzer.analyze_holdings = AsyncMock(return_value=MagicMock())
+                    with patch("src.main.ReportGenerator") as MockReporter:
+                        reporter = MockReporter.return_value
+                        reporter.generate_report = MagicMock(
+                            return_value=tmp_path / "2026-Q2.html"
+                        )
+                        async for event_json in run_pipeline_stream("gs"):
+                            events.append(json.loads(event_json))
+                        _, kwargs = reporter.generate_report.call_args
+                        assert "signals" not in kwargs
+                        assert "signal_errors" not in kwargs
+                        assert "source_status" not in kwargs
+
+    event_names = [e["event"] for e in events]
+    assert "source_done" not in event_names
+    start = events[0]
+    assert start["event"] == "start"
+    assert start["sources"] == []
+    complete = events[-1]
+    assert complete["event"] == "complete"
+    assert "signal_count" not in complete

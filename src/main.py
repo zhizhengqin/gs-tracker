@@ -24,7 +24,6 @@ from src.llm_config import resolve_llm_config
 from src.notifier import Notification, Notifier, _format_summary
 from src.quarter_compare import QuarterComparator
 from src.reporter import ReportGenerator
-from src.signals.aggregator import SignalAggregator, dedup_across_institutions
 from src.signals.ai_triage import AiTriage
 from src.signals.base import Signal
 from src.signals.news_source import NewsSource
@@ -51,7 +50,6 @@ from src.storage import (
     is_notification_sent,
     mark_notification_sent,
     save_holdings,
-    save_signal_payload,
     save_signal_run,
     save_signals_incremental,
     save_source_state,
@@ -404,8 +402,7 @@ async def run_pipeline_stream(institution_id: str = "gs"):
 
     quarter = "2026-Q1"
 
-    source_names = ["13F", "8-K"] + (["news"] if RSS_FEEDS else [])
-    yield json.dumps({"event": "start", "sources": source_names})
+    yield json.dumps({"event": "start", "sources": []})
 
     def _step(step: str, status: str, label: str, detail: str = "") -> str:
         return json.dumps({
@@ -460,83 +457,6 @@ async def run_pipeline_stream(institution_id: str = "gs"):
                 f"对比 {previous_quarter}：新增 {summary['new_positions']} · 清仓 {summary['sold_positions']}",
             )
 
-    # --- Multi-source signal aggregation ---
-    aggregation_signals = []
-    aggregation_errors = []
-    aggregation_status = {}
-    aggregation_ok = False
-    aggregator = SignalAggregator(
-        news_source=(
-            NewsSource(
-                rss_urls=RSS_FEEDS,
-                source_name="news" if institution_id == "gs" else f"news_{institution_id}",
-                filter_policy="gs_only" if institution_id == "gs" else f"{institution_id}_only",
-                institution_id=institution_id,
-            )
-            if RSS_FEEDS else None
-        ),
-        sec8k_source=Sec8kSource(
-            cik=cik,
-            company_tag=institution_id.upper(),
-            display_name=inst["display_name"],
-            institution_id=institution_id,
-        ),
-    )
-    try:
-        # Bridge the aggregator's sync progress callback into this async
-        # generator: the callback queues events, we drain them while awaiting.
-        progress_queue: asyncio.Queue[str] = asyncio.Queue()
-
-        def _progress_cb(event: dict) -> None:
-            progress_queue.put_nowait(json.dumps(event))
-
-        agg_task = asyncio.create_task(
-            aggregator.aggregate(
-                quarter, df.to_dict("records"), summary, progress_cb=_progress_cb,
-            )
-        )
-        while not (agg_task.done() and progress_queue.empty()):
-            try:
-                yield progress_queue.get_nowait()
-            except asyncio.QueueEmpty:
-                await asyncio.sleep(0.1)
-        aggregation = await agg_task
-        aggregation_signals = aggregation.signals
-        aggregation_errors = aggregation.errors
-        aggregation_status = aggregation.source_status
-        aggregation_ok = True
-        logger.info(
-            "Aggregated %d signals (errors: %d, status: %s)",
-            len(aggregation_signals), len(aggregation_errors), aggregation_status,
-        )
-    except Exception as exc:
-        logger.exception("Signal aggregation failed; report will lack signal panel")
-        # Record the failure so the dashboard stops showing stale "ok" badges;
-        # previously saved signals (last known good) are kept as-is.
-        try:
-            save_signal_run(
-                quarter,
-                job="reconciliation",
-                source_status={},
-                errors=[f"信号聚合失败: {exc}"],
-            )
-        except Exception:
-            logger.exception("Failed to record signal run failure for %s", quarter)
-    finally:
-        await aggregator.close()
-
-    if aggregation_ok:
-        try:
-            save_signal_payload(
-                quarter,
-                aggregation_signals,
-                job="reconciliation",
-                source_status=aggregation_status,
-                errors=aggregation_errors,
-            )
-        except Exception:
-            logger.exception("Failed to persist signals for %s", quarter)
-
     yield _step("report", "running", "生成季度报告")
     reporter = ReportGenerator()
     report_path = await asyncio.to_thread(
@@ -544,9 +464,6 @@ async def run_pipeline_stream(institution_id: str = "gs"):
         quarter,
         df,
         analysis,
-        signals=aggregation_signals,
-        signal_errors=aggregation_errors,
-        source_status=aggregation_status,
         institution_id=institution_id,
         institution_label=inst_label,
     )
@@ -582,9 +499,6 @@ async def run_pipeline_stream(institution_id: str = "gs"):
     yield json.dumps({
         "event": "complete",
         "quarter": quarter,
-        "signal_count": len(aggregation_signals),
-        "source_status": aggregation_status,
-        "errors": aggregation_errors,
     })
 
 
