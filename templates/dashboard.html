@@ -48,7 +48,7 @@
             <label><input type="radio" name="institution" checked onchange="onInstitutionChange()" value=""> 全部机构</label>
             <label><input type="radio" name="institution" onchange="onInstitutionChange()" value="gs"> 高盛</label>
             <label><input type="radio" name="institution" onchange="onInstitutionChange()" value="jpm"> 摩根大通</label>
-            <button type="button" class="btn-sm" style="margin-top:6px" onclick="switchMainView('institution')">机构档案 ›</button>
+            <div class="inst-stats" id="instStatsLine" style="display:none"></div>
         </div>
         <h3>信号来源</h3>
         <div class="signal-filter">
@@ -195,17 +195,13 @@
             <li><strong>交叉信号</strong>：两家机构同时谈到同一家公司时，卡片会出现「交叉信号」徽章，点「AI 交叉解读」可让 AI 对比两家观点的共识与分歧；左侧勾选「只看交叉信号」可一键过滤。</li>
             <li><strong>查看日期</strong>：页面顶部可选择任意历史日期回溯当天的情报。</li>
             <li><strong>更早的情报</strong>：页面底部折叠区，展开可看最近 30 天。</li>
+            <li><strong>机构统计</strong>：左侧「追踪机构」选中高盛或摩根大通时，下方会显示该机构近 7 天情报条数、高优先级条数和最近更新时间。</li>
             <li><strong>重新生成日报</strong>：系统每小时自动抓取，抓到新情报后会自动重写日报，一般不用你操心。如果刚好在新情报入库、日报还没自动更新的间隙，卡片上会出现橙色提醒（"生成时只有 N 条，现在已有 M 条"），点卡片底部的「重新生成」可以不等定时任务、立刻让 AI 基于最新情报重写一份。</li>
         </ul>
         <h4>季度报告</h4>
         <ul>
             <li>页面顶部先用<strong>「机构」下拉框</strong>选择高盛或摩根大通（两家的季度报告完全独立），再选择季度；下方标签栏可切换：<strong>全部</strong>（一屏到底的长页面，依次为：AI 季度洞察 → 重点标的分析 → 持仓变化 → 前十大持仓）、<strong>概览</strong>（关键数据）、<strong>AI 分析</strong>（含 AI 季度洞察：调仓解读、A 股题材映射、宏观看点）、<strong>持仓变化</strong>（与上一季度对比：新建仓/增持/减持/清仓）、<strong>持仓明细</strong>（默认按公司汇总，可切换"原始明细"）。</li>
             <li><strong>AI 季度洞察</strong>和<strong>重点标的分析</strong>都可以点「重新生成」刷新内容。</li>
-        </ul>
-        <h4>机构档案</h4>
-        <ul>
-            <li>左侧「追踪机构」下方的 <strong>「机构档案 ›」</strong>：一页看清某家机构的全貌——近 7 天情报数量、高优先级条数、最近更新时间、最新季度报告入口。</li>
-            <li>页面下方的 <strong>「跨机构交叉信号（30 天）」</strong>：列出最近被两家机构同时覆盖的标的，是寻找共识机会的入口。</li>
         </ul>
         <h4>设置</h4>
         <ul>
@@ -1297,60 +1293,12 @@ async function switchMainView(view) {
         } else {
             document.getElementById('mainContent').innerHTML = '<div class="loading">暂无报告数据，请先运行季度对账</div>';
         }
-    } else if (view === 'institution') {
-        if (filterSection) filterSection.style.display = 'block';
-        await renderInstitutionProfile();
     } else if (view === 'settings') {
         if (filterSection) filterSection.style.display = 'none';
         await renderSettings();
     } else if (view === 'guide') {
         if (filterSection) filterSection.style.display = 'none';
         renderGuide();
-    }
-}
-
-// ====== Institution profile view ======
-async function renderInstitutionProfile() {
-    const main = document.getElementById('mainContent');
-    const inst = quarterInst();  // "全部机构" 时默认高盛（档案必须是单机构）
-    main.innerHTML = '<div class="loading">加载机构档案...</div>';
-    try {
-        const resp = await fetch(`/api/institutions/${inst}/overview`);
-        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-        const d = await resp.json();
-        const i = d.institution || {};
-        const stats = d.stats || {};
-        const lastAt = stats.last_signal_at
-            ? new Date(stats.last_signal_at).toLocaleString('zh-CN') : '暂无';
-        const reportCard = d.latest_report
-            ? `<div class="daily-report-card"><h3>最新季度报告</h3>
-                 <p><a href="${d.latest_report.path}" target="_blank">${esc(d.latest_report.quarter)} 季度报告 →</a></p></div>`
-            : `<div class="daily-report-card"><h3>最新季度报告</h3>
-                 <p class="muted">暂无，请到「季度报告」页运行季度对账生成</p></div>`;
-        const recentHtml = (d.recent_signals || []).map(renderSignalCard).join('')
-            || '<p class="muted">近 7 天暂无情报</p>';
-        const crossHtml = (d.cross_signals || []).map(renderSignalCard).join('')
-            || '<p class="muted">近 30 天暂无跨机构交叉信号</p>';
-        main.innerHTML = `
-            <h2>${esc(i.display_name || inst)} · 机构档案</h2>
-            <div class="daily-report-card">
-                <p><strong>${esc(i.display_name || '')}</strong>（${esc(i.name || '')}）
-                   · CIK ${esc(i.cik || '—')} · ${i.enabled ? '追踪中' : '已停用'}</p>
-                <p>近 7 天情报 <strong>${stats.signals_7d ?? 0}</strong> 条
-                   · 高优先级 <strong>${stats.high_7d ?? 0}</strong> 条
-                   · 最近更新 ${esc(lastAt)}</p>
-            </div>
-            ${reportCard}
-            <h2>近 7 天情报</h2>
-            <div id="instRecentBox">${recentHtml}</div>
-            <h2>跨机构交叉信号（30 天）</h2>
-            <div id="instCrossBox">${crossHtml}</div>
-        `;
-        addAiToggles(main);
-        main.querySelectorAll('.signal-card').forEach(updateSummaryToggle);
-    } catch (e) {
-        console.error(e);
-        main.innerHTML = '<div class="loading">机构档案加载失败</div>';
     }
 }
 
@@ -1454,9 +1402,8 @@ function quarterInst() {
 async function onInstitutionChange() {
     const sel = document.querySelector('input[name="institution"]:checked');
     currentInstitution = sel ? sel.value : '';
-    if (currentView === 'institution') {
-        await renderInstitutionProfile();
-    } else if (currentView === 'quarter') {
+    updateInstStats();
+    if (currentView === 'quarter') {
         await refreshReports();
     } else {
         // Daily view: reload whatever mode is active so the feed matches the
@@ -1477,6 +1424,30 @@ function instBadge(instId) {
     if (instId === 'gs') return '<span class="inst-tag">高盛</span>';
     if (instId === 'jpm') return '<span class="inst-tag">摩根大通</span>';
     return '<span class="inst-tag">' + esc(instId) + '</span>';
+}
+
+// Sidebar one-liner stats under 追踪机构 (only for a specific institution).
+async function updateInstStats() {
+    const el = document.getElementById('instStatsLine');
+    if (!el) return;
+    if (!currentInstitution) {
+        el.style.display = 'none';
+        el.textContent = '';
+        return;
+    }
+    try {
+        const resp = await fetch(`/api/institutions/${currentInstitution}/stats`);
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+        const s = await resp.json();
+        const lastAt = s.last_signal_at
+            ? new Date(s.last_signal_at).toLocaleString('zh-CN', {month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit'})
+            : '暂无';
+        el.textContent = `近 7 天情报 ${s.signals_7d} 条 · 高优先级 ${s.high_7d} 条 · 最近更新 ${lastAt}`;
+        el.style.display = 'block';
+    } catch (e) {
+        console.error('Failed to load institution stats', e);
+        el.style.display = 'none';
+    }
 }
 async function loadDailyIntel(days) {
     dailyDays = days;

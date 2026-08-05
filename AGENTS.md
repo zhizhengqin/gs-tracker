@@ -73,7 +73,7 @@ node scripts/verify_today_view.js http://127.0.0.1:8770 /tmp/verify  # 页面结
 - 用户管理（管理员）：`GET/POST /api/settings/users`；`PUT/DELETE /api/settings/users/{username}`（gsadmin 不可删除/降角色，改密码或角色会使该用户所有会话失效）
 - 季度/报告：`GET /api/signals/{quarter}`（404=该季度未跑过，422=格式错误）；`GET /api/quarters/comparison`；`GET /api/reports?institution=`；`GET /reports/{quarter}.html`；`GET /api/holdings/{quarter}?institution=`；`GET /api/health`
 - 每日情报：`GET /api/signals/recent?days=N`；`GET /api/signals/date/{date}`；`POST /api/signals/{signal_id}/analyze` + `GET /api/signals/{signal_id}/analysis`；`GET /api/daily-report/{date}`（无缓存则自动生成）；`POST /api/daily-report/{date}/regenerate`（强制重生成）；`POST /api/quarter-insight/{quarter}/regenerate`（季度洞察重生成，按机构隔离）；`POST /api/signals/analyses`（批量取解读，避免逐条 404）；`POST/GET /api/signals/{id}/cross-analysis`（AI 交叉解读）
-- 机构：`GET /api/institutions`；`GET /api/institutions/{id}/overview`（机构档案页数据：统计 + 近 7 天情报 + 30 天交叉信号）
+- 机构：`GET /api/institutions`；`GET /api/institutions/{id}/stats`（侧栏统计行：近 7 天情报数 / 高优先级数 / 最近更新时间）
 - 流水线：`POST /api/pipeline/run?institution=`（季度对账，按机构运行）；`POST /api/pipeline/run-daily`；`GET /api/pipeline/run/stream` 与 `GET /api/pipeline/run-daily/stream`（SSE 实时进度）；`GET /api/pipeline/status`、`GET /api/pipeline/run-daily/status`
 - 设置：`GET/PUT /api/settings`；`GET/POST/DELETE /api/settings/llm-models` + `POST .../llm-models/test` + `PUT .../llm-models/{model_id}/default`；`GET/PUT /api/settings/sources` + 自定义源 `POST/PUT/DELETE .../sources/custom[/{name}]` + `POST .../sources/test`
 - 信号由流水线写入 `signals` / `signal_runs` 表（WAL 模式），日报缓存于 `daily_reports` 表；仪表盘信号页走 API 不再解析 HTML
