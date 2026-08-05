@@ -1,4 +1,4 @@
-# GS-Tracker 京东云部署手册（小白版）
+# BridgeIQ 金桥智讯（原 GS-Tracker）京东云部署手册（小白版）
 
 > **最终效果**：你在自己电脑上改代码 → `git push` 到 GitHub → GitHub 自动登录你的京东云服务器 → 自动拉代码、重建、重启。和 Railway 体验一样，push 完什么都不用管。
 >
@@ -197,7 +197,7 @@ docker compose -f deploy/docker-compose.yml ps
 **浏览器验证**：打开 `http://111.228.23.109`
 
 - 弹出登录框 → 输入 `gsadmin` + 你第 5 步设的密码
-- 看到「高盛动向情报系统」仪表盘 = 部署成功 🎉
+- 看到「金桥智讯 BridgeIQ」仪表盘 = 部署成功 🎉
 
 ---
 

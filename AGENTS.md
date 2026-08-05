@@ -1,9 +1,9 @@
-# GS-Tracker — 高盛动向情报系统
+# BridgeIQ 金桥智讯 — 多机构动向情报系统（原 GS-Tracker）
 
 ## 项目概述
-- **名称**: GS-Tracker
+- **名称**: BridgeIQ 金桥智讯（原 GS-Tracker，仓库目录/数据库文件名保留 gs-tracker 命名）
 - **技术栈**: Python 3.11, httpx, pandas, anthropic, jinja2, matplotlib, sqlite3, FastAPI, Docker
-- **目标**: 自动抓取 SEC 13F 与多源每日情报（8-K/13D·13G/高盛研究/新闻/宏观/自定义源），AI 分析并生成每日情报日报，部署为京东云 Web 服务
+- **目标**: 追踪多家外资机构（当前：高盛 + 摩根大通）的 SEC 披露与每日多源情报（8-K/13D·13G/机构研究/新闻/宏观/QFII/北向资金/自定义源），AI 分析生成每日情报日报；跨机构覆盖同一标的自动标记交叉信号，面向 A 股投资参考，部署为京东云 Web 服务
 - **架构**: 数据采集 → 数据处理 → AI 分析 → 报告生成 → Web 服务 → 通知推送
 
 ## 目录结构
@@ -46,11 +46,12 @@ gs-tracker/
 ## 数据规范
 - 13F value 单位为美元（SEC 2023 年起新规：XML 原始值已是美元，禁止再 ×1000；仅 2023 年前的历史申报为千美元）
 - 季度格式: `YYYY-QN`，如 `2026-Q1`
-- Goldman Sachs CIK: `0000886982`
+- Goldman Sachs CIK: `0000886982`；JPMorgan CIK: `0000019617`；机构注册于 `institutions` 表（内置 gs/jpm），信号/报告/持仓/洞察均带 `institution_id` 维度
 - 13F 截止日: Q1(5/15), Q2(8/14), Q3(11/14), Q4(2/14)
 - 信号去重指纹: 有 URL 按 (source,title,url)，无 URL 按 (source,title,日期)；同一 URL 跨天重现只更新原行，不产生新行
 - 跨机构共识: scorer 对同一公司被 ≥2 家真实机构（排除 "all" 聚合源与机构自指词 GS/JPM/高盛/摩根大通）覆盖的信号标记 `cross_institutional` 并加分升优先级；新闻信号 companies 兜底为自身机构标记（GS/JPM），`HOLDING_KEYWORDS` 含 A 股主要公司中文名
 - 日期分组按北京时间（UTC+8）：`get_signals_by_date` 用 `DATE(published_at, '+8 hours')` 归组，日报"今日"判断同理，勿回退到 UTC
+- SEC 抓取器（13F/8-K/13D·13G）均按机构参数化（cik + company_tag + display_name），禁止在源代码里硬编码单一机构名称
 
 ## 语言规范
 - **所有用户可见的输出必须使用中文**：HTML 报告、通知消息、邮件/飞书/钉钉文案、Web 界面、CLI 提示
@@ -64,15 +65,16 @@ pytest -v
 uvicorn src.web:app --reload
 python -m src.main --run-now
 docker compose -f deploy/docker-compose.yml up -d --build
-node scripts/verify_today_view.js http://127.0.0.1:8770 /tmp/verify  # 页面结构回归（另有 verify_mobile.js）
+node scripts/verify_today_view.js http://127.0.0.1:8770 /tmp/verify  # 页面结构回归（另有 verify_mobile.js、verify_institution_switch.js）
 ```
 
 ## API 端点
 - 认证：`GET /login`（登录页）；`POST /api/auth/login`；`POST /api/auth/logout`；`GET /api/auth/me`。除 /login、/api/auth/login、/api/health 外所有页面与 API 需登录（HttpOnly Cookie 会话，7 天）；`/api/settings/**` 仅管理员（内置 gsadmin/admin123 首次启动自动创建）
 - 用户管理（管理员）：`GET/POST /api/settings/users`；`PUT/DELETE /api/settings/users/{username}`（gsadmin 不可删除/降角色，改密码或角色会使该用户所有会话失效）
-- 季度/报告：`GET /api/signals/{quarter}`（404=该季度未跑过，422=格式错误）；`GET /api/quarters/comparison`；`GET /api/reports`；`GET /reports/{quarter}.html`；`GET /api/health`
-- 每日情报：`GET /api/signals/recent?days=N`；`GET /api/signals/date/{date}`；`POST /api/signals/{signal_id}/analyze` + `GET /api/signals/{signal_id}/analysis`；`GET /api/daily-report/{date}`（无缓存则自动生成）；`POST /api/daily-report/{date}/regenerate`（强制重生成）；`POST /api/quarter-insight/{quarter}/regenerate`（季度洞察重生成）
-- 流水线：`POST /api/pipeline/run`（季度对账）；`POST /api/pipeline/run-daily`；`GET /api/pipeline/run/stream` 与 `GET /api/pipeline/run-daily/stream`（SSE 实时进度）；`GET /api/pipeline/status`、`GET /api/pipeline/run-daily/status`
+- 季度/报告：`GET /api/signals/{quarter}`（404=该季度未跑过，422=格式错误）；`GET /api/quarters/comparison`；`GET /api/reports?institution=`；`GET /reports/{quarter}.html`；`GET /api/holdings/{quarter}?institution=`；`GET /api/health`
+- 每日情报：`GET /api/signals/recent?days=N`；`GET /api/signals/date/{date}`；`POST /api/signals/{signal_id}/analyze` + `GET /api/signals/{signal_id}/analysis`；`GET /api/daily-report/{date}`（无缓存则自动生成）；`POST /api/daily-report/{date}/regenerate`（强制重生成）；`POST /api/quarter-insight/{quarter}/regenerate`（季度洞察重生成，按机构隔离）；`POST /api/signals/analyses`（批量取解读，避免逐条 404）；`POST/GET /api/signals/{id}/cross-analysis`（AI 交叉解读）
+- 机构：`GET /api/institutions`；`GET /api/institutions/{id}/overview`（机构档案页数据：统计 + 近 7 天情报 + 30 天交叉信号）
+- 流水线：`POST /api/pipeline/run?institution=`（季度对账，按机构运行）；`POST /api/pipeline/run-daily`；`GET /api/pipeline/run/stream` 与 `GET /api/pipeline/run-daily/stream`（SSE 实时进度）；`GET /api/pipeline/status`、`GET /api/pipeline/run-daily/status`
 - 设置：`GET/PUT /api/settings`；`GET/POST/DELETE /api/settings/llm-models` + `POST .../llm-models/test` + `PUT .../llm-models/{model_id}/default`；`GET/PUT /api/settings/sources` + 自定义源 `POST/PUT/DELETE .../sources/custom[/{name}]` + `POST .../sources/test`
 - 信号由流水线写入 `signals` / `signal_runs` 表（WAL 模式），日报缓存于 `daily_reports` 表；仪表盘信号页走 API 不再解析 HTML
 
